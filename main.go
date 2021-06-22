@@ -8,6 +8,7 @@ import (
 
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/controllers"
+	"github.com/triax/hub/filters"
 )
 
 func main() {
@@ -19,6 +20,7 @@ func main() {
 	marmoset.UseTemplate(tpl)
 
 	r := marmoset.NewRouter()
+	r.Apply(new(filters.AuthFilter))
 	routes(r)
 	http.Handle("/", r)
 

@@ -1,1 +1,4 @@
 runtime: go115
+
+includes:
+- secrets.yaml
