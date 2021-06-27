@@ -19,13 +19,13 @@ type (
 		Team          string `json:"team"`
 	}
 	SlackMember struct {
+		Profile           SlackProfile `json:"profile"`
 		ID                string       `json:"id"`
 		TeamID            string       `json:"team_id"`
 		Name              string       `json:"name"`
 		RealName          string       `json:"real_name"`
 		Deleted           bool         `json:"deleted"`
 		Color             string       `json:"color"`
-		Profile           SlackProfile `json:"profile"`
 		IsAdmin           bool         `json:"is_admin"`
 		IsOwner           bool         `json:"is_owner"`
 		IsPrimaryOwner    bool         `json:"is_primary_owner"`

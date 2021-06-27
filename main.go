@@ -30,6 +30,7 @@ func main() {
 
 	frontend := marmoset.NewRouter()
 	frontend.GET("/", controllers.Index)
+	frontend.GET("/members", controllers.Members)
 	frontend.Apply(new(filters.AuthFilter))
 
 	crontask := marmoset.NewRouter()

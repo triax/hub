@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+{{template "head.html" .}}
+<style>
+  table {
+    width: 100%;
+  }
+</style>
+<body>
+  <div id="layout">
+    <!-- Menu toggle -->
+    <a href="#menu" id="menuLink" class="menu-link">
+      <!-- Hamburger icon -->
+      <span></span>
+    </a>
+
+    {{template "sidemenu.html" .}}
+
+    <div id="main">
+      <div class="header">
+        <h1>メンバーリスト</h1>
+      </div>
+
+      <div class="content">
+        <table class="pure-table">
+          <thead>
+            <tr>
+              <th>Icon</th>
+              <th>Name</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $m := .members}}
+            <tr>
+              <td><img src="{{$m.Slack.Profile.Image512}}" height="200px"/></td>
+              <td>{{$m.Slack.Profile.RealName}}</td>
+              <td>{{$m.Slack.ID}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
