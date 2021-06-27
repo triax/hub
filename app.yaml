@@ -2,3 +2,11 @@ runtime: go115
 
 includes:
 - secrets.yaml
+
+handlers:
+- url: /tasks/.+
+  script: auto
+  login: admin
+
+- url: /.*
+  script: auto

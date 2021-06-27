@@ -1,0 +1,5 @@
+cron:
+- description: "example job"
+  url: /tasks/fetch-slack-members
+  schedule: every 24 hours
+  timezone: Asia/Tokyo

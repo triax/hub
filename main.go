@@ -6,10 +6,19 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/controllers"
 	"github.com/triax/hub/filters"
 )
+
+func init() {
+	if os.Getenv("GAE_APPLICATION") == "" {
+		if _, err := appyaml.Load("app.yaml"); err != nil {
+			panic(err)
+		}
+	}
+}
 
 func main() {
 
@@ -19,9 +28,16 @@ func main() {
 	}
 	marmoset.UseTemplate(tpl)
 
+	frontend := marmoset.NewRouter()
+	frontend.GET("/", controllers.Index)
+	frontend.Apply(new(filters.AuthFilter))
+
+	crontask := marmoset.NewRouter()
+	crontask.GET("/tasks/fetch-slack-members", controllers.CronFetchSlackMembers)
+
 	r := marmoset.NewRouter()
-	r.Apply(new(filters.AuthFilter))
-	routes(r)
+	r.Subrouter(frontend)
+	r.Subrouter(crontask)
 	http.Handle("/", r)
 
 	// [START setting_port]
@@ -35,8 +51,4 @@ func main() {
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func routes(r *marmoset.Router) {
-	r.GET("/", controllers.Index)
 }
