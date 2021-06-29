@@ -36,9 +36,13 @@ func main() {
 	crontask := marmoset.NewRouter()
 	crontask.GET("/tasks/fetch-slack-members", controllers.CronFetchSlackMembers)
 
+	gas := marmoset.NewRouter()
+	gas.POST("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
+
 	r := marmoset.NewRouter()
 	r.Subrouter(frontend)
 	r.Subrouter(crontask)
+	r.Subrouter(gas)
 	http.Handle("/", r)
 
 	// [START setting_port]
