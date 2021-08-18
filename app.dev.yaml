@@ -1,0 +1,13 @@
+runtime: go115
+env: standard
+
+service: dev
+
+# includes:
+# - app-secrets.dev.yaml
+
+handlers:
+- url: /_next
+  static_dir: client/dest/_next
+- url: /.*
+  script: auto

@@ -13,6 +13,15 @@
 .git
 .gitignore
 
+client/*
+!client/dest
+node_modules
+vendor
+
+next.config.js
+package.json
+package-lock.json
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -23,3 +32,5 @@
 *.test
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# Upload client output
