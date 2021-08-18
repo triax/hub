@@ -10,7 +10,8 @@
     "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
     "__dont_use__:start": "next start",
     "lint": "next lint ./client",
-    "deploy:dev": "npm run export && gcloud app deploy ./app.dev.yaml --project triax-bot --quiet"
+    "deploy:prod": "npm run export && gcloud app deploy ./app.yaml    --project triax-football --quiet",
+    "deploy:dev": "npm run export && gcloud app deploy ./app.dev.yaml --project triax-football --quiet"
   },
   "repository": {
     "type": "git",

@@ -11,6 +11,14 @@ import (
 	"github.com/triax/hub/server/filters"
 )
 
+// func init() {
+// 	if os.Getenv("GAE_APPLICATION") == "" {
+// 		if _, err := appyaml.Load("app.yaml"); err != nil {
+// 			panic(err)
+// 		}
+// 	}
+// }
+
 func main() {
 
 	tpl := template.Must(template.ParseGlob("client/dest/*.html"))
@@ -18,15 +26,24 @@ func main() {
 
 	root := marmoset.NewRouter()
 
+	// Pages
 	authrequired := marmoset.NewRouter()
 	authrequired.GET("/", controllers.Top)
 	authrequired.Apply(new(filters.AuthFilter))
 	root.Subrouter(authrequired)
 
+	// Unauthorized pages
 	unauthorized := marmoset.NewRouter()
 	unauthorized.GET("/login", controllers.Login)
 	root.Subrouter(unauthorized)
 
+	// Cron or Gas
+	cron := marmoset.NewRouter()
+	cron.GET("/tasks/fetch-slack-members", controllers.CronFetchSlackMembers)
+	cron.POST("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
+	root.Subrouter(cron)
+
+	// 404
 	root.NotFound(controllers.NotFound)
 
 	// GAEにデプロイされた場合、Staticのレンダリングは、app.yamlに任せる
