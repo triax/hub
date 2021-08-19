@@ -6,18 +6,19 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
 )
 
-// func init() {
-// 	if os.Getenv("GAE_APPLICATION") == "" {
-// 		if _, err := appyaml.Load("app.yaml"); err != nil {
-// 			panic(err)
-// 		}
-// 	}
-// }
+func init() {
+	if os.Getenv("GAE_APPLICATION") == "" {
+		if _, err := appyaml.Load("app.yaml"); err != nil {
+			panic(err)
+		}
+	}
+}
 
 func main() {
 
@@ -35,6 +36,8 @@ func main() {
 	// Unauthorized pages
 	unauthorized := marmoset.NewRouter()
 	unauthorized.GET("/login", controllers.Login)
+	unauthorized.GET("/auth/start", controllers.AuthStart)
+	unauthorized.GET("/auth/callback", controllers.AuthCallback)
 	root.Subrouter(unauthorized)
 
 	// Cron or Gas
