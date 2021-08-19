@@ -9,9 +9,13 @@
 //     };
 // }
 
+import Layout from "../components/layout";
+
 export default function Top(props) {
-    console.log("HMR?", props);
+    // console.log("HMR?", props);
     return (
-        <a href="/hoge">Move to Hoge</a>
+        <Layout {...props} >
+            <h1>TOP</h1>
+        </Layout>
     );
 }

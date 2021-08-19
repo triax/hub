@@ -3,6 +3,9 @@ module.exports = (phase, { defaultConfig }) => {
    * @type {import('next').NextConfig}
    */
   const nextConfig = {
+    images: {
+      domains: ['avatars.slack-edge.com']
+    },
     /** useFileSystemPublicRoutes について
      * - https://nextjs.org/docs/advanced-features/custom-server#disabling-file-system-routing
      * - https://github.com/vercel/next.js/issues/2682#issuecomment-370664352
