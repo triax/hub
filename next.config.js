@@ -3,8 +3,9 @@ module.exports = (phase, { defaultConfig }) => {
    * @type {import('next').NextConfig}
    */
   const nextConfig = {
-    images: {
-      domains: ['avatars.slack-edge.com']
+    // build-timeに評価されることに注意
+    env: {
+      API_BASE_URL: process.env.NODE_ENV == "production" ? "" : "http://localhost:8080",
     },
     /** useFileSystemPublicRoutes について
      * - https://nextjs.org/docs/advanced-features/custom-server#disabling-file-system-routing
