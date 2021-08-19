@@ -8,6 +8,7 @@ import (
 
 	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
+	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
 )
@@ -28,10 +29,18 @@ func main() {
 	root := marmoset.NewRouter()
 
 	// Pages
-	authrequired := marmoset.NewRouter()
-	authrequired.GET("/", controllers.Top)
-	authrequired.Apply(new(filters.AuthFilter))
-	root.Subrouter(authrequired)
+	authpages := marmoset.NewRouter()
+	authpages.GET("/", controllers.Top)
+	authpages.Apply(new(filters.AuthFilter))
+	root.Subrouter(authpages)
+
+	// API
+	authapis := marmoset.NewRouter()
+	authapis.GET("/api/1/users/current", api.GetCurrentUser)
+	authapis.Apply(&filters.AuthFilter{
+		API: true, LocalDev: os.Getenv("GAE_APPLICATION") == "",
+	})
+	root.Subrouter(authapis)
 
 	// Unauthorized pages
 	unauthorized := marmoset.NewRouter()

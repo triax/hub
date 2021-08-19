@@ -14,7 +14,7 @@ module.exports = (phase, { defaultConfig }) => {
      * lintで、 `next/link`を使えというwarning出るが、それはeslintrcで黙らせました。
      * しゃーないやろ、Node.jsでサーバ建てたくないんやから。
      */
-    useFileSystemPublicRoutes: false,
+    // useFileSystemPublicRoutes: false,
   }
   return nextConfig
 }
