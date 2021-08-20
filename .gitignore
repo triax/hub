@@ -8,3 +8,6 @@ vendor
 secrets.yaml
 secrets.dev.yaml
 secrets.local.yaml
+
+# Editors
+.vscode
