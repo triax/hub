@@ -27,6 +27,7 @@ func AuthStart(w http.ResponseWriter, req *http.Request) {
 		"response_type": {"code"},
 		"scope":         {"openid email profile"},
 		"client_id":     {os.Getenv("SLACK_CLIENT_ID")},
+		"team":          {os.Getenv("SLACK_INSTALLED_TEAM_ID")},
 		"state":         {state},
 		"nonce":         {nonce},
 		"redirect_uri":  {"https://" + req.Host + "/auth/callback"},
