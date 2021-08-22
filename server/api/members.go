@@ -30,7 +30,11 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 
 	members := []models.Member{}
-	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindMember), &members); err != nil {
+	query := datastore.NewQuery(models.KindMember).Order("Slack.ID")
+	if req.URL.Query().Get("include_deleted") != "1" {
+		query = query.Filter("Slack.Deleted =", false)
+	}
+	if _, err := client.GetAll(ctx, query, &members); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}

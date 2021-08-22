@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"os"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
@@ -20,7 +21,11 @@ func ListEvents(w http.ResponseWriter, req *http.Request) {
 	}
 
 	events := []models.Event{}
-	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindEvent), &events); err != nil {
+	query := datastore.NewQuery(models.KindEvent).
+		Filter("Google.StartTime >", time.Now().Unix()*1000).
+		Order("Google.StartTime")
+
+	if _, err := client.GetAll(ctx, query, &events); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}

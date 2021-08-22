@@ -1,22 +1,21 @@
+import { useRouter } from "next/router";
 import { Fragment, useEffect, useState } from "react";
 import Layout from "../../components/layout";
 
-async function listMembers() {
+async function listMembers(incdel: boolean) {
   const endpoint = process.env.API_BASE_URL + "/api/1/members";
-  const res = await fetch(endpoint, {
-    cache: "no-cache",
-  });
+  const res = await fetch(endpoint + (incdel ? "?include_deleted=1" : ""));
   return res.json();
 }
 
 export default function Members(props) {
-
+  const incdel = useRouter().query.include_deleted == "1";
   const [members, setMembers] = useState([]);
   useEffect(() => {
     setTimeout(() => { // FIXME: クソすぎる
-      listMembers().then(mems => setMembers(mems));
+      listMembers(incdel).then(mems => setMembers(mems));
     });
-  }, []);
+  }, [incdel]);
 
   return (
     <Layout {...props}>
@@ -118,7 +117,7 @@ function StatusBadges({slack}) {
     badges.push(
       <span key="is_deleted"
         className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-800">
-          Deleted
+          引退
       </span>
     );
   }
