@@ -9,5 +9,8 @@ secrets.yaml
 secrets.dev.yaml
 secrets.local.yaml
 
+# Development
+dev
+
 # Editors
 .vscode

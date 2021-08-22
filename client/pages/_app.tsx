@@ -11,7 +11,8 @@ function App({ Component, pageProps, router }: AppProps) {
     case "/login": return;
     case "/_error": return;
     }
-    const endpoint = process.env.API_BASE_URL + "/api/1/users/current"
+    // TODO: Repositoryつくる
+    const endpoint = process.env.API_BASE_URL + "/api/1/myself"
     fetch(endpoint).then(res => res.json()).then(res => setMyself(res));
   }, [router.pathname]);
   return <Component {...pageProps} myself={myself} />

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +14,7 @@ import (
 
 func init() {
 	if os.Getenv("GAE_APPLICATION") == "" {
-		if _, err := appyaml.Load("app.yaml"); err != nil {
+		if _, err := appyaml.Load("secrets.local.yaml"); err != nil {
 			panic(err)
 		}
 	}
@@ -23,20 +22,17 @@ func init() {
 
 func main() {
 
-	tpl := template.Must(template.ParseGlob("client/dest/*.html"))
-	marmoset.UseTemplate(tpl)
+	// tpl := template.Must(template.ParseGlob("client/dest/*.html"))
+	// marmoset.UseTemplate(tpl)
+	marmoset.LoadViews("client/dest")
 
 	root := marmoset.NewRouter()
 
-	// Pages
-	authpages := marmoset.NewRouter()
-	authpages.GET("/", controllers.Top)
-	authpages.Apply(new(filters.AuthFilter))
-	root.Subrouter(authpages)
-
 	// API
 	authapis := marmoset.NewRouter()
-	authapis.GET("/api/1/users/current", api.GetCurrentUser)
+	authapis.GET("/api/1/members/(?P<id>[a-zA-Z0-9]+)", api.GetMember)
+	authapis.GET("/api/1/members", api.ListMembers)
+	authapis.GET("/api/1/myself", api.GetCurrentUser)
 	authapis.Apply(&filters.AuthFilter{
 		API: true, LocalDev: os.Getenv("GAE_APPLICATION") == "",
 	})
@@ -48,6 +44,16 @@ func main() {
 	unauthorized.GET("/auth/start", controllers.AuthStart)
 	unauthorized.GET("/auth/callback", controllers.AuthCallback)
 	root.Subrouter(unauthorized)
+
+	// Pages
+	authpages := marmoset.NewRouter()
+	authpages.GET("/", controllers.Top)
+	authpages.GET("/members", controllers.Members)
+	authpages.GET("/members/(?P<id>[a-zA-Z0-9]+)", controllers.Member)
+	authpages.Apply(&filters.AuthFilter{
+		API: false, LocalDev: os.Getenv("GAE_APPLICATION") == "",
+	})
+	root.Subrouter(authpages)
 
 	// Cron or Gas
 	cron := marmoset.NewRouter()

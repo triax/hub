@@ -37,6 +37,8 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if auth.API && auth.LocalDev {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	}
 
 	if auth.LocalDev {
