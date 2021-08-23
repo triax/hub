@@ -8,10 +8,10 @@ const (
 )
 
 const (
-	PTJoin      PariticipationType = "join"
-	PTJoinLate  PariticipationType = "join_late"
-	PTDropEarly PariticipationType = "drop_early"
-	PTAbsent    PariticipationType = "absent"
+	PTJoin       ParticipationType = "join"
+	PTJoinLate   ParticipationType = "join_late"
+	PTLeaveEarly ParticipationType = "leave_early"
+	PTAbsent     ParticipationType = "absent"
 )
 
 type (
@@ -21,17 +21,22 @@ type (
 	Event struct {
 		Google GoogleEvent `json:"google"`
 
-		Participants map[string]Pariticipation `json:"participations"`
+		// Participants Participations `json:"participations"`
+		ParticipationsJSONString string `json:"participations_json_str"`
 
 		StartDate time.Time `json:"start_date"` // なくてよい
 		StartTime int64     `json:"start_time"` // なくてよい
 		EndTime   int64     `json:"end_time"`   // なくてよい
 	}
 
-	Pariticipation struct {
-		Type   PariticipationType `json:"type"`
-		Member SlackMember        `json:"member"`
+	Participations map[string]Participation
+
+	Participation struct {
+		Type    ParticipationType      `json:"type"`
+		Name    string                 `json:"name"`
+		Picture string                 `json:"picture"`
+		Params  map[string]interface{} `json:"params"`
 	}
 
-	PariticipationType string
+	ParticipationType string
 )

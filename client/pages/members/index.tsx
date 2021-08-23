@@ -94,7 +94,7 @@ function MemberRow(member) {
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <div className="text-sm text-gray-900">LB</div>
+        <div className="text-sm text-gray-900">{slack.profile.title}</div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <StatusBadges {...member} />
