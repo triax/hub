@@ -1,0 +1,5 @@
+commands:
+- run: gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football
+- run: echo '$(gcloud beta emulators datastore env-init --data-dir=./dev/data)'
+# - run: go run main.go
+# - run: npm run dev

@@ -30,7 +30,7 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 
 	members := []models.Member{}
-	query := datastore.NewQuery(models.KindMember).Order("Slack.ID")
+	query := datastore.NewQuery(models.KindMember)
 	if req.URL.Query().Get("include_deleted") != "1" {
 		query = query.Filter("Slack.Deleted =", false)
 	}

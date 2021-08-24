@@ -33,8 +33,9 @@ export default function Layout({children, myself}) {
                 <div className="flex items-center">
 
                   {/* Always show branc-logo */}
-                  <div className="flex-shrink-0">
-                    <img className="h-8 w-8" src={teamIcon} alt="Workflow" />
+                  <div className="flex-shrink-0 flex items-center">
+                    <img className="h-8 w-8" src={teamIcon} alt="Triax" />
+                    <span className="md:hidden ml-2 text-gray-100">Team HUB</span>
                   </div>
 
                   {/* Items HIDDEN in small */}
