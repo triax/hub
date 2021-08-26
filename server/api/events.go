@@ -22,6 +22,7 @@ func ListEvents(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
+	defer client.Close()
 
 	events := []models.Event{}
 	query := datastore.NewQuery(models.KindEvent).

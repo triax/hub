@@ -28,6 +28,7 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
+	defer client.Close()
 
 	members := []models.Member{}
 	query := datastore.NewQuery(models.KindMember)
@@ -50,6 +51,7 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
+	defer client.Close()
 
 	id := req.FormValue("id")
 	member := models.Member{}

@@ -1,6 +1,6 @@
-import { Dialog, RadioGroup, Transition } from "@headlessui/react";
+import { Dialog } from "@headlessui/react";
 import { CheckCircleIcon } from "@heroicons/react/outline";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Layout from "../components/layout";
 
 async function listEvents() {
@@ -24,7 +24,7 @@ function cn(...classes): string {
 }
 
 export default function Top(props) {
-  const { myself } = props;
+  const { myself, startLoading, stopLoading } = props;
   const [modalevent, setModalEvent] = useState(null);
   const [events, setEvents] = useState([]);
   useEffect(() => {
@@ -33,9 +33,11 @@ export default function Top(props) {
     });
   }, []);
   const submit = async function(params) {
+    startLoading();
     const updated = await submitRSVP(params);
     const newlist = events.map(ev => ev.google.id == updated.google.id ? updated : ev);
     setEvents(newlist);
+    stopLoading();
   }
   return (
     <Layout {...props} >

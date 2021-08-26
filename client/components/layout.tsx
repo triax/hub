@@ -2,7 +2,7 @@ import Head from "next/head";
 
 import { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
-import { BellIcon, MenuIcon, XIcon } from "@heroicons/react/outline";
+import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
 
 const navigation = [
   { label: 'Dashboard', link: '/' },
@@ -15,14 +15,26 @@ function classnames(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-export default function Layout({children, myself}) {
+function Loading({isLoading}) {
+  if (!isLoading) return <></>;
+  return (
+    <div className="fixed w-full h-full bg-black bg-opacity-60 flex justify-center items-center space-x-2">
+      <RefreshIcon color="white" className="w-10 h-10 animate-spin" />
+      <span className="text-white text-xl">Loading...</span>
+    </div>
+  )
+}
+
+export default function Layout({children, myself, isLoading}) {
   const teamIcon: string = myself["https://slack.com/team_image_44"];
   const myIcon: string = myself["picture"];
+  console.log(isLoading);
   return (
     <div id="root">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+      <Loading isLoading={isLoading} />
       <Disclosure as="nav" className="bg-gray-800">
         {({open}) => (
           <>

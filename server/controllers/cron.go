@@ -51,6 +51,7 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	defer client.Close()
 
 	keys := []*datastore.Key{}
 	members := []models.Member{}
@@ -102,6 +103,7 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	defer client.Close()
 
 	if _, err := client.PutMulti(ctx, keys, events); err != nil {
 		fmt.Println("[ERROR]", 6003, err.Error())
