@@ -30,5 +30,11 @@
     "https://slack.com/team_image_132": "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_132.png",
     "https://slack.com/team_image_230": "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_230.png",
     "https://slack.com/team_image_default": ""
+  },
+  "slack": {
+    "real_name": "Hiromu Ochiai",
+    "profile": {
+      "title": "老害"
+    }
   }
 }

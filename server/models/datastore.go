@@ -19,17 +19,17 @@ type (
 	Event struct {
 		Google GoogleEvent `json:"google"`
 
-		// Participants Participations `json:"participations"`
-		ParticipationsJSONString string `json:"participations_json_str"`
+		ParticipationsJSONString string `json:"participations_json_str" datastore:",noindex"`
 	}
 
 	Participations map[string]Participation
 
 	Participation struct {
 		Type    ParticipationType      `json:"type"`
+		Params  map[string]interface{} `json:"params"`
 		Name    string                 `json:"name"`
 		Picture string                 `json:"picture"`
-		Params  map[string]interface{} `json:"params"`
+		Title   string                 `json:"title"`
 	}
 
 	ParticipationType string

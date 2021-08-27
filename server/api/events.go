@@ -104,9 +104,10 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 		}
 		parts[myself.OpenID.Sub] = models.Participation{
 			Type:    body.Type,
+			Params:  body.Params,
 			Name:    member.Slack.Profile.RealName,
 			Picture: member.Slack.Profile.Image512,
-			Params:  body.Params,
+			Title:   member.Slack.Profile.Title,
 		}
 		b, err := json.Marshal(parts)
 		if err != nil {
