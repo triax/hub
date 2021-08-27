@@ -76,6 +76,8 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 }
 
 // Cronではないが
+// Eventは、`participations_json_str` を含むので、
+// .Google以下だけPUTする必要がある。
 func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 	if req.Header.Get("X-Hub-Verifier") != os.Getenv("GAS_ACCESS_VERIFIER") {
 		w.WriteHeader(http.StatusForbidden)
@@ -89,12 +91,6 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	keys := []*datastore.Key{}
-	events := []models.Event{}
-	for _, event := range payload.Events {
-		keys = append(keys, datastore.NameKey(models.KindEvent, event.ID, nil))
-		events = append(events, models.Event{Google: event})
-	}
 
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
@@ -105,8 +101,19 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	if _, err := client.PutMulti(ctx, keys, events); err != nil {
-		fmt.Println("[ERROR]", 6003, err.Error())
+	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+		for _, ggl := range payload.Events {
+			ev := models.Event{}
+			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
+			tx.Get(key, &ev) // Error見ないです
+			ev.Google = ggl
+			if _, err := tx.Put(key, ev); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		fmt.Println("[ERROR]", 6005, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

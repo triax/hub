@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 const (
 	KindMember = "Member"
 	KindEvent  = "Event"
@@ -23,10 +21,6 @@ type (
 
 		// Participants Participations `json:"participations"`
 		ParticipationsJSONString string `json:"participations_json_str"`
-
-		StartDate time.Time `json:"start_date"` // なくてよい
-		StartTime int64     `json:"start_time"` // なくてよい
-		EndTime   int64     `json:"end_time"`   // なくてよい
 	}
 
 	Participations map[string]Participation
