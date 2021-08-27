@@ -33,6 +33,7 @@ func main() {
 	authapis.GET("/api/1/members/(?P<id>[a-zA-Z0-9]+)", api.GetMember)
 	authapis.GET("/api/1/members", api.ListMembers)
 	authapis.GET("/api/1/myself", api.GetCurrentUser)
+	authapis.GET("/api/1/events/(?P<id>[a-zA-Z0-9]+)", api.GetEvent)
 	authapis.POST("/api/1/events/answer", api.AnswerEvent)
 	authapis.GET("/api/1/events", api.ListEvents)
 	authapis.Apply(&filters.AuthFilter{
@@ -52,6 +53,7 @@ func main() {
 	authpages.GET("/", controllers.Top)
 	authpages.GET("/members", controllers.Members)
 	authpages.GET("/members/(?P<id>[a-zA-Z0-9]+)", controllers.Member)
+	authpages.GET("/events/(?P<id>[a-zA-Z0-9]+)", controllers.Event)
 	authpages.Apply(&filters.AuthFilter{
 		API: false, LocalDev: os.Getenv("GAE_APPLICATION") == "",
 	})

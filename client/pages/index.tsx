@@ -1,6 +1,7 @@
 import { Dialog } from "@headlessui/react";
 import { CheckCircleIcon } from "@heroicons/react/outline";
 import { useEffect, useRef, useState } from "react";
+import { EventDateTime } from "../components/DateTime";
 import Layout from "../components/layout";
 
 async function listEvents() {
@@ -15,7 +16,6 @@ async function submitRSVP({event, answer, params}) {
     event: { id: event.google.id }, type: answer, params: params ? params : null,
   })});
   const result = await res.json();
-  // console.log(res.status, res.statusText, JSON.parse(result.participations_json_str));
   return result;
 }
 
@@ -56,19 +56,6 @@ export default function Top(props) {
   );
 }
 
-const weekday = {
-  0: "日", 1: "月", 2: "火", 3: "水", 4: "木", 5: "金", 6: "土"
-}
-
-function EventDateTime({timestamp}) {
-  const date = new Date(timestamp);
-  return (
-    <div className="text-xs text-gray-500">
-      {date.getMonth() + 1}月 {date.getDate()}日（{weekday[date.getDay()]}） {date.getHours()}:{("0" + date.getMinutes()).slice(-2)}
-    </div>
-  )
-}
-
 function EventLocation({location}) {
   return (
     <div>
@@ -81,13 +68,13 @@ function EventLocation({location}) {
 
 function EventRow({event, myself, submit, setModalEvent}) {
   const pats = JSON.parse(event.participations_json_str || "{}");
-  const answer = pats[myself.sub] || {};
+  const answer = pats[myself.openid.sub] || {};
   return (
     <div className="px-0 py-4">
       <EventDateTime timestamp={event.google.start_time} />
       <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
       <EventLocation location={event.google.location} />
-      <EventParticipantsIcons pats={pats} />
+      <EventParticipantsIcons pats={pats} onClick={() => location.href = `/events/${event.google.id.replace(/@google\.com$/, "")}`} />
       <div className="px-0 pt-4 flex items-center">
         <div className="flex">
           {answer.type === undefined ? (
@@ -230,7 +217,7 @@ function ParticipationSelectBoxes({ptype, setPType, defaultTime, onCancel, onCom
   );
 }
 
-function EventParticipantsIcons({pats}) {
+function EventParticipantsIcons({pats, onClick = () => {}}) {
   const entries = Object.entries(pats)
     .filter(([_, p]: [string, any]) => p.type == 'join' || p.type == 'join_late') || [];
   if (entries.length == 0) return null;
@@ -238,7 +225,7 @@ function EventParticipantsIcons({pats}) {
   const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
   const rest = entries.length - visibles.length;
   return (
-    <div className="flex">
+    <div className="flex" onClick={onClick} >
       <div className="flex -space-x-2">
         {visibles.map(([id, p]: [string, any]) => (
           <img

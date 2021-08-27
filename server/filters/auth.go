@@ -24,13 +24,13 @@ const (
 	SessionContextKey ContextKey = "session_user"
 )
 
-func SetSessionUserContext(req *http.Request, info *models.SlackOpenIDUserInfo) *http.Request {
-	ctx := context.WithValue(req.Context(), SessionContextKey, info)
+func SetSessionUserContext(req *http.Request, myself *models.Myself) *http.Request {
+	ctx := context.WithValue(req.Context(), SessionContextKey, myself)
 	return req.WithContext(ctx)
 }
 
-func GetSessionUserContext(req *http.Request) *models.SlackOpenIDUserInfo {
-	return req.Context().Value(SessionContextKey).(*models.SlackOpenIDUserInfo)
+func GetSessionUserContext(req *http.Request) *models.Myself {
+	return req.Context().Value(SessionContextKey).(*models.Myself)
 }
 
 func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -43,10 +43,10 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if auth.LocalDev {
 		f, _ := os.Open("server/filters/local-user.json")
-		info := models.SlackOpenIDUserInfo{Name: "Local Dev USER"}
-		json.NewDecoder(f).Decode(&info)
+		myself := models.Myself{}
+		json.NewDecoder(f).Decode(&myself)
 		f.Close()
-		auth.Next.ServeHTTP(w, SetSessionUserContext(req, &info))
+		auth.Next.ServeHTTP(w, SetSessionUserContext(req, &myself))
 		return
 	}
 
@@ -72,5 +72,5 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	auth.Next.ServeHTTP(w, SetSessionUserContext(req, &claims.Info))
+	auth.Next.ServeHTTP(w, SetSessionUserContext(req, &claims.Myself))
 }

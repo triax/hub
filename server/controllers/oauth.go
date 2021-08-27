@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	"github.com/golang-jwt/jwt"
 	"github.com/triax/hub/server/models"
 )
@@ -104,12 +105,28 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("datastore.Client: " + err.Error()))
+		return
+	}
+	defer client.Close()
+
+	member := models.Member{}
+	if err := client.Get(ctx, datastore.NameKey(models.KindMember, info.Sub, nil), &member); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("datastore.Get: " + err.Error()))
+		return
+	}
+
 	t := jwt.New(jwt.GetSigningMethod(os.Getenv("JWT_SIGNING_METHOD")))
 	t.Claims = &models.SessionUserClaims{
 		StandardClaims: &jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Hour * 48).Unix(),
+			ExpiresAt: time.Now().Add(time.Hour * 24 * 7).Unix(),
 		},
-		Info: *info,
+		Myself: models.Myself{OpenID: *info, Slack: member.Slack},
 	}
 
 	tokenstr, err := t.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
@@ -123,7 +140,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		Name:    "hub-identity-token",
 		Value:   tokenstr,
 		Path:    "/",
-		Expires: time.Now().Add(time.Hour * 36),
+		Expires: time.Now().Add(time.Hour * 24 * 7),
 	})
 	http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
 }

@@ -13,6 +13,27 @@ import (
 	"github.com/triax/hub/server/models"
 )
 
+func GetEvent(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	event := models.Event{}
+	suffix := "@google.com"
+	key := datastore.NameKey(models.KindEvent, req.FormValue("id")+suffix, nil)
+	if err := client.Get(ctx, key, &event); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	render.JSON(http.StatusOK, event)
+}
+
 func ListEvents(w http.ResponseWriter, req *http.Request) {
 
 	render := marmoset.Render(w)
@@ -63,7 +84,7 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	member := models.Member{}
-	if err := client.Get(ctx, datastore.NameKey(models.KindMember, myself.Sub, nil), &member); err != nil {
+	if err := client.Get(ctx, datastore.NameKey(models.KindMember, myself.OpenID.Sub, nil), &member); err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -81,7 +102,7 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 		if err := json.NewDecoder(strings.NewReader(event.ParticipationsJSONString)).Decode(&parts); err != nil {
 			return err
 		}
-		parts[myself.Sub] = models.Participation{
+		parts[myself.OpenID.Sub] = models.Participation{
 			Type:    body.Type,
 			Name:    member.Slack.Profile.RealName,
 			Picture: member.Slack.Profile.Image512,

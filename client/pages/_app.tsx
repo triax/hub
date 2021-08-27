@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 
 function App({ Component, pageProps, router }: AppProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [myself, setMyself] = useState({});
+  const [myself, setMyself] = useState({openid:{}, slack: {}});
   useEffect(() => {
     switch (router.pathname) {
     case "/login": return;

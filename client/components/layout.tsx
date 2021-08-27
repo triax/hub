@@ -26,9 +26,8 @@ function Loading({isLoading}) {
 }
 
 export default function Layout({children, myself, isLoading}) {
-  const teamIcon: string = myself["https://slack.com/team_image_44"];
-  const myIcon: string = myself["picture"];
-  console.log(isLoading);
+  const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
+  const myIcon: string = myself.openid["picture"];
   return (
     <div id="root">
       <Head>
@@ -93,7 +92,7 @@ export default function Layout({children, myself, isLoading}) {
                           <img
                             className="h-8 w-8 rounded-full"
                             src={myIcon}
-                            alt={myself.given_name}
+                            alt={myself.openid.given_name}
                           />
                         </Menu.Button>
                       </div>
@@ -159,11 +158,11 @@ export default function Layout({children, myself, isLoading}) {
                     <img
                       className="h-10 w-10 rounded-full"
                       src={myIcon}
-                      alt={myself.given_name}
+                      alt={myself.openid.given_name}
                     />
                   </div>
                   <div className="ml-3">
-                    <div className="text-base font-medium leading-none text-white">{myself.given_name} {myself.family_name}</div>
+                    <div className="text-base font-medium leading-none text-white">{myself.openid.given_name} {myself.openid.family_name}</div>
                     <div className="text-sm font-medium leading-none text-gray-400">tom@example.com</div>
                   </div>
 

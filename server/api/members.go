@@ -12,12 +12,11 @@ import (
 
 func GetCurrentUser(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
-	info := filters.GetSessionUserContext(req)
-	if info == nil {
-		render.JSON(http.StatusBadRequest, marmoset.P{})
+	myself := filters.GetSessionUserContext(req)
+	if myself == nil {
+		render.JSON(http.StatusForbidden, marmoset.P{})
 	}
-
-	render.JSON(http.StatusOK, info)
+	render.JSON(http.StatusOK, myself)
 }
 
 func ListMembers(w http.ResponseWriter, req *http.Request) {
