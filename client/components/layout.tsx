@@ -27,11 +27,15 @@ function Loading({isLoading}) {
 
 export default function Layout({children, myself, isLoading}) {
   const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
+  const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
   const myIcon: string = myself.openid["picture"];
   return (
     <div id="root">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{process.env.NODE_ENV == "production" ? "" : "[DEV] "}Triax Team Hub</title>
+        <link rel="apple-touch-icon" href={touchIcon} />
+        <link rel="shortcut icon" href={teamIcon} />
       </Head>
       <Loading isLoading={isLoading} />
       <Disclosure as="nav" className="bg-gray-800">
