@@ -1,9 +1,9 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import { EventDateTime } from "../../../components/DateTime";
 import Layout from "../../../components/layout";
-import { LocationMarkerIcon, MapIcon } from "@heroicons/react/outline";
+import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
+import { EventDateTime } from "../../../components/Events";
 
 export default function EventView(props) {
   const id = useRouter().query.id;
