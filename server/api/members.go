@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -37,6 +38,11 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	if _, err := client.GetAll(ctx, query, &members); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
+	}
+
+	if req.URL.Query().Get("cached") == "1" {
+		age := 4 * 60 * 60 // 4時間
+		w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
 	}
 
 	render.JSON(http.StatusOK, members)
