@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import Layout from "../../components/layout";
 import StatusBadges from "../../components/statusbadges";
+import Image from "next/image";
 
 async function listMembers(incdel: boolean) {
   const endpoint = process.env.API_BASE_URL + "/api/1/members";
@@ -42,11 +43,17 @@ function MemberItem({ member }) {
     <article className="py-2 flex space-x-4 cursor-pointer"
       onClick={() => location.href = `/members/${member.slack.id}`}
     >
-      <img
-        src={slack.profile.image_512}
-        alt={slack.profile.real_name}
-        className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
-      />
+      <div className="flex-none w-12 h-12">
+        <Image
+          loader={({ src }) => src}
+          unoptimized={true}
+          src={slack.profile.image_512}
+          alt={slack.profile.real_name}
+          className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
+          width={120}
+          height={120}
+        />
+      </div>
       <div className="min-w-0 relative flex-auto sm:pr-20 lg:pr-0 xl:pr-20 flex">
         <div className="flex-1">
           <h3 className="text-md text-black">
