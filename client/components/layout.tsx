@@ -2,7 +2,7 @@ import Head from "next/head";
 
 import { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
-import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
+import { BellIcon, LocationMarkerIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
 import { useRouter } from "next/router";
 
 const navigation = [
@@ -10,7 +10,12 @@ const navigation = [
   { label: 'Calendar', link: '/events' },
   { label: 'Team', link: '/members' }
 ];
-const profile = ['Your Profile', 'Settings', 'Sign out']
+
+async function logout() {
+  const res = await fetch(process.env.API_BASE_URL + "/api/1/auth/logout", { method: "POST" });
+  const body = await res.json();
+  if (body.ok) location.href = "/";
+}
 
 function classnames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -31,6 +36,12 @@ export default function Layout({children, myself, isLoading}) {
   const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
   const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
   const myIcon: string = myself.openid["picture"];
+
+  const userNavigation = [
+    { label: 'Your Profile', onClick: () => location.href = `/members/${myself.openid.sub}` },
+    { label: 'Sign out', onClick: logout },
+  ];
+
   return (
     <div id="root">
       <Head>
@@ -117,15 +128,15 @@ export default function Layout({children, myself, isLoading}) {
                         <Menu.Items
                           className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
                         >
-                          {profile.map((item) => (
-                            <Menu.Item key={item}>
+                          {userNavigation.map(item => (
+                            <Menu.Item key={item.label}>
                               {({active}) => (
-                                <a href="#"
+                                <span onClick={item.onClick}
                                   className={classnames(
                                     active ? 'bg-gray-100' : '',
                                     'block px-4 py-2 text-sm text-gray-700',
                                   )}
-                                >{item}</a>
+                                >{item.label}</span>
                               )}
                             </Menu.Item>
                           ))}
@@ -184,12 +195,12 @@ export default function Layout({children, myself, isLoading}) {
                   </button>
                 </div>
                 <div className="mt-3 px-2 space-y-1">
-                  {profile.map((item) => (
-                    <a
-                      key={item}
-                      href="#"
+                  {userNavigation.map(item => (
+                    <span
+                      onClick={item.onClick}
+                      key={item.label}
                       className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700"
-                    >{item}</a>
+                    >{item.label}</span>
                   ))}
                 </div>
               </div>

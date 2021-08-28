@@ -36,6 +36,7 @@ func main() {
 	authapis.GET("/api/1/events/(?P<id>[a-zA-Z0-9]+)", api.GetEvent)
 	authapis.POST("/api/1/events/answer", api.AnswerEvent)
 	authapis.GET("/api/1/events", api.ListEvents)
+	authapis.POST("/api/1/auth/logout", api.AuthLogout)
 	authapis.Apply(&filters.AuthFilter{
 		API: true, LocalDev: os.Getenv("GAE_APPLICATION") == "",
 	})
