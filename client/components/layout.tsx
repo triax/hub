@@ -3,10 +3,11 @@ import Head from "next/head";
 import { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
 import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
+import { useRouter } from "next/router";
 
 const navigation = [
   { label: 'Dashboard', link: '/' },
-  { label: 'Calendar', link: '/' },
+  { label: 'Calendar', link: '/events' },
   { label: 'Team', link: '/members' }
 ];
 const profile = ['Your Profile', 'Settings', 'Sign out']
@@ -26,6 +27,7 @@ function Loading({isLoading}) {
 }
 
 export default function Layout({children, myself, isLoading}) {
+  const { pathname } = useRouter();
   const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
   const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
   const myIcon: string = myself.openid["picture"];
@@ -48,7 +50,10 @@ export default function Layout({children, myself, isLoading}) {
                 <div className="flex items-center">
 
                   {/* Always show branc-logo */}
-                  <div className="flex-shrink-0 flex items-center">
+                  <div
+                    className="flex-shrink-0 flex items-center"
+                    onClick={() => location.href = "/"}
+                  >
                     <img className="h-8 w-8" src={teamIcon} alt="Triax" />
                     <span className="md:hidden ml-2 text-gray-100">Team HUB</span>
                   </div>
@@ -56,7 +61,7 @@ export default function Layout({children, myself, isLoading}) {
                   {/* Items HIDDEN in small */}
                   <div className="hidden md:block">
                     <div className="ml-10 flex items-baseline space-x-4">
-                      {navigation.map((item, i) => i == 0 ? (
+                      {navigation.map(item => item.link == pathname ? (
                         <Fragment key={item.label}>
                           <a
                             href={item.link}

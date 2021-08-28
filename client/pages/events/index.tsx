@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { EventList, EventRow } from "../components/Events";
-import { RSVPModal } from "../components/Events/RSVPModal";
-import Layout from "../components/layout";
+import { EventList, EventRow } from "../../components/Events";
+import { RSVPModal } from "../../components/Events/RSVPModal";
+import Layout from "../../components/layout";
 
+// TODO: Repositoryつくれよ、いい加減
 async function submitRSVP({event, answer, params}) {
   const endpoint = process.env.API_BASE_URL + "/api/1/events/answer";
   const res = await fetch(endpoint, { method: "POST", body: JSON.stringify({
