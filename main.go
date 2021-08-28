@@ -54,6 +54,7 @@ func main() {
 	authpages.GET("/", controllers.Top)
 	authpages.GET("/members", controllers.Members)
 	authpages.GET("/members/(?P<id>[a-zA-Z0-9]+)", controllers.Member)
+	authpages.GET("/events", controllers.Events)
 	authpages.GET("/events/(?P<id>[a-zA-Z0-9]+)", controllers.Event)
 	authpages.Apply(&filters.AuthFilter{
 		API: false, LocalDev: os.Getenv("GAE_APPLICATION") == "",

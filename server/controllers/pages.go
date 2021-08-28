@@ -16,6 +16,11 @@ func Member(w http.ResponseWriter, req *http.Request) {
 	render.HTML("members/[id]", marmoset.P{})
 }
 
+func Events(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	render.HTML("events", marmoset.P{})
+}
+
 func Event(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	render.HTML("events/[id]", marmoset.P{})

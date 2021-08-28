@@ -4,6 +4,7 @@ module.exports = (phase, { defaultConfig }) => {
    */
   const nextConfig = {
     images: {
+      loader: 'custom',
       domains: [
         'avatars.slack-edge.com',
         'a.slack-edge.com',
