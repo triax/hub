@@ -71,6 +71,10 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
+	if claims.Myself.OpenID.Sub == "" || claims.Myself.OpenID.Picture == "" {
+		http.Redirect(w, req, "/login?error=reset", http.StatusTemporaryRedirect)
+		return
+	}
 
 	auth.Next.ServeHTTP(w, SetSessionUserContext(req, &claims.Myself))
 }
