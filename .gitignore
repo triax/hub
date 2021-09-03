@@ -1,2 +1,16 @@
+# Frontend
+node_modules
+client/.next
+client/dest
+
+# Backend
 vendor
 secrets.yaml
+secrets.dev.yaml
+secrets.local.yaml
+
+# Development
+dev
+
+# Editors
+.vscode

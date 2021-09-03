@@ -8,7 +8,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
-	"github.com/triax/hub/models"
+	"github.com/triax/hub/server/models"
 )
 
 func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
@@ -51,6 +51,7 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	defer client.Close()
 
 	keys := []*datastore.Key{}
 	members := []models.Member{}
@@ -72,4 +73,51 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 		"message": "ok",
 		"count":   len(members),
 	})
+}
+
+// Cronではないが
+// Eventは、`participations_json_str` を含むので、
+// .Google以下だけPUTする必要がある。
+func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("X-Hub-Verifier") != os.Getenv("GAS_ACCESS_VERIFIER") {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	payload := struct {
+		Events []models.GoogleEvent `json:"events"`
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		fmt.Println("[ERROR]", 6001, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		fmt.Println("[ERROR]", 6002, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer client.Close()
+
+	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+		for _, ggl := range payload.Events {
+			ev := models.Event{}
+			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
+			tx.Get(key, &ev) // Error見ないです
+			ev.Google = ggl
+			if _, err := tx.Put(key, ev); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		fmt.Println("[ERROR]", 6005, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Printf("%+v\n", payload.Events)
+	w.WriteHeader(http.StatusOK)
 }

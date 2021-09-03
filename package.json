@@ -1,0 +1,45 @@
+{
+  "name": "hub",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "next dev ./client",
+    "build": "next build ./client",
+    "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
+    "dev:db": "gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football",
+    "dev:env": "gcloud beta emulators datastore env-init --data-dir=./dev/data",
+    "lint": "next lint ./client",
+    "deploy:prod": "npm run export && gcloud app deploy ./app.yaml    --project triax-football --quiet",
+    "deploy:dev": "npm run export && gcloud app deploy ./app.dev.yaml --project triax-football --quiet"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/triax/hub.git"
+  },
+  "author": "otiai10",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/triax/hub/issues"
+  },
+  "homepage": "https://github.com/triax/hub#readme",
+  "devDependencies": {
+    "@types/react": "^17.0.18",
+    "autoprefixer": "^10.3.1",
+    "eslint": "7.32.0",
+    "eslint-config-next": "11.1.0",
+    "next": "^11.1.0",
+    "postcss": "^8.3.6",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "sass": "^1.38.0",
+    "tailwindcss": "^2.2.7",
+    "typescript": "^4.3.5"
+  },
+  "dependencies": {
+    "@headlessui/react": "^1.4.0",
+    "@heroicons/react": "^1.0.4",
+    "@tailwindcss/forms": "^0.3.3"
+  }
+}
