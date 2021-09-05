@@ -57,8 +57,10 @@ func main() {
 	// Cron or Gas
 	cron := chi.NewRouter()
 	cron.Get("/fetch-slack-members", controllers.CronFetchSlackMembers)
-	cron.Post("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
 	r.Mount("/tasks", cron)
+
+	// TODO: Do not rely on GAS.
+	r.Post("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
 
 	r.NotFound(controllers.NotFound)
 

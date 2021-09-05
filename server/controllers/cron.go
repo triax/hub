@@ -89,6 +89,7 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		fmt.Println("[ERROR]", 6001, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
 		return
 	}
 
@@ -97,6 +98,7 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		fmt.Println("[ERROR]", 6002, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
 		return
 	}
 	defer client.Close()
@@ -105,9 +107,11 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 		for _, ggl := range payload.Events {
 			ev := models.Event{}
 			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
-			tx.Get(key, &ev) // Error見ないです
-			ev.Google = ggl
-			if _, err := tx.Put(key, ev); err != nil {
+			if err := tx.Get(key, &ev); err != nil {
+				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", ggl.Title)
+			}
+			ev.Google = ggl // Merge with existing "ev"
+			if _, err := tx.Put(key, &ev); err != nil {
 				return err
 			}
 		}
@@ -115,6 +119,7 @@ func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
 	}); err != nil {
 		fmt.Println("[ERROR]", 6005, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
 		return
 	}
 
