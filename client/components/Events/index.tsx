@@ -51,12 +51,15 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
 export function EventRow({event, myself, submit, setModalEvent}) {
   const pats = JSON.parse(event.participations_json_str || "{}");
   const answer = pats[myself.openid.sub] || {};
+  const id = event.google.id.replace(/@google\.com$/, "");
   return (
     <div className="px-0 py-4">
-      <EventDateTime timestamp={event.google.start_time} />
-      <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
-      <EventLocation location={event.google.location} />
-      <EventParticipantsIcons pats={pats} onClick={() => location.href = `/events/${event.google.id.replace(/@google\.com$/, "")}`} />
+      <div onClick={() => location.href = `/events/${id}`}>
+        <EventDateTime timestamp={event.google.start_time} />
+        <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
+        <EventLocation location={event.google.location} />
+        <EventParticipantsIcons pats={pats} />
+      </div>
       <div className="px-0 pt-4 flex items-center">
         <div className="flex">
           {answer.type === undefined ? (
