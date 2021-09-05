@@ -1,3 +1,4 @@
+import Image from "next/image";
 
 function cn(...classes): string {
   return classes.filter(Boolean).join(' ');
@@ -37,10 +38,16 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
     <div className="flex" onClick={onClick} >
       <div className="flex -space-x-2">
         {visibles.map(([id, p]: [string, any]) => (
-          <img
-            key={id} src={p.picture} alt={p.name}
-            className="w-6 h-6 rounded-full border-2 border-white"
-          />
+          <div key={id}
+            className="w-6 h-6 rounded-full border-2 border-white overflow-hidden"
+          >
+            <Image
+              width={60} height={60}
+              src={p.picture} alt={p.name}
+              loader={({ src }) => src}
+              unoptimized={true}
+            />
+          </div>
         ))}
       </div>
       {rest > 0 ? <span className="text-gray-400 text-sm items-center">+{rest}</span> : null}
