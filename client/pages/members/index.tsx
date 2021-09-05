@@ -14,9 +14,7 @@ export default function Members(props) {
   const incdel = useRouter().query.include_deleted == "1";
   const [members, setMembers] = useState([]);
   useEffect(() => {
-    setTimeout(() => { // FIXME: クソすぎる
-      listMembers(incdel).then(mems => setMembers(mems));
-    }, 1000);
+    listMembers(incdel).then(mems => setMembers(mems));
   }, [incdel]);
   return (
     <Layout {...props}>

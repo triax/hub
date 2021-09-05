@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"github.com/go-chi/chi/v5"
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
@@ -23,9 +24,10 @@ func GetEvent(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
+	id := chi.URLParam(req, "id")
 	event := models.Event{}
 	suffix := "@google.com"
-	key := datastore.NameKey(models.KindEvent, req.FormValue("id")+suffix, nil)
+	key := datastore.NameKey(models.KindEvent, id+suffix, nil)
 	if err := client.Get(ctx, key, &event); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return

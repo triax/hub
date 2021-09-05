@@ -14,9 +14,7 @@ export default function EventView(props) {
     // TODO: Repositoryつくる
     const base = process.env.API_BASE_URL;
     fetch(`${base}/api/1/events/${id}`).then(res => res.json()).then(res => setEvent(res));
-    setTimeout(() => { // TODO: はーマジクソ
-      fetch(`${base}/api/1/members?cached=1`).then(res => res.json()).then(res => setAllMembers(res));
-    })
+    fetch(`${base}/api/1/members?cached=1`).then(res => res.json()).then(res => setAllMembers(res));
   }, [id]);
   if (!event) return <></>;
   const pats = JSON.parse(event.participations_json_str);

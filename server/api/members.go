@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"cloud.google.com/go/datastore"
+	"github.com/go-chi/chi/v5"
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
@@ -58,7 +59,7 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	id := req.FormValue("id")
+	id := chi.URLParam(req, "id")
 	member := models.Member{}
 	key := datastore.NameKey(models.KindMember, id, nil)
 	if err := client.Get(ctx, key, &member); err != nil {

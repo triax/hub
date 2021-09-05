@@ -10,6 +10,8 @@ import (
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func init() {
@@ -22,60 +24,43 @@ func init() {
 
 func main() {
 
-	// tpl := template.Must(template.ParseGlob("client/dest/*.html"))
-	// marmoset.UseTemplate(tpl)
 	marmoset.LoadViews("client/dest")
 
-	root := marmoset.NewRouter()
+	r := chi.NewRouter()
 
 	// API
-	authapis := marmoset.NewRouter()
-	authapis.GET("/api/1/members/(?P<id>[a-zA-Z0-9]+)", api.GetMember)
-	authapis.GET("/api/1/members", api.ListMembers)
-	authapis.GET("/api/1/myself", api.GetCurrentUser)
-	authapis.GET("/api/1/events/(?P<id>[a-zA-Z0-9]+)", api.GetEvent)
-	authapis.POST("/api/1/events/answer", api.AnswerEvent)
-	authapis.GET("/api/1/events", api.ListEvents)
-	authapis.POST("/api/1/auth/logout", api.AuthLogout)
-	authapis.Apply(&filters.AuthFilter{
-		API: true, LocalDev: os.Getenv("GAE_APPLICATION") == "",
-	})
-	root.Subrouter(authapis)
+	v1 := chi.NewRouter()
+	auth := &filters.Auth{API: true, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
+	v1.Use(auth.Handle)
+	v1.Get("/members/{id}", api.GetMember)
+	v1.Get("/members", api.ListMembers)
+	v1.Get("/myself", api.GetCurrentUser)
+	v1.Get("/events/{id}", api.GetEvent)
+	v1.Post("/events/answer", api.AnswerEvent)
+	v1.Get("/events", api.ListEvents)
+	v1.Post("/auth/logout", api.AuthLogout)
+	r.Mount("/api/1", v1)
 
 	// Unauthorized pages
-	unauthorized := marmoset.NewRouter()
-	unauthorized.GET("/login", controllers.Login)
-	unauthorized.GET("/auth/start", controllers.AuthStart)
-	unauthorized.GET("/auth/callback", controllers.AuthCallback)
-	root.Subrouter(unauthorized)
+	r.Get("/login", controllers.Login)
+	r.Get("/auth/start", controllers.AuthStart)
+	r.Get("/auth/callback", controllers.AuthCallback)
 
 	// Pages
-	authpages := marmoset.NewRouter()
-	authpages.GET("/", controllers.Top)
-	authpages.GET("/members", controllers.Members)
-	authpages.GET("/members/(?P<id>[a-zA-Z0-9]+)", controllers.Member)
-	authpages.GET("/events", controllers.Events)
-	authpages.GET("/events/(?P<id>[a-zA-Z0-9]+)", controllers.Event)
-	authpages.Apply(&filters.AuthFilter{
-		API: false, LocalDev: os.Getenv("GAE_APPLICATION") == "",
-	})
-	root.Subrouter(authpages)
+	page := &filters.Auth{API: false, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
+	r.With(page.Handle).Get("/", controllers.Top)
+	r.With(page.Handle).Get("/members", controllers.Members)
+	r.With(page.Handle).Get("/members/{id}", controllers.Member)
+	r.With(page.Handle).Get("/events", controllers.Events)
+	r.With(page.Handle).Get("/events/{id}", controllers.Event)
 
 	// Cron or Gas
-	cron := marmoset.NewRouter()
-	cron.GET("/tasks/fetch-slack-members", controllers.CronFetchSlackMembers)
-	cron.POST("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
-	root.Subrouter(cron)
+	cron := chi.NewRouter()
+	cron.Get("/fetch-slack-members", controllers.CronFetchSlackMembers)
+	cron.Post("/_gas/sync-calendar-events", controllers.SyncCalendarEvetns)
+	r.Mount("/tasks", cron)
 
-	// 404
-	root.NotFound(controllers.NotFound)
-
-	// GAEにデプロイされた場合、Staticのレンダリングは、app.yamlに任せる
-	if os.Getenv("GAE_APPLICATION") == "" {
-		root.Static("/_next", "client/dest/_next")
-	}
-
-	http.Handle("/", root)
+	r.NotFound(controllers.NotFound)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -83,7 +68,7 @@ func main() {
 		log.Printf("Defaulting to port %s", port)
 	}
 	log.Printf("Listening on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}
 }
