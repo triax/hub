@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/otiai10/marmoset"
+	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
 
@@ -50,12 +52,12 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cookie, err := req.Cookie("hub-identity-token")
+	cookie, err := req.Cookie(server.SessionCookieName)
 	if err != nil {
 		if auth.API {
 			w.WriteHeader(http.StatusUnauthorized)
 		} else {
-			http.Redirect(w, req, "/login", http.StatusTemporaryRedirect)
+			http.Redirect(w, req, "/login?error="+err.Error(), http.StatusTemporaryRedirect)
 		}
 		return
 	}
@@ -67,11 +69,21 @@ func (auth *AuthFilter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if auth.API {
 			w.WriteHeader(http.StatusUnauthorized)
 		} else {
+			http.SetCookie(w, &http.Cookie{
+				Name:  server.SessionCookieName,
+				Value: "", Path: "/", Expires: time.Unix(0, 0),
+				MaxAge: -1, HttpOnly: true,
+			})
 			http.Redirect(w, req, "/login?error="+err.Error(), http.StatusTemporaryRedirect)
 		}
 		return
 	}
 	if claims.Myself.OpenID.Sub == "" || claims.Myself.OpenID.Picture == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:  server.SessionCookieName,
+			Value: "", Path: "/", Expires: time.Unix(0, 0),
+			MaxAge: -1, HttpOnly: true,
+		})
 		http.Redirect(w, req, "/login?error=reset", http.StatusTemporaryRedirect)
 		return
 	}

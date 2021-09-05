@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/golang-jwt/jwt"
+	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
 
@@ -34,6 +35,12 @@ func AuthStart(w http.ResponseWriter, req *http.Request) {
 		"redirect_uri":  {"https://" + req.Host + "/auth/callback"},
 	}
 	u.RawQuery = q.Encode()
+	http.SetCookie(w, &http.Cookie{
+		Name:  server.SessionCookieName,
+		Value: "", Path: "/", Expires: time.Unix(0, 0),
+		MaxAge: -1, HttpOnly: true,
+	})
+
 	http.Redirect(w, req, u.String(), http.StatusTemporaryRedirect)
 }
 
@@ -51,6 +58,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("No oauth client code given."))
 		return
 	}
+
 	// https://api.slack.com/authentication/sign-in-with-slack#exchange
 	tokenExchangeEndpoint := "https://slack.com/api/openid.connect.token"
 	q := url.Values{
@@ -60,6 +68,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		"grant_type":    {"authorization_code"},
 		"redirect_uri":  {"https://" + req.Host + "/auth/callback"},
 	}
+
 	exchange, err := http.NewRequest("POST", tokenExchangeEndpoint, strings.NewReader(q.Encode()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -137,11 +146,12 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:    "hub-identity-token",
+		Name:    server.SessionCookieName,
 		Value:   tokenstr,
 		Path:    "/",
 		Expires: time.Now().Add(time.Hour * 24 * 7),
 	})
+
 	http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
 }
 
