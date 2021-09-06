@@ -1,5 +1,11 @@
 package models
 
+import (
+	"time"
+
+	"google.golang.org/api/calendar/v3"
+)
+
 type (
 	GoogleEvent struct {
 		ID          string `json:"id"`
@@ -10,3 +16,20 @@ type (
 		Location    string `json:"location"`
 	}
 )
+
+func CreateEventFromCalendarAPI(cal *calendar.Event) GoogleEvent {
+	must := func(t time.Time, err error) int64 {
+		if err != nil {
+			panic(err)
+		}
+		return t.Unix() * 1000
+	}
+	return GoogleEvent{
+		ID:          cal.Id,
+		Title:       cal.Summary,
+		Description: cal.Description,
+		StartTime:   must(time.Parse(time.RFC3339, cal.Start.DateTime)),
+		EndTime:     must(time.Parse(time.RFC3339, cal.End.DateTime)),
+		Location:    cal.Location,
+	}
+}

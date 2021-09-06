@@ -3,3 +3,8 @@ cron:
   url: /tasks/fetch-slack-members
   schedule: every 24 hours
   timezone: Asia/Tokyo
+
+- description: Fetch Google Events
+  url: /tasks/fetch-calendar-events
+  schedule: every 24 hours
+  timezone: Asia/Tokyo

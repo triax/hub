@@ -8,7 +8,7 @@
     "dev": "next dev ./client",
     "db": "gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football",
     "db:env": "gcloud beta emulators datastore env-init --data-dir=./dev/data",
-    "db:kill": "ps aux | grep cloud_datastore_emulator | awk '{print $2}' | xargs kill",
+    "db:kill": "ps aux | grep datastore | awk '{print $2}' | xargs kill",
     "build": "next build ./client",
     "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
     "lint": "next lint ./client",

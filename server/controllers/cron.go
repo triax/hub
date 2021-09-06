@@ -5,11 +5,77 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/triax/hub/server/models"
+	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
 )
+
+func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	jsonstr := os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+	opt := option.WithCredentialsJSON([]byte(jsonstr))
+	service, err := calendar.NewService(ctx, opt)
+	if err != nil {
+		fmt.Println("[ERROR]", 7001, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	id := os.Getenv("GOOGLE_CALENDAR_ID")
+
+	t := time.Now().Format(time.RFC3339)
+	events, err := service.Events.List(id).
+		ShowDeleted(false).
+		SingleEvents(true).
+		TimeMin(t).
+		MaxResults(20).
+		OrderBy("startTime").
+		Do()
+	if err != nil {
+		fmt.Println("[ERROR]", 7002, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		fmt.Println("[ERROR]", 7003, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	defer client.Close()
+
+	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+		for _, item := range events.Items {
+			ev := models.Event{}
+			key := datastore.NameKey(models.KindEvent, item.Id, nil)
+			if err := tx.Get(key, &ev); err != nil {
+				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", item)
+			}
+			ev.Google = models.CreateEventFromCalendarAPI(item)
+			if _, err := tx.Put(key, &ev); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		fmt.Println("[ERROR]", 7005, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	marmoset.Render(w).JSON(http.StatusOK, marmoset.P{
+		"message": "ok",
+		"count":   len(events.Items),
+	})
+}
 
 func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
@@ -78,51 +144,51 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 // Cronではないが
 // Eventは、`participations_json_str` を含むので、
 // .Google以下だけPUTする必要がある。
-func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
-	if req.Header.Get("X-Hub-Verifier") != os.Getenv("GAS_ACCESS_VERIFIER") {
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-	payload := struct {
-		Events []models.GoogleEvent `json:"events"`
-	}{}
-	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-		fmt.Println("[ERROR]", 6001, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
+// func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
+// 	if req.Header.Get("X-Hub-Verifier") != os.Getenv("GAS_ACCESS_VERIFIER") {
+// 		w.WriteHeader(http.StatusForbidden)
+// 		return
+// 	}
+// 	payload := struct {
+// 		Events []models.GoogleEvent `json:"events"`
+// 	}{}
+// 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+// 		fmt.Println("[ERROR]", 6001, err.Error())
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		fmt.Fprint(w, err.Error())
+// 		return
+// 	}
 
-	ctx := req.Context()
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-	if err != nil {
-		fmt.Println("[ERROR]", 6002, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	defer client.Close()
+// 	ctx := req.Context()
+// 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+// 	if err != nil {
+// 		fmt.Println("[ERROR]", 6002, err.Error())
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		fmt.Fprint(w, err.Error())
+// 		return
+// 	}
+// 	defer client.Close()
 
-	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
-		for _, ggl := range payload.Events {
-			ev := models.Event{}
-			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
-			if err := tx.Get(key, &ev); err != nil {
-				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", ggl.Title)
-			}
-			ev.Google = ggl // Merge with existing "ev"
-			if _, err := tx.Put(key, &ev); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		fmt.Println("[ERROR]", 6005, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
+// 	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+// 		for _, ggl := range payload.Events {
+// 			ev := models.Event{}
+// 			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
+// 			if err := tx.Get(key, &ev); err != nil {
+// 				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", ggl.Title)
+// 			}
+// 			ev.Google = ggl // Merge with existing "ev"
+// 			if _, err := tx.Put(key, &ev); err != nil {
+// 				return err
+// 			}
+// 		}
+// 		return nil
+// 	}); err != nil {
+// 		fmt.Println("[ERROR]", 6005, err.Error())
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		fmt.Fprint(w, err.Error())
+// 		return
+// 	}
 
-	fmt.Printf("%+v\n", payload.Events)
-	w.WriteHeader(http.StatusOK)
-}
+// 	fmt.Printf("%+v\n", payload.Events)
+// 	w.WriteHeader(http.StatusOK)
+// }

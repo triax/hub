@@ -26,10 +26,9 @@ func GetEvent(w http.ResponseWriter, req *http.Request) {
 
 	id := chi.URLParam(req, "id")
 	event := models.Event{}
-	suffix := "@google.com"
-	key := datastore.NameKey(models.KindEvent, id+suffix, nil)
+	key := datastore.NameKey(models.KindEvent, id, nil)
 	if err := client.Get(ctx, key, &event); err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
 
