@@ -13,9 +13,17 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/otiai10/marmoset/marker"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
+)
+
+var (
+	rsvp = template.Must(template.New("x").Parse(
+		`参加:		{{len (index . "join")}}
+不参加:	{{len (index . "absent")}}
+未回答:	{{len (index . "unanswered")}}`))
 )
 
 func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
@@ -56,81 +64,55 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	x := map[models.ParticipationType][]models.Member{
-		models.PTJoin:       {},
-		models.PTAbsent:     {},
-		models.PTUnanswered: {},
+	x := map[string][]models.Member{
+		"join":       {},
+		"absent":     {},
+		"unanswered": {},
 	}
 
 	for _, member := range members {
 		if p, ok := participations[member.Slack.ID]; ok {
 			switch p.Type {
 			case models.PTJoin, models.PTJoinLate, models.PTLeaveEarly:
-				x[models.PTJoin] = append(x[models.PTJoin], member)
+				x["join"] = append(x["join"], member)
 			case models.PTAbsent:
-				x[models.PTAbsent] = append(x[models.PTAbsent], member)
+				x["absent"] = append(x["absent"], member)
 			default:
-				x[models.PTJoin] = append(x[models.PTJoin], member)
+				x["join"] = append(x["join"], member)
 			}
 		} else {
-			x[models.PTUnanswered] = append(x[models.PTUnanswered], member)
+			x["unanswered"] = append(x["unanswered"], member)
 		}
 	}
 
-	tpl, err := template.New("RSVP").Parse(
-		"{{.title}}\n```参加: {{len .join}}\n不参加: {{len .absent}}\n未回答: {{len .unanswered}}```\n:robot_face: 自動出欠確認システムのテスト中",
-	)
-	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
-		return
-	}
-
-	text := bytes.NewBuffer(nil)
-	if err := tpl.Execute(text, map[string]interface{}{
-		"title": recent.Google.Title, "join": x["join"], "absent": x["absent"], "unanswered": x["unanswered"],
-	}); err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
-		return
-	}
-
-	endpoint := "https://slack.com/api/chat.postMessage"
-	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
-	body := bytes.NewBuffer(nil)
 	channel := req.URL.Query().Get("channel")
 	if channel == "" {
 		channel = "random"
 	}
-	if err := json.NewEncoder(body).Encode(map[string]interface{}{"channel": "#" + channel, "text": text.String()}); err != nil {
+	link := ":football: https://hub.triax.football"
+	text := bytes.NewBuffer(nil)
+	if err := rsvp.Execute(text, x); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
 		return
 	}
 
-	slackreq, err := http.NewRequestWithContext(ctx, "POST", endpoint, body)
+	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+	api := slack.New(token)
+	_, ts, err := api.PostMessage("#"+channel, slack.MsgOptionBlocks(
+		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, recent.Google.Title, false, false)),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.PlainTextType, text.String(), false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, link, false, false), nil, nil),
+	))
 	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
-		return
-	}
-	slackreq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
-	slackreq.Header.Add("Content-Type", "application/json")
-
-	res, err := http.DefaultClient.Do(slackreq)
-	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
-		return
-	}
-	defer res.Body.Close()
-
-	slackresp := map[string]interface{}{}
-	if err := json.NewDecoder(res.Body).Decode(&slackresp); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
 		return
 	}
 
 	render.JSON(http.StatusOK, marmoset.P{"event": recent, "summary": map[string]int{
-		string(models.PTJoin):       len(x[models.PTJoin]),
-		string(models.PTAbsent):     len(x[models.PTAbsent]),
-		string(models.PTUnanswered): len(x[models.PTUnanswered]),
-	}, "response": slackresp})
+		string(models.PTJoin):       len(x[string(models.PTJoin)]),
+		string(models.PTAbsent):     len(x[string(models.PTAbsent)]),
+		string(models.PTUnanswered): len(x[string(models.PTUnanswered)]),
+	}, "timestamp": ts})
 }
 
 func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
