@@ -13,6 +13,7 @@
     "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
     "lint": "next lint ./client",
     "deploy:prod": "npm run export && gcloud app deploy ./app.yaml    --project triax-football --quiet",
+    "deploy:cron": "npm run export && gcloud app deploy ./cron.yaml   --project triax-football --quiet",
     "deploy:dev": "npm run export && gcloud app deploy ./app.dev.yaml --project triax-football --quiet"
   },
   "repository": {

@@ -58,6 +58,7 @@ func main() {
 	cron := chi.NewRouter()
 	cron.Get("/fetch-slack-members", controllers.CronFetchSlackMembers)
 	cron.Get("/fetch-calendar-events", controllers.CronFetchGoogleEvents)
+	cron.Get("/check-rsvp", controllers.CronCheckRSVP)
 	r.Mount("/tasks", cron)
 
 	r.NotFound(controllers.NotFound)

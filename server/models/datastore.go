@@ -10,6 +10,7 @@ const (
 	PTJoinLate   ParticipationType = "join_late"
 	PTLeaveEarly ParticipationType = "leave_early"
 	PTAbsent     ParticipationType = "absent"
+	PTUnanswered ParticipationType = "unanswered"
 )
 
 type (
