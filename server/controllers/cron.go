@@ -108,6 +108,21 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// 未回答一覧をスレッドに投稿. 将来的にはメンションにする.
+	unanswered := []string{}
+	for _, m := range x["unanswered"] {
+		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
+			unanswered = append(unanswered, m.Slack.RealName)
+		}
+	}
+	if _, _, err := api.PostMessage("#"+channel,
+		slack.MsgOptionText("*未回答*\n"+strings.Join(unanswered, "\n"), false),
+		slack.MsgOptionTS(ts),
+	); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		return
+	}
+
 	render.JSON(http.StatusOK, marmoset.P{"event": recent, "summary": map[string]int{
 		string(models.PTJoin):       len(x[string(models.PTJoin)]),
 		string(models.PTAbsent):     len(x[string(models.PTAbsent)]),
