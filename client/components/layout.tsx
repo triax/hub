@@ -2,7 +2,7 @@ import Head from "next/head";
 
 import { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
-import { BellIcon, LocationMarkerIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
+import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
 import { useRouter } from "next/router";
 
 const navigation = [
@@ -10,12 +10,6 @@ const navigation = [
   { label: 'Calendar', link: '/events' },
   { label: 'Team', link: '/members' }
 ];
-
-async function logout() {
-  const res = await fetch(process.env.API_BASE_URL + "/api/1/auth/logout", { method: "POST" });
-  const body = await res.json();
-  if (body.ok) location.href = "/";
-}
 
 function classnames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -36,11 +30,6 @@ export default function Layout({children, myself, isLoading}) {
   const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
   const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
   const myIcon: string = myself.openid["picture"];
-
-  const userNavigation = [
-    { label: 'Your Profile', onClick: () => location.href = `/members/${myself.openid.sub}` },
-    { label: 'Sign out', onClick: logout },
-  ];
 
   return (
     <div id="root">
@@ -128,18 +117,26 @@ export default function Layout({children, myself, isLoading}) {
                         <Menu.Items
                           className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
                         >
-                          {userNavigation.map(item => (
-                            <Menu.Item key={item.label}>
-                              {({active}) => (
-                                <span onClick={item.onClick}
-                                  className={classnames(
-                                    active ? 'bg-gray-100' : '',
-                                    'block px-4 py-2 text-sm text-gray-700',
-                                  )}
-                                >{item.label}</span>
-                              )}
-                            </Menu.Item>
-                          ))}
+                          <Menu.Item key={"Your Profile"}>
+                            {({active}) => (
+                              <span onClick={() => location.href = `/members/${myself.openid.sub}`}
+                                className={classnames(
+                                  active ? 'bg-gray-100' : '',
+                                  'block px-4 py-2 text-sm text-gray-700',
+                                )}
+                              >Your Profile</span>
+                            )}
+                          </Menu.Item>
+                          <Menu.Item key={"Sign out"}>
+                            {({active}) => (
+                              <form method="POST" action="/logout" className={classnames(
+                                active ? 'bg-gray-100' : '',
+                                'block px-4 py-2 text-sm text-gray-700',
+                              )}>
+                                <input type="submit" value="Sign Out" className="bg-transparent" />
+                              </form>
+                            )}
+                          </Menu.Item>
                         </Menu.Items>
                       </Transition>
                     </Menu>
@@ -195,13 +192,12 @@ export default function Layout({children, myself, isLoading}) {
                   </button>
                 </div>
                 <div className="mt-3 px-2 space-y-1">
-                  {userNavigation.map(item => (
-                    <span
-                      onClick={item.onClick}
-                      key={item.label}
-                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700"
-                    >{item.label}</span>
-                  ))}
+                  <form
+                    method="POST" action="/logout"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700"
+                  >
+                    <input type="submit" value="Sign Out" className="bg-transparent" />
+                  </form>
                 </div>
               </div>
             </Disclosure.Panel>
@@ -209,12 +205,6 @@ export default function Layout({children, myself, isLoading}) {
           </>
         )}
       </Disclosure>
-
-      {/* <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        </div>
-      </header> */}
 
       <main>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

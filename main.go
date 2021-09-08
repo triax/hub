@@ -38,11 +38,12 @@ func main() {
 	v1.Get("/events/{id}", api.GetEvent)
 	v1.Post("/events/answer", api.AnswerEvent)
 	v1.Get("/events", api.ListEvents)
-	v1.Post("/auth/logout", api.AuthLogout)
 	r.Mount("/api/1", v1)
 
 	// Unauthorized pages
 	r.Get("/login", controllers.Login)
+	r.Post("/login", controllers.Login)
+	r.Post("/logout", controllers.Logout)
 	r.Get("/auth/start", controllers.AuthStart)
 	r.Get("/auth/callback", controllers.AuthCallback)
 

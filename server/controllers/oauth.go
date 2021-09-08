@@ -145,6 +145,8 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	fmt.Printf("[DEBUG] %s = length(%d)\n", member.Slack.RealName, len(tokenstr))
+
 	http.SetCookie(w, &http.Cookie{
 		Name:    server.SessionCookieName,
 		Value:   tokenstr,
