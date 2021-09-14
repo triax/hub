@@ -8,18 +8,8 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/go-chi/chi/v5"
 	"github.com/otiai10/marmoset"
-	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
 )
-
-func GetCurrentUser(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	myself := filters.GetSessionUserContext(req)
-	if myself == nil {
-		render.JSON(http.StatusForbidden, marmoset.P{})
-	}
-	render.JSON(http.StatusOK, myself)
-}
 
 func ListMembers(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)

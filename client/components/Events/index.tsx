@@ -57,7 +57,7 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
 
 export function EventRow({event, myself, submit, setModalEvent}) {
   const pats = JSON.parse(event.participations_json_str || "{}");
-  const answer = pats[myself.openid.sub] || {};
+  const answer = pats[myself.slack.id] || {};
   const id = event.google.id.replace(/@google\.com$/, "");
   return (
     <div className="px-0 py-4">

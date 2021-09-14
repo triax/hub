@@ -135,7 +135,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		StandardClaims: &jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(time.Hour * 24 * 7).Unix(),
 		},
-		Myself: models.Myself{OpenID: *info, Slack: member.Slack},
+		SlackID: member.Slack.ID,
 	}
 
 	tokenstr, err := t.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))

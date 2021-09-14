@@ -61,7 +61,7 @@ func ListEvents(w http.ResponseWriter, req *http.Request) {
 
 func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
-	myself := filters.GetSessionUserContext(req)
+	slackID := filters.GetSessionUserContext(req)
 
 	body := struct {
 		Event struct {
@@ -85,7 +85,7 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	member := models.Member{}
-	if err := client.Get(ctx, datastore.NameKey(models.KindMember, myself.OpenID.Sub, nil), &member); err != nil {
+	if err := client.Get(ctx, datastore.NameKey(models.KindMember, slackID, nil), &member); err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -103,7 +103,7 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 		if err := json.NewDecoder(strings.NewReader(event.ParticipationsJSONString)).Decode(&parts); err != nil {
 			return err
 		}
-		parts[myself.OpenID.Sub] = models.Participation{
+		parts[slackID] = models.Participation{
 			Type:    body.Type,
 			Params:  body.Params,
 			Name:    member.Slack.Profile.RealName,

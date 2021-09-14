@@ -27,9 +27,11 @@ function Loading({isLoading}) {
 
 export default function Layout({children, myself, isLoading}) {
   const { pathname } = useRouter();
-  const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
-  const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
-  const myIcon: string = myself.openid["picture"];
+  // const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
+  // const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
+  const teamIcon: string =  "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_44.png";
+  const touchIcon: string = "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_132.png";
+  const myIcon: string = myself.slack.profile.image_512;
 
   return (
     <div id="root">
@@ -101,7 +103,7 @@ export default function Layout({children, myself, isLoading}) {
                           <img
                             className="h-8 w-8 rounded-full"
                             src={myIcon}
-                            alt={myself.openid.given_name}
+                            alt={myself.slack.profile.real_name}
                           />
                         </Menu.Button>
                       </div>
@@ -119,7 +121,7 @@ export default function Layout({children, myself, isLoading}) {
                         >
                           <Menu.Item key={"Your Profile"}>
                             {({active}) => (
-                              <span onClick={() => location.href = `/members/${myself.openid.sub}`}
+                              <span onClick={() => location.href = `/members/${myself.slack.id}`}
                                 className={classnames(
                                   active ? 'bg-gray-100' : '',
                                   'block px-4 py-2 text-sm text-gray-700',
@@ -175,11 +177,11 @@ export default function Layout({children, myself, isLoading}) {
                     <img
                       className="h-10 w-10 rounded-full"
                       src={myIcon}
-                      alt={myself.openid.given_name}
+                      alt={myself.slack.profile.real_name}
                     />
                   </div>
                   <div className="ml-3">
-                    <div className="text-base font-medium leading-none text-white">{myself.openid.given_name} {myself.openid.family_name}</div>
+                    <div className="text-base font-medium leading-none text-white">{myself.slack.profile.real_name}</div>
                     <div className="text-sm font-medium leading-none text-gray-400">tom@example.com</div>
                   </div>
 

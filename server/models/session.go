@@ -7,7 +7,7 @@ import (
 type (
 	SessionUserClaims struct {
 		*jwt.StandardClaims
-		Myself Myself
+		SlackID string
 	}
 	Myself struct {
 		OpenID SlackOpenIDUserInfo `json:"openid"`

@@ -20,13 +20,13 @@ const (
 	SessionContextKey ContextKey = "session_user"
 )
 
-func SetSessionUserContext(req *http.Request, myself *models.Myself) *http.Request {
-	ctx := context.WithValue(req.Context(), SessionContextKey, myself)
+func SetSessionUserContext(req *http.Request, slackID string) *http.Request {
+	ctx := context.WithValue(req.Context(), SessionContextKey, slackID)
 	return req.WithContext(ctx)
 }
 
-func GetSessionUserContext(req *http.Request) *models.Myself {
-	return req.Context().Value(SessionContextKey).(*models.Myself)
+func GetSessionUserContext(req *http.Request) string {
+	return req.Context().Value(SessionContextKey).(string)
 }
 
 type (
@@ -50,7 +50,7 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 			myself := models.Myself{}
 			json.NewDecoder(f).Decode(&myself)
 			f.Close()
-			next.ServeHTTP(w, SetSessionUserContext(req, &myself))
+			next.ServeHTTP(w, SetSessionUserContext(req, myself.OpenID.Sub))
 			return
 		}
 
@@ -80,7 +80,7 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 			}
 			return
 		}
-		if claims.Myself.OpenID.Sub == "" || claims.Myself.OpenID.Picture == "" {
+		if claims.SlackID == "" {
 			http.SetCookie(w, &http.Cookie{
 				Name:  server.SessionCookieName,
 				Value: "", Path: "/", Expires: time.Unix(0, 0),
@@ -89,6 +89,6 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 			http.Redirect(w, req, "/login?error=reset", http.StatusTemporaryRedirect)
 			return
 		}
-		next.ServeHTTP(w, SetSessionUserContext(req, &claims.Myself))
+		next.ServeHTTP(w, SetSessionUserContext(req, claims.SlackID))
 	})
 }
