@@ -71,6 +71,10 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	for _, member := range members {
+		if member.Status == models.MSLimited || member.Status == models.MSInactive {
+			// 練習外部員や、休眠部員には、未回答メンションを送らなくてよい
+			continue
+		}
 		if p, ok := participations[member.Slack.ID]; ok {
 			switch p.Type {
 			case models.PTJoin, models.PTJoinLate, models.PTLeaveEarly:
