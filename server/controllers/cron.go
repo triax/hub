@@ -235,76 +235,34 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	keys := []*datastore.Key{}
-	members := []models.Member{}
+	count := 0
+	newjoiner := []models.Member{}
 	for _, m := range slackres.Members {
 		if m.IsBot || m.IsAppUser {
 			continue
 		}
-		keys = append(keys, datastore.NameKey("Member", m.ID, nil))
-		members = append(members, models.Member{Slack: m})
-	}
-
-	if _, err := client.PutMulti(ctx, keys, members); err != nil {
-		fmt.Println("[ERROR]", 4006, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		key := datastore.NameKey(models.KindMember, m.ID, nil)
+		member := models.Member{Slack: m}
+		if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+			if err := tx.Get(key, &member); err != nil {
+				fmt.Printf("[DEBUG] NEW MEMBER: %+v\n", member)
+				newjoiner = append(newjoiner, member)
+			}
+			if _, err := tx.Put(key, &member); err != nil {
+				return err
+			}
+			count++
+			return nil
+		}); err != nil {
+			fmt.Println("[ERROR]", 4005, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	marmoset.RenderJSON(w, http.StatusOK, marmoset.P{
 		"message": "ok",
-		"count":   len(members),
+		"new":     newjoiner,
+		"count":   count,
 	})
 }
-
-// Cronではないが
-// Eventは、`participations_json_str` を含むので、
-// .Google以下だけPUTする必要がある。
-// func SyncCalendarEvetns(w http.ResponseWriter, req *http.Request) {
-// 	if req.Header.Get("X-Hub-Verifier") != os.Getenv("GAS_ACCESS_VERIFIER") {
-// 		w.WriteHeader(http.StatusForbidden)
-// 		return
-// 	}
-// 	payload := struct {
-// 		Events []models.GoogleEvent `json:"events"`
-// 	}{}
-// 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-// 		fmt.Println("[ERROR]", 6001, err.Error())
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		fmt.Fprint(w, err.Error())
-// 		return
-// 	}
-
-// 	ctx := req.Context()
-// 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-// 	if err != nil {
-// 		fmt.Println("[ERROR]", 6002, err.Error())
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		fmt.Fprint(w, err.Error())
-// 		return
-// 	}
-// 	defer client.Close()
-
-// 	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
-// 		for _, ggl := range payload.Events {
-// 			ev := models.Event{}
-// 			key := datastore.NameKey(models.KindEvent, ggl.ID, nil)
-// 			if err := tx.Get(key, &ev); err != nil {
-// 				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", ggl.Title)
-// 			}
-// 			ev.Google = ggl // Merge with existing "ev"
-// 			if _, err := tx.Put(key, &ev); err != nil {
-// 				return err
-// 			}
-// 		}
-// 		return nil
-// 	}); err != nil {
-// 		fmt.Println("[ERROR]", 6005, err.Error())
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		fmt.Fprint(w, err.Error())
-// 		return
-// 	}
-
-// 	fmt.Printf("%+v\n", payload.Events)
-// 	w.WriteHeader(http.StatusOK)
-// }

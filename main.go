@@ -33,7 +33,7 @@ func main() {
 	auth := &filters.Auth{API: true, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
 	v1.Use(auth.Handle)
 	v1.Get("/members/{id}", api.GetMember)
-	v1.Post("/members/{id}/status", api.UpdateMemberStatus)
+	v1.Post("/members/{id}/props", api.UpdateMemberProps)
 	v1.Get("/members", api.ListMembers)
 	v1.Get("/myself", api.GetCurrentUser)
 	v1.Get("/events/{id}", api.GetEvent)

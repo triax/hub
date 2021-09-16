@@ -12,11 +12,11 @@ export default class MemberRepo {
     const endpoint = this.baseURL + `/api/1/members/${id}`;
     return fetch(endpoint).then(res => res.json()).then(Member.fromAPIResponse);
   }
-  updateStatus(id: string, status: string): Promise<Member> {
-    const endpoint = this.baseURL + `/api/1/members/${id}/status`;
+  update(id: string, props: { status?: string, number?: number }): Promise<Member> {
+    const endpoint = this.baseURL + `/api/1/members/${id}/props`;
     return fetch(endpoint, {
       method: "POST",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(props),
     }).then(res => res.json()).then(Member.fromAPIResponse);
   }
 }

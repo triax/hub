@@ -61,7 +61,7 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 	render.JSON(http.StatusOK, member)
 }
 
-func UpdateMemberStatus(w http.ResponseWriter, req *http.Request) {
+func UpdateMemberProps(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
@@ -72,8 +72,11 @@ func UpdateMemberStatus(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 	id := chi.URLParam(req, "id")
 
-	body := struct{ Status models.MemberStatus }{}
-	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+	props := struct {
+		Status *models.MemberStatus
+		Number *int
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&props); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -89,7 +92,12 @@ func UpdateMemberStatus(w http.ResponseWriter, req *http.Request) {
 		if err := client.Get(ctx, key, member); err != nil {
 			return err
 		}
-		member.Status = body.Status
+		if props.Status != nil {
+			member.Status = *props.Status
+		}
+		if props.Number != nil {
+			member.Number = props.Number
+		}
 		if _, err := client.Put(ctx, key, member); err != nil {
 			return err
 		}

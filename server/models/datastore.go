@@ -8,11 +8,16 @@ const (
 type (
 	Member struct {
 		Slack SlackMember `json:"slack"`
+
 		// Status メンバーの（退部済み以外の）参加状態
 		Status MemberStatus `json:"status"`
+
 		// Number 背番号
+		// 背番号ゼロに対応するためにポインタを使わざるを得ない.
+		// おおおか、許すまじ
 		Number *int `json:"number"`
 	}
+
 	Event struct {
 		Google GoogleEvent `json:"google"`
 
