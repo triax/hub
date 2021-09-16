@@ -1,17 +1,15 @@
 import Layout from "../../../components/layout";
 import { useRouter } from 'next/router';
-import { useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import StatusBadges from "../../../components/statusbadges";
+import MemberRepo from "../../../repository/MemberRepo";
+import Member from "../../../models/Member";
 
-export default function Member(props) {
-  const id = useRouter().query.id;
-  const [member, setMember] = useState(null);
-  useEffect(() => {
-    if (!id) return;
-    // TODO: Repositoryつくる
-    const endpoint = process.env.API_BASE_URL + `/api/1/members/${id}`;
-    fetch(endpoint).then(res => res.json()).then(res => setMember(res));
-  }, [id]);
+export default function MemberView(props) {
+  const repo = useMemo(() => new MemberRepo(), []);
+  const id = useRouter().query.id as string;
+  const [member, setMember] = useState<Member>(null);
+  useEffect(() => { id ? repo.get(id).then(setMember) : null }, [id, repo]);
   const updateMember = (params) => {
     // TODO:
     // const endpoint = process.env.API_BASE_URL + `/api/1/members/${id}`;
@@ -27,7 +25,7 @@ export default function Member(props) {
         <div className="fle w-44">
           <img
             className="rounded-md"
-            src={member.slack.profile.image_512} alt={member.slack.name}
+            src={member.slack.profile.image_512} alt={member.slack.profile.name}
           />
         </div>
         <div className="flex-grow">
@@ -56,9 +54,38 @@ export default function Member(props) {
       <div className="py-2">
         <div className="flex space-x-2"><StatusBadges member={member} size="text-lg px-4 py-1" /></div>
       </div>
+
+      {props.myself.slack.is_admin ? <AdminMenu member={member} repo={repo} /> : null}
+
       <div className="p-12 flex justify-center items-center">
         <a href="/members" className="underline">一覧に戻る</a>
       </div>
     </Layout>
   )
+}
+
+function AdminMenu({ member, repo }: { member: Member, repo: MemberRepo }) {
+  const { status, slack } = member;
+  const onInputChange = async (ev: ChangeEvent<HTMLSelectElement>) => {
+    const updated = await repo.updateStatus(slack.id, ev.target.value);
+    console.log(updated);
+  };
+  return <div className="p-2 border rounded-md bg-red-100">
+    <h3>管理者メニュー</h3>
+    <div>
+      <select
+        className="w-full rounded-sm" defaultValue={slack.deleted ? "deleted" : (status || "active")}
+        disabled={slack.deleted}
+        onChange={onInputChange}
+      >
+        <option value="active">通常部員</option>
+        <option value="limited">練習外部員（出欠回答不要）</option>
+        <option value="inactive">休眠</option>
+        <option
+          value="deleted"
+          disabled={!slack.deleted}
+        >退部済み（Slackで設定）</option>
+      </select>
+    </div>
+  </div>;
 }

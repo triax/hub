@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -53,6 +54,47 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 	member := models.Member{}
 	key := datastore.NameKey(models.KindMember, id, nil)
 	if err := client.Get(ctx, key, &member); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	render.JSON(http.StatusOK, member)
+}
+
+func UpdateMemberStatus(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+	id := chi.URLParam(req, "id")
+
+	body := struct{ Status models.MemberStatus }{}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	member := &models.Member{}
+	key := datastore.NameKey(models.KindMember, id, nil)
+	if err := client.Get(ctx, key, member); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+		if err := client.Get(ctx, key, member); err != nil {
+			return err
+		}
+		member.Status = body.Status
+		if _, err := client.Put(ctx, key, member); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
