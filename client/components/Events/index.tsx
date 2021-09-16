@@ -31,16 +31,12 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
   const entries = Object.entries(pats)
     .filter(([_, p]: [string, any]) => p.type == 'join' || p.type == 'join_late') || [];
   if (entries.length == 0) return null;
-  const maxVisible = 10;
-  const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
-  const rest = entries.length - visibles.length;
+  // const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
   return (
-    <div className="flex" onClick={onClick} >
-      <div className="flex -space-x-2">
-        {visibles.map(([id, p]: [string, any]) => (
-          <div key={id}
-            className="w-6 h-6 rounded-full border-2 border-white overflow-hidden"
-          >
+    <div className="flex items-center" onClick={onClick} >
+      <div className="flex -space-x-1 flex-wrap">
+        {entries.map(([id, p]: [string, any]) => (
+          <div key={id} className="w-5 h-5 rounded-full overflow-hidden">
             <Image
               width={60} height={60}
               src={p.picture} alt={p.name}
@@ -50,7 +46,7 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
           </div>
         ))}
       </div>
-      {rest > 0 ? <span className="text-gray-400 text-sm items-center">+{rest}</span> : null}
+      {/* {rest > 0 ? <span className="text-gray-400 text-sm">+{rest}</span> : null} */}
     </div>
   )
 }
