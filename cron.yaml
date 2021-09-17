@@ -11,5 +11,5 @@ cron:
 
 - description: Check RSVP of recent event
   url: /tasks/check-rsvp
-  schedule: every tuesday 09:00
+  schedule: every wednesday 12:05
   timezone: Asia/Tokyo

@@ -93,7 +93,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "random"
 	}
-	link := ":football: https://hub.triax.football"
+	link := "こちらから回答可能です https://hub.triax.football :football:"
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
@@ -116,7 +116,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	unanswered := []string{}
 	for _, m := range x["unanswered"] {
 		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
-			unanswered = append(unanswered, m.Slack.RealName)
+			unanswered = append(unanswered, fmt.Sprintf("<@%s>", m.Slack.ID))
 		}
 	}
 	if _, _, err := api.PostMessage("#"+channel,
