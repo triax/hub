@@ -93,7 +93,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "random"
 	}
-	link := "こちらから回答可能です https://hub.triax.football :football:"
+	link := "<https://hub.triax.football|:football: :football: :football: hub.triax.football>"
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
@@ -119,8 +119,15 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 			unanswered = append(unanswered, fmt.Sprintf("<@%s>", m.Slack.ID))
 		}
 	}
+	encourage := strings.Join([]string{
+		"*【未回答の皆さまへ】*",
+		"以下のリンクから、回答お願いいたします。",
+		"<https://hub.triax.football|hub.triax.football>",
+		"ログインの仕方が分からない場合は、こちらをご参考ください！",
+		"<https://sites.google.com/view/how-to-use-triax-hub|hubの使い方 :wink:>",
+	}, "\n")
 	if _, _, err := api.PostMessage("#"+channel,
-		slack.MsgOptionText("*未回答*\n"+strings.Join(unanswered, "\n"), false),
+		slack.MsgOptionText(encourage+"\n"+strings.Join(unanswered, "\n"), false),
 		slack.MsgOptionTS(ts),
 	); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
