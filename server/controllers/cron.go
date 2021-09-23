@@ -112,24 +112,8 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 未回答一覧をスレッドに投稿. 将来的にはメンションにする.
-	unanswered := []string{}
-	for _, m := range x["unanswered"] {
-		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
-			unanswered = append(unanswered, fmt.Sprintf("<@%s>", m.Slack.ID))
-		}
-	}
-	encourage := strings.Join([]string{
-		"*【未回答の皆さまへ】*",
-		"以下のリンクから、回答お願いいたします。",
-		"<https://hub.triax.football|hub.triax.football>",
-		"ログインの仕方が分からない場合は、こちらをご参考ください！",
-		"<https://sites.google.com/view/how-to-use-triax-hub|hubの使い方 :wink:>",
-	}, "\n")
-	if _, _, err := api.PostMessage("#"+channel,
-		slack.MsgOptionText(encourage+"\n"+strings.Join(unanswered, "\n"), false),
-		slack.MsgOptionTS(ts),
-	); err != nil {
+	reminder := buildRSVPReminderMessage(recent.Google.Title, x["unanswered"])
+	if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
 		return
 	}
@@ -139,6 +123,29 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		string(models.PTAbsent):     len(x[string(models.PTAbsent)]),
 		string(models.PTUnanswered): len(x[string(models.PTUnanswered)]),
 	}, "timestamp": ts})
+}
+
+func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.MsgOption {
+	mentions := []string{}
+	for _, m := range unanswers {
+		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
+			mentions = append(mentions, fmt.Sprintf("<@%s>", m.Slack.ID))
+		}
+	}
+	return slack.MsgOptionBlocks(
+		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, "出欠未回答の皆さまへ", false, false)),
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<https://hub.triax.football|【Triax Team Hub】>*", false, false),
+			nil, slack.NewAccessory(slack.NewImageBlockElement("https://avatars.slack-edge.com/2021-08-16/2369588425687_e490e60131c70bf52eee_192.png", "Triax Team Hub")),
+		),
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, "使い方やログイン方法が分からない場合は、下記のリンクで詳しい解説があるので、ご参考ください。\n*<https://sites.google.com/view/how-to-use-triax-hub|【hubの使い方】>*", false, false),
+			nil, slack.NewAccessory(slack.NewImageBlockElement("https://drive.google.com/uc?id=1OdopRR5hbOCoAftxfc4enVPbDHF37jcj", "How to use")),
+		),
+		slack.NewDividerBlock(),
+		slack.NewContextBlock("", slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("直近の「%s」へ出欠回答していない人", title), false, false)),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(mentions, " "), false, false), nil, nil),
+	)
 }
 
 func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
