@@ -5,7 +5,7 @@ export default class MemberRepo {
       public baseURL = process.env.API_BASE_URL,
   ) {}
   myself(): Promise<Member> {
-    const endpoint = this.baseURL + `/api/1/myself`;
+    const endpoint = this.baseURL + `/api/1/myself` + `?t=${Date.now()}`;
     return fetch(endpoint).then(res => res.json()).then(Member.fromAPIResponse);
   }
   get(id: string): Promise<Member> {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 
@@ -35,7 +34,8 @@ func GetCurrentUser(w http.ResponseWriter, req *http.Request) {
 	}
 	myself := &models.Myself{Slack: member.Slack}
 
-	age := 4 * 60 * 60 // 4時間
-	w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
+	// https://cloud.google.com/appengine/docs/standard/nodejs/how-requests-are-handled#response_caching
+	w.Header().Add("Cache-Control", "no-store, max-age=0")
+
 	render.JSON(http.StatusOK, myself)
 }
