@@ -5,6 +5,14 @@ import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
 import { EventDateTime } from "../../../components/Events";
 
+interface Participation {
+  name: string;
+  params?: any;
+  type: string;
+  title: string;
+  picture: string;
+}
+
 export default function EventView(props) {
   const id = useRouter().query.id;
   const [event, setEvent] = useState(null);
@@ -17,16 +25,15 @@ export default function EventView(props) {
     fetch(`${base}/api/1/members?cached=1`).then(res => res.json()).then(res => setAllMembers(res));
   }, [id]);
   if (!event) return <></>;
-  const pats = JSON.parse(event.participations_json_str);
-  const sum = Object.entries(pats).reduce((ctx, [id, entry]: [string, any]) => {
-    if (['join', 'join_late', 'leave_early'].includes(entry.type)) {
-      ctx.yes.push(entry);
-    } else {
-      ctx.no.push(entry);
-    }
-    ctx.waiting = ctx.waiting.filter(m => m.slack.id !== id);
+  const pats: Record<string, Participation> = JSON.parse(event.participations_json_str);
+  const sum: Record<string, Participation[]> = Object.entries(pats).reduce((ctx, [id, entry]: [string, any]) => {
+    if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push(entry);
+    else ctx.no.push(entry);
+    ctx.unanswered = ctx.unanswered.filter(m => m.slack.id !== id);
     return ctx;
-  }, { yes: [], no: [], waiting: allMembers });
+  }, { yes: [], no: [], unanswered: allMembers });
+  sum.yes = sum.yes.sort((prev, next) => prev.title < next.title ? -1 : 1);
+  sum.no = sum.no.sort((prev, next) => prev.title < next.title ? -1 : 1);
   return (
     <Layout {...props}>
       <div>
@@ -90,10 +97,10 @@ export default function EventView(props) {
             <Disclosure>
               <Disclosure.Button as="div" className="border-b cursor-pointer">
                 <span className="font-semibold">未回答</span>
-                <span className="px-4">{sum.waiting.length}人</span>
+                <span className="px-4">{sum.unanswered.length}人</span>
               </Disclosure.Button>
               <Disclosure.Panel as="div" className="divide-y">
-                {sum.waiting.map((m: any) => (
+                {sum.unanswered.map((m: any) => (
                   <div key={m.slack.id} className="flex space-x-2 items-center">
                     <div className="flex-auto">{m.slack.real_name}</div>
                     <div className="w-1/3 text-xs">ここにポジション表示</div>
