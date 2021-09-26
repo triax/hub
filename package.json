@@ -6,9 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "next dev ./client",
-    "db": "gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football",
+    "db": "npm run db:kill && npm run db:start",
+    "db:start": "gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football",
+    "db:kill": "ps aux | grep datastore | grep -v \"grep datastore\" | awk '{print $2}' | xargs kill",
     "db:env": "gcloud beta emulators datastore env-init --data-dir=./dev/data",
-    "db:kill": "ps aux | grep datastore | awk '{print $2}' | xargs kill",
     "build": "next build ./client",
     "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
     "lint": "next lint ./client",
