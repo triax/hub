@@ -37,6 +37,7 @@ func main() {
 	v1.Get("/members", api.ListMembers)
 	v1.Get("/myself", api.GetCurrentUser)
 	v1.Get("/events/{id}", api.GetEvent)
+	v1.Post("/events/{id}/delete", api.DeleteEvent)
 	v1.Post("/events/answer", api.AnswerEvent)
 	v1.Get("/events", api.ListEvents)
 	r.Mount("/api/1", v1)

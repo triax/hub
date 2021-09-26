@@ -1,39 +1,49 @@
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../../../components/layout";
 import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
 import { EventDateTime } from "../../../components/Events";
-
-interface Participation {
-  name: string;
-  params?: any;
-  type: string;
-  title: string;
-  picture: string;
-}
+import TeamEventRepo from "../../../repository/EventRepo";
+import MemberRepo from "../../../repository/MemberRepo";
+import Member from "../../../models/Member";
+import TeamEvent, { Participation } from "../../../models/TriaxEvent";
 
 export default function EventView(props) {
-  const id = useRouter().query.id;
-  const [event, setEvent] = useState(null);
-  const [allMembers, setAllMembers] = useState([]);
+  const evrepo = useMemo(() => new TeamEventRepo(), []);
+  const merepo = useMemo(() => new MemberRepo(), []);
+  const id = useRouter().query.id as string;
+  const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+
   useEffect(() => {
     if (!id) return;
-    // TODO: Repositoryつくる
-    const base = process.env.API_BASE_URL;
-    fetch(`${base}/api/1/events/${id}`).then(res => res.json()).then(res => setEvent(res));
-    fetch(`${base}/api/1/members?cached=1`).then(res => res.json()).then(res => setAllMembers(res));
-  }, [id]);
+    evrepo.get(id).then(setEvent);
+    merepo.list({cached: true}).then(setAllMembers)
+  }, [id, evrepo, merepo]);
   if (!event) return <></>;
-  const pats: Record<string, Participation> = JSON.parse(event.participations_json_str);
-  const sum: Record<string, Participation[]> = Object.entries(pats).reduce((ctx, [id, entry]: [string, any]) => {
+
+  // 集計
+  const sum: {
+    yes: Participation[],
+    no: Participation[],
+    unanswered: Member[],
+  } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, any]) => {
     if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push(entry);
     else ctx.no.push(entry);
     ctx.unanswered = ctx.unanswered.filter(m => m.slack.id !== id);
     return ctx;
   }, { yes: [], no: [], unanswered: allMembers });
+
+  // Sort
   sum.yes = sum.yes.sort((prev, next) => prev.title < next.title ? -1 : 1);
   sum.no = sum.no.sort((prev, next) => prev.title < next.title ? -1 : 1);
+
+  const onClickDeleteEvent = () => {
+    if (!window.confirm(`イベント「${event.google.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
+    evrepo.delete(id).then(res => { window.alert(JSON.stringify(res)); (location.href = "/") })
+  };
+
   return (
     <Layout {...props}>
       <div>
@@ -110,6 +120,15 @@ export default function EventView(props) {
             </Disclosure>
           </div>
         </div>
+
+        {props.myself.slack.is_admin ? <div className="py-8">
+          <div>
+            <button
+              className="w-full bg-red-500 text-white p-4 rounded-md font-bold cursor-pointer"
+              onClick={() => onClickDeleteEvent()}
+            >このイベントを削除</button>
+          </div>
+        </div> : null}
       </div>
     </Layout>
   );

@@ -12,6 +12,12 @@ export default class MemberRepo {
     const endpoint = this.baseURL + `/api/1/members/${id}`;
     return fetch(endpoint).then(res => res.json()).then(Member.fromAPIResponse);
   }
+  list(params: { cached: boolean } = { cached: false }): Promise<Member[]> {
+    const query = new URLSearchParams();
+    if (params.cached) query.set("cached", "1");
+    const endpoint = this.baseURL + `/api/1/members` + '?' + query.toString();
+    return fetch(endpoint).then(res => res.json()).then(Member.listFromAPIResponse);
+  }
   update(id: string, props: { status?: string, number?: number }): Promise<Member> {
     const endpoint = this.baseURL + `/api/1/members/${id}/props`;
     return fetch(endpoint, {

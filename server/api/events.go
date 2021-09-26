@@ -31,8 +31,25 @@ func GetEvent(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
-
 	render.JSON(http.StatusOK, event)
+}
+
+func DeleteEvent(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+	id := chi.URLParam(req, "id")
+	key := datastore.NameKey(models.KindEvent, id, nil)
+	if err := client.Delete(ctx, key); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	render.JSON(http.StatusOK, marmoset.P{"id": id, "ok": true})
 }
 
 func ListEvents(w http.ResponseWriter, req *http.Request) {

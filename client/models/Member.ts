@@ -21,6 +21,9 @@ export default class Member {
   static fromAPIResponse({slack, number, status}): Member {
     return new Member(slack, number, status);
   }
+  static listFromAPIResponse(res: {slack, number, status}[]): Member[] {
+    return res.map(Member.fromAPIResponse);
+  }
   static placeholder(): Member {
     return new Member({
       id: "xxx", profile: { name: "", real_name: "", image_512: "", title: "" }, is_admin: false, deleted: false
