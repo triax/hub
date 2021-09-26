@@ -8,7 +8,8 @@ import { useRouter } from "next/router";
 const navigation = [
   { label: 'Dashboard', link: '/' },
   { label: 'Calendar', link: '/events' },
-  { label: 'Team', link: '/members' }
+  { label: 'Team', link: '/members' },
+  { label: 'Help', link: 'https://sites.google.com/view/how-to-use-triax-hub' },
 ];
 
 function classnames(...classes) {
