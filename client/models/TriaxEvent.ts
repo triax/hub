@@ -31,6 +31,6 @@ export default class TeamEvent {
     return new TeamEvent(google, pats);
   }
   static placeholder(): TeamEvent {
-    return new TeamEvent({ id: 'x', title: 'xx', location: 'xxx', start_time: 0, end_time: 0 }, {});
+    return new TeamEvent({ id: '', title: 'xx', location: 'xxx', start_time: 0, end_time: 0 }, {});
   }
 }

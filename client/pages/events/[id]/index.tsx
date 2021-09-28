@@ -21,7 +21,8 @@ export default function EventView(props) {
     evrepo.get(id).then(setEvent);
     merepo.list({cached: true}).then(setAllMembers)
   }, [id, evrepo, merepo]);
-  if (!event) return <></>;
+
+  if (!event || !event.google || !event.google.id) return <></>;
 
   // 集計
   const sum: {
