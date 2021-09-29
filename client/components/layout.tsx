@@ -101,11 +101,11 @@ export default function Layout({children, myself, isLoading}) {
                           className="max-w-xs bg-gray-800 rounded-full flex items-center text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
                         >
                           <span className="sr-only">Open user menu</span>
-                          <img
+                          {myIcon ? <img
                             className="h-8 w-8 rounded-full"
                             src={myIcon}
                             alt={myself.slack.profile.real_name}
-                          />
+                          /> : null}
                         </Menu.Button>
                       </div>
                       <Transition
@@ -175,11 +175,11 @@ export default function Layout({children, myself, isLoading}) {
               <div className="pt-4 pb-3 border-t border-gray-700">
                 <div className="flex items-center px-5">
                   <div className="flex-shrink-0">
-                    <img
+                    {myIcon ? <img
                       className="h-10 w-10 rounded-full"
                       src={myIcon}
                       alt={myself.slack.profile.real_name}
-                    />
+                    /> : null}
                   </div>
                   <div className="ml-3">
                     <div className="text-base font-medium leading-none text-white">{myself.slack.profile.real_name}</div>
