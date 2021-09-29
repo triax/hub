@@ -9,8 +9,11 @@ const navigation = [
   { label: 'Dashboard', link: '/' },
   { label: 'Calendar', link: '/events' },
   { label: 'Team', link: '/members' },
-  { label: 'Help', link: 'https://sites.google.com/view/how-to-use-triax-hub' },
 ];
+
+if (process.env.HELP_PAGE_URL) {
+  navigation.push({ label: 'Help', link: process.env.HELP_PAGE_URL });
+}
 
 function classnames(...classes) {
   return classes.filter(Boolean).join(' ');

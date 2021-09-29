@@ -78,14 +78,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.yes.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.yes.map((entry: any) => (
-                <div key={entry.name} className="flex space-x-2 items-center">
-                  <div className="flex-auto">{entry.name}</div>
-                  <div className="w-1/3 text-xs">
-                    {entry.title ? entry.title : "ここにポジション表示"}
-                  </div>
-                </div>
-              ))}
+              {sum.yes.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
             </div>
           </div>
 
@@ -95,12 +88,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.no.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.no.map((entry: any) => (
-                <div key={entry.name} className="flex space-x-2 items-center">
-                  <div className="flex-auto">{entry.name}</div>
-                  <div className="w-1/3 text-xs">ここにポジション表示</div>
-                </div>
-              ))}
+              {sum.no.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
             </div>
           </div>
 
@@ -132,6 +120,22 @@ export default function EventView(props) {
         </div> : null}
       </div>
     </Layout>
+  );
+}
+
+function ParticipationRow({ entry }: { entry: Participation }) {
+  return (
+    <div key={entry.name} className="flex space-x-2 items-center">
+      <div className="flex-auto">{entry.name}</div>
+      <div className="w-1/3 text-xs">
+        {entry.title ? entry.title : <span>
+          Pos設定方法は
+          <a href={process.env.HELP_PAGE_URL} target="_blank" rel="noreferrer"
+            className="font-bold text-blue-500"
+          >ここ</a>
+        </span>}
+      </div>
+    </div>
   );
 }
 
