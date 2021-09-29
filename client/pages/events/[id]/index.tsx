@@ -1,34 +1,50 @@
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../../../components/layout";
 import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
 import { EventDateTime } from "../../../components/Events";
+import TeamEventRepo from "../../../repository/EventRepo";
+import MemberRepo from "../../../repository/MemberRepo";
+import Member from "../../../models/Member";
+import TeamEvent, { Participation } from "../../../models/TriaxEvent";
 
 export default function EventView(props) {
-  const id = useRouter().query.id;
-  const [event, setEvent] = useState(null);
-  const [allMembers, setAllMembers] = useState([]);
+  const evrepo = useMemo(() => new TeamEventRepo(), []);
+  const merepo = useMemo(() => new MemberRepo(), []);
+  const id = useRouter().query.id as string;
+  const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+
   useEffect(() => {
     if (!id) return;
-    // TODO: Repositoryつくる
-    const base = process.env.API_BASE_URL;
-    fetch(`${base}/api/1/events/${id}`).then(res => res.json()).then(res => setEvent(res));
-    setTimeout(() => { // TODO: はーマジクソ
-      fetch(`${base}/api/1/members?cached=1`).then(res => res.json()).then(res => setAllMembers(res));
-    })
-  }, [id]);
-  if (!event) return <></>;
-  const pats = JSON.parse(event.participations_json_str);
-  const sum = Object.entries(pats).reduce((ctx, [id, entry]: [string, any]) => {
-    if (['join', 'join_late', 'leave_early'].includes(entry.type)) {
-      ctx.yes.push(entry);
-    } else {
-      ctx.no.push(entry);
-    }
-    ctx.waiting = ctx.waiting.filter(m => m.slack.id !== id);
+    evrepo.get(id).then(setEvent);
+    merepo.list({cached: true}).then(setAllMembers)
+  }, [id, evrepo, merepo]);
+
+  if (!event || !event.google || !event.google.id) return <></>;
+
+  // 集計
+  const sum: {
+    yes: Participation[],
+    no: Participation[],
+    unanswered: Member[],
+  } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, any]) => {
+    if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push(entry);
+    else ctx.no.push(entry);
+    ctx.unanswered = ctx.unanswered.filter(m => m.slack.id !== id);
     return ctx;
-  }, { yes: [], no: [], waiting: allMembers });
+  }, { yes: [], no: [], unanswered: allMembers });
+
+  // Sort
+  sum.yes = sum.yes.sort((prev, next) => prev.title < next.title ? -1 : 1);
+  sum.no = sum.no.sort((prev, next) => prev.title < next.title ? -1 : 1);
+
+  const onClickDeleteEvent = () => {
+    if (!window.confirm(`イベント「${event.google.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
+    evrepo.delete(id).then(res => { window.alert(JSON.stringify(res)); (location.href = "/") })
+  };
+
   return (
     <Layout {...props}>
       <div>
@@ -62,14 +78,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.yes.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.yes.map((entry: any) => (
-                <div key={entry.name} className="flex space-x-2 items-center">
-                  <div className="flex-auto">{entry.name}</div>
-                  <div className="w-1/3 text-xs">
-                    {entry.title ? entry.title : "ここにポジション表示"}
-                  </div>
-                </div>
-              ))}
+              {sum.yes.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
             </div>
           </div>
 
@@ -79,12 +88,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.no.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.no.map((entry: any) => (
-                <div key={entry.name} className="flex space-x-2 items-center">
-                  <div className="flex-auto">{entry.name}</div>
-                  <div className="w-1/3 text-xs">ここにポジション表示</div>
-                </div>
-              ))}
+              {sum.no.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
             </div>
           </div>
 
@@ -92,10 +96,10 @@ export default function EventView(props) {
             <Disclosure>
               <Disclosure.Button as="div" className="border-b cursor-pointer">
                 <span className="font-semibold">未回答</span>
-                <span className="px-4">{sum.waiting.length}人</span>
+                <span className="px-4">{sum.unanswered.length}人</span>
               </Disclosure.Button>
               <Disclosure.Panel as="div" className="divide-y">
-                {sum.waiting.map((m: any) => (
+                {sum.unanswered.map((m: any) => (
                   <div key={m.slack.id} className="flex space-x-2 items-center">
                     <div className="flex-auto">{m.slack.real_name}</div>
                     <div className="w-1/3 text-xs">ここにポジション表示</div>
@@ -105,8 +109,33 @@ export default function EventView(props) {
             </Disclosure>
           </div>
         </div>
+
+        {props.myself.slack.is_admin ? <div className="py-8">
+          <div>
+            <button
+              className="w-full bg-red-500 text-white p-4 rounded-md font-bold cursor-pointer"
+              onClick={() => onClickDeleteEvent()}
+            >このイベントを削除</button>
+          </div>
+        </div> : null}
       </div>
     </Layout>
+  );
+}
+
+function ParticipationRow({ entry }: { entry: Participation }) {
+  return (
+    <div key={entry.name} className="flex space-x-2 items-center">
+      <div className="flex-auto">{entry.name}</div>
+      <div className="w-1/3 text-xs">
+        {entry.title ? entry.title : <span>
+          Pos設定方法は
+          <a href={process.env.HELP_PAGE_URL} target="_blank" rel="noreferrer"
+            className="font-bold text-blue-500"
+          >ここ</a>
+        </span>}
+      </div>
+    </div>
   );
 }
 

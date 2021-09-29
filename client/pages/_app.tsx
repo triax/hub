@@ -2,20 +2,20 @@ import "tailwindcss/tailwind.css";
 import "../styles/globals.scss";
 
 import type { AppProps } from 'next/app'
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import MemberRepo from "../repository/MemberRepo";
+import Member from "../models/Member";
 
 function App({ Component, pageProps, router }: AppProps) {
+  const repo = useMemo(() => new MemberRepo(), []);
   const [isLoading, setIsLoading] = useState(false);
-  const [myself, setMyself] = useState({openid:{}, slack: {}});
+  const [myself, setMyself] = useState<Member>(Member.placeholder());
   useEffect(() => {
     switch (router.pathname) {
-    case "/login": return;
-    case "/_error": return;
+    case "/login": case "/_error": return;
     }
-    // TODO: Repositoryつくる
-    const endpoint = process.env.API_BASE_URL + "/api/1/myself"
-    fetch(endpoint).then(res => res.json()).then(res => setMyself(res));
-  }, [router.pathname]);
+    repo.myself().then(setMyself);
+  }, [router.pathname, repo]);
   return <Component
     {...pageProps}
     myself={myself}

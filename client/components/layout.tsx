@@ -2,19 +2,17 @@ import Head from "next/head";
 
 import { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
-import { BellIcon, LocationMarkerIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
+import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
 import { useRouter } from "next/router";
 
 const navigation = [
   { label: 'Dashboard', link: '/' },
   { label: 'Calendar', link: '/events' },
-  { label: 'Team', link: '/members' }
+  { label: 'Team', link: '/members' },
 ];
 
-async function logout() {
-  const res = await fetch(process.env.API_BASE_URL + "/api/1/auth/logout", { method: "POST" });
-  const body = await res.json();
-  if (body.ok) location.href = "/";
+if (process.env.HELP_PAGE_URL) {
+  navigation.push({ label: 'Help', link: process.env.HELP_PAGE_URL });
 }
 
 function classnames(...classes) {
@@ -33,14 +31,11 @@ function Loading({isLoading}) {
 
 export default function Layout({children, myself, isLoading}) {
   const { pathname } = useRouter();
-  const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
-  const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
-  const myIcon: string = myself.openid["picture"];
-
-  const userNavigation = [
-    { label: 'Your Profile', onClick: () => location.href = `/members/${myself.openid.sub}` },
-    { label: 'Sign out', onClick: logout },
-  ];
+  // const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
+  // const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
+  const teamIcon: string =  "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_44.png";
+  const touchIcon: string = "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_132.png";
+  const myIcon: string = myself.slack.profile.image_512;
 
   return (
     <div id="root">
@@ -109,11 +104,11 @@ export default function Layout({children, myself, isLoading}) {
                           className="max-w-xs bg-gray-800 rounded-full flex items-center text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
                         >
                           <span className="sr-only">Open user menu</span>
-                          <img
+                          {myIcon ? <img
                             className="h-8 w-8 rounded-full"
                             src={myIcon}
-                            alt={myself.openid.given_name}
-                          />
+                            alt={myself.slack.profile.real_name}
+                          /> : null}
                         </Menu.Button>
                       </div>
                       <Transition
@@ -128,18 +123,26 @@ export default function Layout({children, myself, isLoading}) {
                         <Menu.Items
                           className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
                         >
-                          {userNavigation.map(item => (
-                            <Menu.Item key={item.label}>
-                              {({active}) => (
-                                <span onClick={item.onClick}
-                                  className={classnames(
-                                    active ? 'bg-gray-100' : '',
-                                    'block px-4 py-2 text-sm text-gray-700',
-                                  )}
-                                >{item.label}</span>
-                              )}
-                            </Menu.Item>
-                          ))}
+                          <Menu.Item key={"Your Profile"}>
+                            {({active}) => (
+                              <span onClick={() => location.href = `/members/${myself.slack.id}`}
+                                className={classnames(
+                                  active ? 'bg-gray-100' : '',
+                                  'block px-4 py-2 text-sm text-gray-700',
+                                )}
+                              >Your Profile</span>
+                            )}
+                          </Menu.Item>
+                          <Menu.Item key={"Sign out"}>
+                            {({active}) => (
+                              <form method="POST" action="/logout" className={classnames(
+                                active ? 'bg-gray-100' : '',
+                                'block px-4 py-2 text-sm text-gray-700',
+                              )}>
+                                <input type="submit" value="Sign Out" className="bg-transparent" />
+                              </form>
+                            )}
+                          </Menu.Item>
                         </Menu.Items>
                       </Transition>
                     </Menu>
@@ -175,14 +178,14 @@ export default function Layout({children, myself, isLoading}) {
               <div className="pt-4 pb-3 border-t border-gray-700">
                 <div className="flex items-center px-5">
                   <div className="flex-shrink-0">
-                    <img
+                    {myIcon ? <img
                       className="h-10 w-10 rounded-full"
                       src={myIcon}
-                      alt={myself.openid.given_name}
-                    />
+                      alt={myself.slack.profile.real_name}
+                    /> : null}
                   </div>
                   <div className="ml-3">
-                    <div className="text-base font-medium leading-none text-white">{myself.openid.given_name} {myself.openid.family_name}</div>
+                    <div className="text-base font-medium leading-none text-white">{myself.slack.profile.real_name}</div>
                     <div className="text-sm font-medium leading-none text-gray-400">tom@example.com</div>
                   </div>
 
@@ -195,13 +198,12 @@ export default function Layout({children, myself, isLoading}) {
                   </button>
                 </div>
                 <div className="mt-3 px-2 space-y-1">
-                  {userNavigation.map(item => (
-                    <span
-                      onClick={item.onClick}
-                      key={item.label}
-                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700"
-                    >{item.label}</span>
-                  ))}
+                  <form
+                    method="POST" action="/logout"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700"
+                  >
+                    <input type="submit" value="Sign Out" className="bg-transparent" />
+                  </form>
                 </div>
               </div>
             </Disclosure.Panel>
@@ -209,12 +211,6 @@ export default function Layout({children, myself, isLoading}) {
           </>
         )}
       </Disclosure>
-
-      {/* <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        </div>
-      </header> */}
 
       <main>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

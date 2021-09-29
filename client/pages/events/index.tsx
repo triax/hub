@@ -18,11 +18,9 @@ export default function Top(props) {
   const [modalevent, setModalEvent] = useState(null);
   const [events, setEvents] = useState([]);
   useEffect(() => {
-    setTimeout(() => { // FIXME: クソすぎる
-      fetch(process.env.API_BASE_URL + "/api/1/events") // TODO: Repository作れ
-        .then(res => res.json())
-        .then(evts => setEvents(evts));
-    });
+    fetch(process.env.API_BASE_URL + "/api/1/events") // TODO: Repository作れ
+      .then(res => res.json())
+      .then(evts => setEvents(evts));
   }, []);
   const submit = async function(params) {
     startLoading();

@@ -1,3 +1,4 @@
+import Image from "next/image";
 
 function cn(...classes): string {
   return classes.filter(Boolean).join(' ');
@@ -30,33 +31,38 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
   const entries = Object.entries(pats)
     .filter(([_, p]: [string, any]) => p.type == 'join' || p.type == 'join_late') || [];
   if (entries.length == 0) return null;
-  const maxVisible = 10;
-  const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
-  const rest = entries.length - visibles.length;
+  // const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
   return (
-    <div className="flex" onClick={onClick} >
-      <div className="flex -space-x-2">
-        {visibles.map(([id, p]: [string, any]) => (
-          <img
-            key={id} src={p.picture} alt={p.name}
-            className="w-6 h-6 rounded-full border-2 border-white"
-          />
+    <div className="flex items-center" onClick={onClick} >
+      <div className="flex -space-x-1 flex-wrap">
+        {entries.map(([id, p]: [string, any]) => (
+          <div key={id} className="w-5 h-5 rounded-full overflow-hidden">
+            <Image
+              width={60} height={60}
+              src={p.picture} alt={p.name}
+              loader={({ src }) => src}
+              unoptimized={true}
+            />
+          </div>
         ))}
       </div>
-      {rest > 0 ? <span className="text-gray-400 text-sm items-center">+{rest}</span> : null}
+      {/* {rest > 0 ? <span className="text-gray-400 text-sm">+{rest}</span> : null} */}
     </div>
   )
 }
 
 export function EventRow({event, myself, submit, setModalEvent}) {
   const pats = JSON.parse(event.participations_json_str || "{}");
-  const answer = pats[myself.openid.sub] || {};
+  const answer = pats[myself.slack.id] || {};
+  const id = event.google.id.replace(/@google\.com$/, "");
   return (
     <div className="px-0 py-4">
-      <EventDateTime timestamp={event.google.start_time} />
-      <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
-      <EventLocation location={event.google.location} />
-      <EventParticipantsIcons pats={pats} onClick={() => location.href = `/events/${event.google.id.replace(/@google\.com$/, "")}`} />
+      <div onClick={() => location.href = `/events/${id}`}>
+        <EventDateTime timestamp={event.google.start_time} />
+        <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
+        <EventLocation location={event.google.location} />
+        <EventParticipantsIcons pats={pats} />
+      </div>
       <div className="px-0 pt-4 flex items-center">
         <div className="flex">
           {answer.type === undefined ? (

@@ -1,5 +1,15 @@
 cron:
 - description: Fetch Slack Members
   url: /tasks/fetch-slack-members
-  schedule: every 24 hours
+  schedule: everyday 04:00
+  timezone: Asia/Tokyo
+
+- description: Fetch Google Events
+  url: /tasks/fetch-calendar-events
+  schedule: everyday 04:00
+  timezone: Asia/Tokyo
+
+- description: Check RSVP of recent event
+  url: /tasks/check-rsvp
+  schedule: every wednesday 12:05
   timezone: Asia/Tokyo

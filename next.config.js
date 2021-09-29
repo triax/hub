@@ -14,6 +14,7 @@ module.exports = (phase, { defaultConfig }) => {
     // build-timeに評価されることに注意
     env: {
       API_BASE_URL: process.env.NODE_ENV == "production" ? "" : "http://localhost:8080",
+      HELP_PAGE_URL: "https://sites.google.com/view/how-to-use-triax-hub",
     },
     /** useFileSystemPublicRoutes について
      * - https://nextjs.org/docs/advanced-features/custom-server#disabling-file-system-routing

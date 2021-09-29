@@ -14,15 +14,17 @@ export default function Members(props) {
   const incdel = useRouter().query.include_deleted == "1";
   const [members, setMembers] = useState([]);
   useEffect(() => {
-    setTimeout(() => { // FIXME: クソすぎる
-      listMembers(incdel).then(mems => setMembers(mems));
-    }, 1000);
+    listMembers(incdel).then(mems => setMembers(mems));
   }, [incdel]);
   return (
     <Layout {...props}>
       <div className="divide-y divide-gray-100">
         <List>
-          {members.map(member => <MemberItem key={member.slack.id} member={member} />)}
+          {members.map(member => <MemberItem
+            key={member.slack.id}
+            member={member}
+            admin={props.myself.slack.is_admin}
+          />)}
         </List>
       </div>
     </Layout>
@@ -37,7 +39,7 @@ function List({ children }) {
   )
 }
 
-function MemberItem({ member }) {
+function MemberItem({ member, admin }) {
   const { slack } = member;
   return (
     <article className="py-2 flex space-x-4 cursor-pointer"
@@ -60,12 +62,12 @@ function MemberItem({ member }) {
             {slack.profile.real_name}
           </h3>
           <div className="flex space-x-4 text-gray-400">
-            <div className="flex-shrink-0">#{member.number == undefined || member.number == "" ? "未設定" : member.number}</div>
+            <div className="flex-shrink-0">#{member.number === null ? "未設定" : member.number}</div>
             <div><PositionCols title={member.slack.profile.title} /></div>
           </div>
         </div>
         <div className="flex-shrink">
-          <div className="space-x-1"><StatusBadges member={member} /></div>
+          <div className="space-x-1"><StatusBadges member={member} admin={admin} /></div>
         </div>
       </div>
     </article>
