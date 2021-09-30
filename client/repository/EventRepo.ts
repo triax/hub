@@ -14,10 +14,4 @@ export default class TeamEventRepo {
     const endpoint = this.baseURL + `/api/1/events/${id}/delete`;
     return fetch(endpoint, { method: "POST" }).then(res => res.json());
   }
-  list(): Promise<TeamEvent[]> {
-    const endpoint = this.baseURL + `/api/1/events`;
-    const res = fetch(endpoint);
-    console.log(res);
-    return res.then(res => res.json()).then(a => a.map(TeamEvent.fromAPIResponse));
-  }
 }

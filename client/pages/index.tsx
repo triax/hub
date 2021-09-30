@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EventList, EventRow } from "../components/Events";
 import { RSVPModal } from "../components/Events/RSVPModal";
 import Layout from "../components/layout";
-import TeamEvent from "../models/TriaxEvent";
 import TeamEventRepo from "../repository/EventRepo";
 
 async function submitRSVP({event, answer, params}) {
@@ -17,10 +16,13 @@ async function submitRSVP({event, answer, params}) {
 export default function Top(props) {
   const { myself, startLoading, stopLoading } = props;
   const [modalevent, setModalEvent] = useState(null);
-  const [events, setEvents] = useState<TeamEvent[]>([]);
+  const [events, setEvents] = useState([]);
+  const repo = useMemo(() => new TeamEventRepo(), []);
   useEffect(() => {
-    (new TeamEventRepo()).list().then(setEvents);
-  }, []);
+    fetch(process.env.API_BASE_URL + "/api/1/events") // TODO: Repository作れ
+      .then(res => res.json())
+      .then(evts => setEvents(evts));
+  }, [repo]);
   const submit = async function(params) {
     startLoading();
     const updated = await submitRSVP(params);
