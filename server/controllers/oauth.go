@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,7 +49,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 
 	if errmsg := req.URL.Query().Get("error"); errmsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `%s\n<a href="/login">Back to login</a>`, errmsg)
+		fmt.Fprintf(w, `%s\n<a href="/login">Back to login</a>`, html.EscapeString(errmsg))
 		return
 	}
 

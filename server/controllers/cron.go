@@ -20,8 +20,10 @@ import (
 )
 
 var (
-	appurl = os.Getenv("APP_BASE_URL")
-	rsvp   = template.Must(template.New("x").Parse(
+	appbase  = os.Getenv("APP_BASE_URL")
+	helplink = os.Getenv("HELP_PAGE_URL")
+
+	rsvp = template.Must(template.New("x").Parse(
 		`参加:		{{len (index . "join")}}
 不参加:	{{len (index . "absent")}}
 未回答:	{{len (index . "unanswered")}}`))
@@ -94,7 +96,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "random"
 	}
-	link := "<" + appurl + "|:football: :football: :football: " + appurl + ">"
+	link := "<" + appbase + "|:football: :football: :football: " + appbase + ">"
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
@@ -133,11 +135,10 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 			mentions = append(mentions, fmt.Sprintf("<@%s>", m.Slack.ID))
 		}
 	}
-	helplink := os.Getenv("HELP_PAGE_URL")
 	return slack.MsgOptionBlocks(
 		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, "出欠未回答の皆さまへ", false, false)),
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+appurl+"|【Triax Team Hub】>*", false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+appbase+"|【Triax Team Hub】>*", false, false),
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://avatars.slack-edge.com/2021-08-16/2369588425687_e490e60131c70bf52eee_192.png", "Triax Team Hub")),
 		),
 		slack.NewSectionBlock(
