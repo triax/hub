@@ -55,6 +55,10 @@ jobs:
         node-version: 14.x
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
+    - name: Install dependencies
+      run: npm install
+    - name: Export assets
+      run: npm run export
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@master
       with:

@@ -14,6 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+var (
+	tpl = marmoset.LoadViews("client/dest")
+)
+
 func init() {
 	if os.Getenv("GAE_APPLICATION") == "" {
 		if _, err := appyaml.Load("secrets.local.yaml"); err != nil {
@@ -24,7 +28,7 @@ func init() {
 
 func main() {
 
-	marmoset.LoadViews("client/dest")
+	marmoset.UseTemplate(tpl)
 
 	r := chi.NewRouter()
 
