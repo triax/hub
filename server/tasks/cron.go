@@ -1,4 +1,4 @@
-package controllers
+package tasks
 
 import (
 	"bytes"
@@ -92,6 +92,11 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	if req.URL.Query().Get("dry") != "" {
+		render.JSON(200, x)
+		return
+	}
+
 	channel := req.URL.Query().Get("channel")
 	if channel == "" {
 		channel = "random"
@@ -176,6 +181,11 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 		fmt.Println("[ERROR]", 7002, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	if req.URL.Query().Get("dry") != "" {
+		marmoset.RenderJSON(w, 200, events)
 		return
 	}
 
