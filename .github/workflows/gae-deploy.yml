@@ -105,3 +105,13 @@ jobs:
         APP_SECRETS_PROD_YAML: ${{ secrets.APP_SECRETS_PROD_YAML }}
     - name: Deploy PROD
       run: gcloud app deploy ./app.yaml --quiet
+    - name: Announce on Slack
+      run: |
+        curl -XPOST \
+          -d "{
+            \"channel\": \"tech\",
+            \"text\": \":robot_face: 新しいバージョンがproduction環境にデプロイされました :tada:\nhttps://github.com/${GITHUB_REPOSITORY}/commits/main\"
+          }" \
+          -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          https://slack.com/api/chat.postMessage
