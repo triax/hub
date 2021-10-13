@@ -248,6 +248,11 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if req.URL.Query().Get("dry") != "" {
+		marmoset.RenderJSON(w, http.StatusOK, slackres)
+		return
+	}
+
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
 		fmt.Println("[ERROR]", 4005, slackres.Error)
@@ -263,12 +268,13 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		key := datastore.NameKey(models.KindMember, m.ID, nil)
-		member := models.Member{Slack: m}
+		member := models.Member{}
 		if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 			if err := tx.Get(key, &member); err != nil {
 				fmt.Printf("[DEBUG] NEW MEMBER: %+v\n", member)
 				newjoiner = append(newjoiner, member)
 			}
+			member.Slack = m // 存在しているSlack上の情報で上書き
 			if _, err := tx.Put(key, &member); err != nil {
 				return err
 			}

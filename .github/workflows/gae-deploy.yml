@@ -23,6 +23,7 @@ jobs:
       run: go test -v -cover -race
 
   js-test:
+    name: JavaScript Test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -71,3 +72,46 @@ jobs:
         APP_SECRETS_DEV_YAML: ${{ secrets.APP_SECRETS_DEV_YAML }}
     - name: Deploy DEV
       run: gcloud app deploy ./app.dev.yaml --quiet
+
+  gae-deploy-prod:
+    name: GAE Deploy PROD
+    if: github.ref == 'refs/heads/main'
+    needs: [go-test, js-test]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.16
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.16
+    - name: Set up Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: 14.x
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run: npm install
+    - name: Export assets
+      run: npm run export
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@master
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+    - name: Recover App Secrets PROD
+      run: 'echo "$APP_SECRETS_PROD_YAML" > secrets.yaml'
+      shell: bash
+      env:
+        APP_SECRETS_PROD_YAML: ${{ secrets.APP_SECRETS_PROD_YAML }}
+    - name: Deploy PROD
+      run: gcloud app deploy ./app.yaml --quiet
+    - name: Announce on Slack
+      run: |
+        curl -XPOST \
+          -d "{
+            \"channel\": \"tech\",
+            \"text\": \":robot_face: 新しいバージョンがproduction環境にデプロイされました :tada:\nhttps://github.com/${GITHUB_REPOSITORY}/commits/main\"
+          }" \
+          -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          https://slack.com/api/chat.postMessage
