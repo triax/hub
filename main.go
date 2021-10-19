@@ -10,6 +10,7 @@ import (
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
+	"github.com/triax/hub/server/tasks"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -61,11 +62,11 @@ func main() {
 	r.With(page.Handle).Get("/events", controllers.Events)
 	r.With(page.Handle).Get("/events/{id}", controllers.Event)
 
-	// Cron or Gas
+	// Cloud Tasks
 	cron := chi.NewRouter()
-	cron.Get("/fetch-slack-members", controllers.CronFetchSlackMembers)
-	cron.Get("/fetch-calendar-events", controllers.CronFetchGoogleEvents)
-	cron.Get("/check-rsvp", controllers.CronCheckRSVP)
+	cron.Get("/fetch-slack-members", tasks.CronFetchSlackMembers)
+	cron.Get("/fetch-calendar-events", tasks.CronFetchGoogleEvents)
+	cron.Get("/check-rsvp", tasks.CronCheckRSVP)
 	r.Mount("/tasks", cron)
 
 	r.NotFound(controllers.NotFound)
