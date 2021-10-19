@@ -27,26 +27,30 @@ export function EventLocation({location}) {
   )
 }
 
+function EventParticipantsRow({ row }) {
+  return <div className="flex -space-x-1 overflow-hidden">
+    {row.map(([id, p]: [string, any]) => (
+      <div
+        key={id}
+        className="inline-block h-4 w-4 rounded-full ring-1 ring-white"
+        style={{backgroundImage: `url(${p.picture})`, backgroundSize: 'cover'}}
+      />
+    ))}
+  </div>;
+}
+
 function EventParticipantsIcons({pats, onClick = () => {}}) {
   const entries = Object.entries(pats)
     .filter(([_, p]: [string, any]) => p.type == 'join' || p.type == 'join_late') || [];
   if (entries.length == 0) return null;
-  // const visibles = entries.length > maxVisible ? entries.slice(0, maxVisible) : entries;
+  const chunk = 25;
+  const rows = entries.reduce((ctx, e, i) => {
+    if (i % chunk == 0) ctx.push(entries.slice(i, i+chunk));
+    return ctx;
+  }, []);
   return (
-    <div className="flex items-center" onClick={onClick} >
-      <div className="flex -space-x-1 flex-wrap">
-        {entries.map(([id, p]: [string, any]) => (
-          <div key={id} className="w-5 h-5 rounded-full overflow-hidden">
-            <Image
-              width={60} height={60}
-              src={p.picture} alt={p.name}
-              loader={({ src }) => src}
-              unoptimized={true}
-            />
-          </div>
-        ))}
-      </div>
-      {/* {rest > 0 ? <span className="text-gray-400 text-sm">+{rest}</span> : null} */}
+    <div onClick={onClick} >
+      {rows.map((row, i) => <EventParticipantsRow key={i} row={row} />)}
     </div>
   )
 }
