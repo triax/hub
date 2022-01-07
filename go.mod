@@ -10,5 +10,5 @@ require (
 	github.com/otiai10/marmoset v0.7.0
 	github.com/slack-go/slack v0.9.5
 	golang.org/x/net v0.0.0-20210903162142-ad29c8ab022f // indirect
-	google.golang.org/api v0.56.0
+	google.golang.org/api v0.64.0
 )
