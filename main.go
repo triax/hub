@@ -7,6 +7,7 @@ import (
 
 	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
@@ -58,6 +59,7 @@ func main() {
 	// Bot events
 	bot := slackbot.Bot{
 		VerificationToken: os.Getenv("SLACK_BOT_EVENTS_VERIFICATION_TOKEN"),
+		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
 	}
 	r.Post("/slack/events", bot.Webhook)
 
