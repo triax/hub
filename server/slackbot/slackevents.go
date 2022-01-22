@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/slack-go/slack"
@@ -57,5 +58,6 @@ func (bot Bot) onURLVerification(req *http.Request, w http.ResponseWriter, paylo
 }
 
 func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Payload) {
-	bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText("Hello!", false))
+	a, b, err := bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText("Hello!", false))
+	log.Println(a, b, err)
 }
