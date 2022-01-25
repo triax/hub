@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+
+	"github.com/otiai10/largo"
 )
 
 type SlackAPI interface {
@@ -41,13 +44,14 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	switch payload.Type {
-	case slackevents.URLVerification:
+	switch {
+	case payload.Type == slackevents.URLVerification:
 		bot.onURLVerification(req, w, payload)
-	case slackevents.AppMention:
+	case payload.Event.Type == slackevents.AppMention:
 		bot.onMention(req, w, payload)
 	default:
-		w.WriteHeader(http.StatusOK)
+		log.Printf("UNKNOWN EVENT TYPE: %+v\n", payload)
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
@@ -58,6 +62,11 @@ func (bot Bot) onURLVerification(req *http.Request, w http.ResponseWriter, paylo
 }
 
 func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Payload) {
-	a, b, err := bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText("Hello!", false))
+	tokens := largo.Tokenize(payload.Event.Text)[1:]
+	opts := []slack.MsgOption{slack.MsgOptionText("You said: "+strings.Join(tokens, " "), false)}
+	if payload.Event.ThreadTimeStamp != "" {
+		opts = append(opts, slack.MsgOptionTS(payload.Event.ThreadTimeStamp))
+	}
+	a, b, err := bot.SlackAPI.PostMessage(payload.Event.Channel, opts...)
 	log.Println(a, b, err)
 }
