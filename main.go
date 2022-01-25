@@ -7,9 +7,11 @@ import (
 
 	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
 	"github.com/triax/hub/server/filters"
+	"github.com/triax/hub/server/slackbot"
 	"github.com/triax/hub/server/tasks"
 
 	"github.com/go-chi/chi/v5"
@@ -53,6 +55,13 @@ func main() {
 	r.Post("/logout", controllers.Logout)
 	r.Get("/auth/start", controllers.AuthStart)
 	r.Get("/auth/callback", controllers.AuthCallback)
+
+	// Bot events
+	bot := slackbot.Bot{
+		VerificationToken: os.Getenv("SLACK_BOT_EVENTS_VERIFICATION_TOKEN"),
+		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
+	}
+	r.Post("/slack/events", bot.Webhook)
 
 	// Pages
 	page := &filters.Auth{API: false, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
