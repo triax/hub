@@ -12,5 +12,5 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/slack-go/slack v0.10.1
 	golang.org/x/net v0.0.0-20210903162142-ad29c8ab022f // indirect
-	google.golang.org/api v0.65.0
+	google.golang.org/api v0.68.0
 )
