@@ -125,7 +125,10 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	member := models.Member{}
-	if err := client.Get(ctx, datastore.NameKey(models.KindMember, info.Sub, nil), &member); err != nil {
+	if err := client.Get(ctx,
+		datastore.NameKey(models.KindMember, info.Sub, nil),
+		&member,
+	); err != nil && !models.IsFiledMismatch(err) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("datastore.Get: " + err.Error()))
 		return

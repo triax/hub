@@ -1,5 +1,10 @@
 package models
 
+import (
+	"cloud.google.com/go/datastore"
+	"github.com/slack-go/slack"
+)
+
 const (
 	KindMember = "Member"
 	KindEvent  = "Event"
@@ -7,7 +12,8 @@ const (
 
 type (
 	Member struct {
-		Slack SlackMember `json:"slack"`
+		Team  slack.TeamInfo `json:"team"`
+		Slack slack.User     `json:"slack"`
 
 		// Status メンバーの（退部済み以外の）参加状態
 		Status MemberStatus `json:"status"`
@@ -57,3 +63,16 @@ const (
 	// Member.Statusでは管理せず、Member.Slack.Deletedを使うため、使わないはず.
 	MSDeleted MemberStatus = "deleted"
 )
+
+// IsFieldMismatch ...
+// datastoreのGet系メソッド利用時において、
+// datastore側で存在するフィールドを、struct側が持っていない場合、
+// ErrFieldMismatchが起きるが、これはdataのマイグレーション上めんどくさいので、
+// このエラーだけは無視したいことが多々ある。
+// @See
+// 	- https://github.com/googleapis/google-cloud-go/issues/913
+//	- https://pkg.go.dev/cloud.google.com/go/datastore#ErrFieldMismatch
+func IsFiledMismatch(err error) bool {
+	_, ok := err.(*datastore.ErrFieldMismatch)
+	return ok
+}

@@ -102,7 +102,10 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	member := models.Member{}
-	if err := client.Get(ctx, datastore.NameKey(models.KindMember, slackID, nil), &member); err != nil {
+	if err := client.Get(ctx,
+		datastore.NameKey(models.KindMember, slackID, nil),
+		&member,
+	); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
