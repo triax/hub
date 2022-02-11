@@ -10,8 +10,8 @@ const defaultTeamIcon = "https://avatars.slack-edge.com/2018-03-08/326510858803_
 const defaultTeamName = "Triax";
 
 const navigation = [
-  { label: 'Dashboard', link: '/' },
-  { label: 'Calendar', link: '/events' },
+  { label: 'Schedule', link: '/' },
+  // { label: 'Calendar', link: '/events' },
   { label: 'Team', link: '/members' },
 ];
 
