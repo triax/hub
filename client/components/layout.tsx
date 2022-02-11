@@ -1,9 +1,13 @@
 import Head from "next/head";
 
-import { Fragment } from "react";
+import React, { Fragment } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
 import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
 import { useRouter } from "next/router";
+import Member from "../models/Member";
+
+const defaultTeamIcon = "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_44.png";
+const defaultTeamName = "Triax";
 
 const navigation = [
   { label: 'Dashboard', link: '/' },
@@ -29,20 +33,18 @@ function Loading({isLoading}) {
   )
 }
 
-export default function Layout({children, myself, isLoading}) {
+export default function Layout({ children, myself, isLoading } : { children: React.ReactNode, myself: Member, isLoading: boolean }) {
   const { pathname } = useRouter();
-  // const teamIcon: string = myself.openid["https://slack.com/team_image_44"];
-  // const touchIcon: string = myself.openid["https://slack.com/team_image_132"];
-  const teamIcon: string =  "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_44.png";
-  const touchIcon: string = "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_132.png";
+  const teamIcon: string = myself.team?.icon?.image_132 || defaultTeamIcon;
+  const teamName: string = myself.team?.name || defaultTeamName;
   const myIcon: string = myself.slack.profile.image_512;
 
   return (
     <div id="root">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{process.env.NODE_ENV == "production" ? "" : "[DEV] "}Triax Team Hub</title>
-        <link rel="apple-touch-icon" href={touchIcon} />
+        <title>{process.env.NODE_ENV == "production" ? "" : "[DEV] "}{teamName} Team Hub</title>
+        <link rel="apple-touch-icon" href={teamIcon} />
         <link rel="shortcut icon" href={teamIcon} />
       </Head>
       <Loading isLoading={isLoading} />
