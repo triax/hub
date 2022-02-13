@@ -58,6 +58,7 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", 2*60*60)) // 2時間
 	render.JSON(http.StatusOK, member)
 }
 

@@ -48,6 +48,7 @@ func main() {
 	v1.Post("/events/answer", api.AnswerEvent)
 	v1.Get("/events", api.ListEvents)
 	// Equips
+	v1.Post("/equips/custody", api.EquipCustodyReport)
 	v1.Get("/equips/{id}", api.GetEquip)
 	v1.Post("/equips/{id}/delete", api.DeleteEquip)
 	v1.Post("/equips", api.CreateEquipItem)

@@ -1,9 +1,10 @@
+import Image from "next/image";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
-import Equip from "../../models/Equip";
+import Equip, { Custody } from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
-import { TrashIcon } from "@heroicons/react/outline";
+import MemberRepo, { MemberCache } from "../../repository/MemberRepo";
 
 export default function Item(props) {
   const id = useRouter().query.id as string;
@@ -15,7 +16,6 @@ export default function Item(props) {
     repo.get(id).then(setEquip);
   }, [repo, id]);
   if (!equip) return <Layout {...props}></Layout>;
-  console.log(equip);
   return (
     <Layout {...props}>
 
@@ -34,6 +34,8 @@ export default function Item(props) {
             {equip.description.split("\n").map((line, i) => <div key={i}>{line}</div>)}
           </div>
 
+          <CustodyFeed history={equip.history} />
+
         </div>
       </div>
 
@@ -49,5 +51,70 @@ export default function Item(props) {
         </div>
       </div> : null}
     </Layout>
+  )
+}
+
+function CustodyFeed({history}) {
+  const cache = useMemo(() => new MemberCache(), []);
+  return (
+    <div>
+      {history.sort((p, n) => p.ts < n.ts ? 1 : -1).map(custody => <FeedEntry
+        key={custody.ts}
+        timestamp={custody.ts}
+        memberID={custody.member_id}
+        comment={custody.comment}
+        cache={cache}
+      />)}
+    </div>
+  );
+}
+
+function DateRow({timestamp}: {timestamp: number}) {
+  const d = new Date(timestamp);
+  return (
+    <div className="h-12 flex items-center text-gray-600">
+      <div>{d.getFullYear()}年</div>
+      <div>{d.getMonth()+1}月</div>
+      <div className="mr-2">{d.getDate()}日</div>
+      <div>{d.getHours()}</div>
+      <div>:</div>
+      <div>{d.getMinutes()}</div>
+    </div>
+  )
+}
+
+function FeedEntry({ timestamp, memberID, comment, cache }: {
+  timestamp: number, memberID: string, comment: string, cache: MemberCache
+}) {
+  const [c, setCustody] = useState<Custody>(null);
+  useEffect(() => {
+    cache.get(memberID).then(m => {
+      setCustody(new Custody(memberID, timestamp, comment, m));
+    });
+  }, [cache]);
+  if (c == null) return null;
+  return (
+    <div className="flex">
+      <div className="flex flex-col items-center">
+        <div className="w-12 h-12 rounded-full overflow-hidden">
+          <Image
+            loader={({ src }) => src}
+            unoptimized={true}
+            src={c.member?.slack?.profile?.image_512}
+            alt={c.member?.slack?.profile?.real_name}
+            className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
+            width={120}
+            height={120}
+          />
+        </div>
+        <div className=" border-x-2 w-1 min-h-2 flex-grow" />
+      </div>
+      <div className="pl-2 pb-4">
+        <DateRow timestamp={timestamp} />
+        <div className="">
+          {c.comment.split("\n").map((line, i) => <div key={i}>{line}</div>)}
+        </div>
+      </div>
+    </div>
   )
 }

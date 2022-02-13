@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/go-chi/chi/v5"
@@ -150,4 +151,50 @@ func DeleteEquip(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	render.JSON(http.StatusAccepted, equip)
+}
+
+func EquipCustodyReport(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	body := struct {
+		IDs      []int64 `json:"ids"`
+		MemberID string  `json:"member_id"`
+		Comment  string  `json:"comment"`
+	}{}
+	defer req.Body.Close()
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	keys := []*datastore.Key{}
+	custodies := []*models.Custody{}
+	for _, id := range body.IDs {
+		keys = append(keys, datastore.IncompleteKey(
+			models.KindCustody,
+			datastore.IDKey(models.KindEquip, id, nil),
+		))
+		custodies = append(custodies, &models.Custody{
+			MemberID:  body.MemberID,
+			Timestamp: time.Now().Unix() * 1000,
+		})
+	}
+
+	if inserted, err := client.PutMulti(ctx, keys, custodies); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	} else {
+		for i, key := range inserted {
+			custodies[i].Key = key
+		}
+	}
+
+	render.JSON(http.StatusAccepted, custodies)
 }

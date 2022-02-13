@@ -30,11 +30,11 @@ export class CustodyRepo {
   constructor(
     public baseURL = process.env.API_BASE_URL,
   ) { }
-  report(equips: number[], reporter: Member, comment: string): any {
+  report(equipIDs: number[], reporter: Member, comment: string): any {
     const endpoint = this.baseURL + `/api/1/equips/custody`;
     return fetch(endpoint, {
       method: "POST",
-      body: JSON.stringify({ equips, member_id: reporter.slack.id, comment }),
+      body: JSON.stringify({ ids: equipIDs, member_id: reporter.slack.id, comment }),
     }).then(res => res.json());
   }
 

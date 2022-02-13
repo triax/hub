@@ -26,3 +26,17 @@ export default class MemberRepo {
     }).then(res => res.json()).then(Member.fromAPIResponse);
   }
 }
+
+export class MemberCache extends MemberRepo {
+  private static dict: Record<string, Member> = {};
+  get(id: string): Promise<Member> {
+    if (MemberCache.dict[id]) {
+      // console.info("Cache hit");
+      return Promise.resolve(MemberCache.dict[id]);
+    }
+    return super.get(id).then(member => {
+      MemberCache.dict[id] = member;
+      return Promise.resolve(member);
+    });
+  }
+}
