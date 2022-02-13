@@ -6,11 +6,30 @@ import (
 )
 
 const (
-	KindMember = "Member"
-	KindEvent  = "Event"
+	KindMember  = "Member"
+	KindEvent   = "Event"
+	KindEquip   = "Equip"
+	KindCustody = "Custody"
 )
 
 type (
+	Equip struct {
+		ID          int64          `json:"id" datastore:"-"`
+		Key         *datastore.Key `datastore:"__key__"`
+		Name        string         `json:"name"`
+		ForPractice bool           `json:"for_practice"`
+		ForGame     bool           `json:"for_game"`
+		Description string         `json:"description"`
+		History     []Custody      `json:"history" datastore:"-"`
+	}
+
+	Custody struct {
+		Key       *datastore.Key `datastore:"__key__"`
+		MemberID  string         `json:"member_id"`
+		Timestamp int64          `json:"ts"`
+		Comment   string         `json:"comment"`
+	}
+
 	Member struct {
 		Team  slack.TeamInfo `json:"team"`
 		Slack slack.User     `json:"slack"`

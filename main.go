@@ -47,6 +47,11 @@ func main() {
 	v1.Post("/events/{id}/delete", api.DeleteEvent)
 	v1.Post("/events/answer", api.AnswerEvent)
 	v1.Get("/events", api.ListEvents)
+	// Equips
+	v1.Get("/equips/{id}", api.GetEquip)
+	v1.Post("/equips/{id}/delete", api.DeleteEquip)
+	v1.Post("/equips", api.CreateEquipItem)
+	v1.Get("/equips", api.ListEquips)
 	r.Mount("/api/1", v1)
 
 	// Unauthorized pages
@@ -70,6 +75,10 @@ func main() {
 	r.With(page.Handle).Get("/members/{id}", controllers.Member)
 	r.With(page.Handle).Get("/events", controllers.Events)
 	r.With(page.Handle).Get("/events/{id}", controllers.Event)
+	r.With(page.Handle).Get("/equips", controllers.Equips)
+	r.With(page.Handle).Get("/equips/create", controllers.EquipCreate)
+	r.With(page.Handle).Get("/equips/report", controllers.EquipReport)
+	r.With(page.Handle).Get("/equips/{id}", controllers.Equip)
 
 	// Cloud Tasks
 	cron := chi.NewRouter()

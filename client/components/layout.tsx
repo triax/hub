@@ -12,6 +12,7 @@ const defaultTeamName = "Triax";
 const navigation = [
   { label: 'Schedule', link: '/' },
   // { label: 'Calendar', link: '/events' },
+  { label: 'Equips', link: '/equips' },
   { label: 'Team', link: '/members' },
 ];
 
