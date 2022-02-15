@@ -1,0 +1,8 @@
+indexes:
+
+- kind: Custody
+  ancestor: yes
+  properties:
+  - name: Timestamp
+    direction: desc
+
