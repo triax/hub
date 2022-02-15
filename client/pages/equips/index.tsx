@@ -21,8 +21,7 @@ export default function List(props) {
         className="py-2 flex text-red-900"
         onClick={() => router.push("/equips/create")}
       >
-        <PlusIcon className="w-4 mr-2" aria-hidden={true} />
-        <span>新規アイテム登録</span>
+        <span>+ 新規アイテム登録</span>
       </span> : null}
       <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg">
         <table className="min-w-full divide-y divide-gray-200">
