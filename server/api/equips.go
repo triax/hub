@@ -33,6 +33,10 @@ func ListEquips(w http.ResponseWriter, req *http.Request) {
 
 	for i, e := range equips {
 		equips[i].ID = e.Key.ID
+
+		// 最新のHistoryだけ収集する
+		query := datastore.NewQuery(models.KindCustody).Ancestor(e.Key).Order("-Timestamp").Limit(1)
+		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
 	}
 
 	if req.URL.Query().Get("cached") == "1" {

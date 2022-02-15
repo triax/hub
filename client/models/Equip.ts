@@ -9,7 +9,7 @@ export interface EquipDraft {
 
 export class Custody {
   constructor(
-    public memberID: string,
+    public member_id: string,
     public timestamp: number,// t.Unix() * 1000
     public comment: string = "",
     public member: Member = null,

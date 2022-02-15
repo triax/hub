@@ -4,6 +4,9 @@ import Layout from "../../components/layout";
 import Equip from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
 import { PlusIcon } from "@heroicons/react/outline";
+import Member from "../../models/Member";
+import { MemberCache } from "../../repository/MemberRepo";
+import Image from "next/image";
 
 export default function List(props) {
   const [equips, setEquips] = useState<Equip[]>([]);
@@ -52,8 +55,22 @@ function Circle({ type }: { type: "practice" | "game" }) {
 }
 
 function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolean }) {
+  const [m, setMember] = useState<Member>(null)
+  useEffect(() => {
+    if (equip.history.length == 0) return;
+    (new MemberCache()).get(equip.history[0].member_id).then(setMember);
+  }, []);
   return (
     <tr key={equip.id} onClick={jump} className={border ? "border-b" : ""}>
+      <td className="pl-2">{m?.slack ? <div className="w-6 h-6 rounded-full overflow-hidden"><Image
+        loader={({ src }) => src}
+        unoptimized={true}
+        src={m?.slack?.profile?.image_512}
+        alt={m?.slack?.profile?.real_name}
+        className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
+        width={120}
+        height={120}
+      /></div> : null}</td>
       <td className="p-2">{equip.name}</td>
       <td className="p-2">{equip.forPractice ? <Circle type="practice" /> : null}</td>
       <td className="p-2">{equip.forGame ?     <Circle type="game" />     : null}</td>

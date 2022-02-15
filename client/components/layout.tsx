@@ -6,7 +6,7 @@ import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline
 import { useRouter } from "next/router";
 import Member from "../models/Member";
 
-const defaultTeamIcon = "https://avatars.slack-edge.com/2018-03-08/326510858803_cfa1bba5e3de9862d0ac_44.png";
+const defaultTeamIcon = "https://s3-us-west-2.amazonaws.com/slack-files2/avatars/2022-02-11/3102891044193_8ede5969380a68bc44bf_132.png";
 const defaultTeamName = "Triax";
 
 const navigation = [
