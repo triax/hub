@@ -13,7 +13,6 @@ export default function Report(props) {
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
-  console.log(ids);
   return (
     <Layout {...props}>
       <h1 className="my-4 text-2xl font-bold">何を持って帰ってくれましたか?</h1>

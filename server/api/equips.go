@@ -66,7 +66,7 @@ func GetEquip(w http.ResponseWriter, req *http.Request) {
 	}
 	equip.ID = key.ID
 
-	query := datastore.NewQuery(models.KindCustody).Ancestor(key)
+	query := datastore.NewQuery(models.KindCustody).Ancestor(key).Order("-Timestamp")
 
 	if _, err := client.GetAll(ctx, query, &equip.History); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})

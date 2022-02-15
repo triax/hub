@@ -4,6 +4,7 @@ interface SlackMember {
   profile: {
     name: string,
     real_name: string,
+    display_name: string,
     image_512: string,
     title: string,
   },
@@ -38,7 +39,7 @@ export default class Member {
   }
   static placeholder(): Member {
     return new Member({
-      id: "xxx", profile: { name: "", real_name: "", image_512: "", title: "" }, is_admin: false, deleted: false
+      id: "xxx", profile: { name: "", real_name: "", display_name: "", image_512: "", title: "" }, is_admin: false, deleted: false
     });
   }
 }

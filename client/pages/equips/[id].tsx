@@ -1,10 +1,10 @@
 import Image from "next/image";
-import { useRouter } from "next/router";
+import { NextRouter, useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import Equip, { Custody } from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
-import MemberRepo, { MemberCache } from "../../repository/MemberRepo";
+import { MemberCache } from "../../repository/MemberRepo";
 
 export default function Item(props) {
   const id = useRouter().query.id as string;
@@ -34,7 +34,7 @@ export default function Item(props) {
             {equip.description.split("\n").map((line, i) => <div key={i}>{line}</div>)}
           </div>
 
-          <CustodyFeed history={equip.history} />
+          <CustodyFeed history={equip.history} router={router} />
 
         </div>
       </div>
@@ -54,16 +54,17 @@ export default function Item(props) {
   )
 }
 
-function CustodyFeed({history}) {
+function CustodyFeed({history, router}) {
   const cache = useMemo(() => new MemberCache(), []);
   return (
     <div>
-      {history.sort((p, n) => p.ts < n.ts ? 1 : -1).map(custody => <FeedEntry
+      {history.map(custody => <FeedEntry
         key={custody.ts}
         timestamp={custody.ts}
         memberID={custody.member_id}
         comment={custody.comment}
         cache={cache}
+        router={router}
       />)}
     </div>
   );
@@ -72,7 +73,7 @@ function CustodyFeed({history}) {
 function DateRow({timestamp}: {timestamp: number}) {
   const d = new Date(timestamp);
   return (
-    <div className="h-12 flex items-center text-gray-600">
+    <div className="h-10 flex items-center">
       <div>{d.getFullYear()}年</div>
       <div>{d.getMonth()+1}月</div>
       <div className="mr-2">{d.getDate()}日</div>
@@ -83,8 +84,8 @@ function DateRow({timestamp}: {timestamp: number}) {
   )
 }
 
-function FeedEntry({ timestamp, memberID, comment, cache }: {
-  timestamp: number, memberID: string, comment: string, cache: MemberCache
+function FeedEntry({ timestamp, memberID, comment, cache, router }: {
+  timestamp: number, memberID: string, comment: string, cache: MemberCache, router: NextRouter,
 }) {
   const [c, setCustody] = useState<Custody>(null);
   useEffect(() => {
@@ -96,8 +97,9 @@ function FeedEntry({ timestamp, memberID, comment, cache }: {
   return (
     <div className="flex">
       <div className="flex flex-col items-center">
-        <div className="w-12 h-12 rounded-full overflow-hidden">
+        <div className="w-10 h-10 rounded-full overflow-hidden">
           <Image
+            onClick={() => router.push(`/members/${c.memberID}`)}
             loader={({ src }) => src}
             unoptimized={true}
             src={c.member?.slack?.profile?.image_512}
@@ -107,10 +109,12 @@ function FeedEntry({ timestamp, memberID, comment, cache }: {
             height={120}
           />
         </div>
-        <div className=" border-x-2 w-1 min-h-2 flex-grow" />
+        <div className="border-x w-0 h-4 my-2 flex-grow border-gray-400" />
       </div>
       <div className="pl-2 pb-4">
-        <DateRow timestamp={timestamp} />
+        <div className="flex h-10 align-middle text-gray-600">
+          <DateRow timestamp={timestamp} />
+        </div>
         <div className="">
           {c.comment.split("\n").map((line, i) => <div key={i}>{line}</div>)}
         </div>

@@ -74,7 +74,7 @@ export default function CreateItem(props) {
               上記のとおり作成
             </button>
             <a className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
-              href="/equips">
+              onClick={() => router.push("/equips")}>
               キャンセル
             </a>
           </div>
