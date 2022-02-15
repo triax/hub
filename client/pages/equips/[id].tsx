@@ -99,7 +99,7 @@ function FeedEntry({ timestamp, memberID, comment, cache, router }: {
       <div className="flex flex-col items-center">
         <div className="w-10 h-10 rounded-full overflow-hidden">
           <Image
-            onClick={() => router.push(`/members/${c.memberID}`)}
+            onClick={() => router.push(`/members/${c.member_id}`)}
             loader={({ src }) => src}
             unoptimized={true}
             src={c.member?.slack?.profile?.image_512}
