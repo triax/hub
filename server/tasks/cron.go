@@ -62,7 +62,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 
 	members := []models.Member{}
 	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindMember).
-		Filter("Slack.Deleted =", false), &members); err != nil {
+		Filter("Slack.Deleted =", false), &members); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -226,46 +226,31 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 
 func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
-	endpoint := "https://slack.com/api/users.list"
+	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+	api := slack.New(token)
 
-	slackreq, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	team, err := api.GetTeamInfoContext(ctx)
 	if err != nil {
 		fmt.Println("[ERROR]", 4001, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
-	slackreq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	res, err := http.DefaultClient.Do(slackreq)
-	if err != nil || res.StatusCode != http.StatusOK {
-		fmt.Println("[ERROR]", 4002, err, res.StatusCode, res.Status)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	slackres := new(models.SlackMembersResponse)
-	if err := json.NewDecoder(res.Body).Decode(slackres); err != nil {
-		fmt.Println("[ERROR]", 4003, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !slackres.OK {
-		fmt.Println("[ERROR]", 4004, slackres.Error)
+	users, err := api.GetUsersContext(ctx)
+	if err != nil {
+		fmt.Println("[ERROR]", 4002, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	if req.URL.Query().Get("dry") != "" {
-		marmoset.RenderJSON(w, http.StatusOK, slackres)
+		marmoset.RenderJSON(w, http.StatusOK, users)
 		return
 	}
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
-		fmt.Println("[ERROR]", 4005, slackres.Error)
+		fmt.Println("[ERROR]", 4005, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -273,18 +258,27 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 
 	count := 0
 	newjoiner := []models.Member{}
-	for _, m := range slackres.Members {
-		if m.IsBot || m.IsAppUser {
+	for _, u := range users {
+
+		if u.IsBot || u.IsAppUser {
 			continue
 		}
-		key := datastore.NameKey(models.KindMember, m.ID, nil)
+
+		key := datastore.NameKey(models.KindMember, u.ID, nil)
 		member := models.Member{}
+
 		if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 			if err := tx.Get(key, &member); err != nil {
-				fmt.Printf("[DEBUG] NEW MEMBER: %+v\n", member)
-				newjoiner = append(newjoiner, member)
+				if _, ok := err.(*datastore.ErrFieldMismatch); !ok {
+					fmt.Printf("[DEBUG] NEW MEMBER: %+v\n", member)
+					newjoiner = append(newjoiner, member)
+				}
 			}
-			member.Slack = m // 存在しているSlack上の情報で上書き
+
+			// いずれにしても、存在しているSlack上の情報で上書き
+			member.Slack = u
+			member.Team = *team
+
 			if _, err := tx.Put(key, &member); err != nil {
 				return err
 			}
