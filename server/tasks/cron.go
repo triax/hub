@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
-	"github.com/otiai10/marmoset/marker"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 	"google.golang.org/api/calendar/v3"
@@ -30,12 +30,12 @@ var (
 )
 
 func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
-	m := marker.New(4000)
 	render := marmoset.Render(w)
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		log.Println("[ERROR]", 4001, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 	defer client.Close()
@@ -44,25 +44,29 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindEvent).
 		Filter("Google.StartTime >", time.Now().Unix()*1000).
 		Order("Google.StartTime").Limit(1), &events); err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		log.Println("[ERROR]", 4002, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 
 	if len(events) == 0 {
-		render.JSON(http.StatusNotFound, marmoset.P{"marker": m.Next(), "events": events})
+		log.Println("[ERROR]", 4003, err.Error())
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
 		return
 	}
 
 	recent := events[0]
 	participations := map[string]models.Participation{}
 	if err := json.NewDecoder(strings.NewReader(recent.ParticipationsJSONString)).Decode(&participations); err != nil {
-		render.JSON(http.StatusNotFound, marmoset.P{"marker": m.Next(), "events": events, "error": err.Error()})
+		log.Println("[ERROR]", 4004, err.Error())
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events, "error": err.Error()})
 		return
 	}
 
 	members := []models.Member{}
 	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindMember).
 		Filter("Slack.Deleted =", false), &members); err != nil && !models.IsFiledMismatch(err) {
+		log.Println("[ERROR]", 4005, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -104,7 +108,8 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	link := "<" + appbase + "|:football: :football: :football: " + appbase + ">"
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		log.Println("[ERROR]", 4006, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 
@@ -116,13 +121,15 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, link, false, false), nil, nil),
 	))
 	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		log.Println("[ERROR]", 4007, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 
 	reminder := buildRSVPReminderMessage(recent.Google.Title, x["unanswered"])
 	if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"marker": m.Next(), "error": err.Error()})
+		log.Println("[ERROR]", 4008, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 
