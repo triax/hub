@@ -139,7 +139,7 @@ func ConvertSlackAPIUserToInternalUser(user slack.User) SlackUser {
 }
 
 func ConvertSlackAPITeamToInternalTeam(team slack.TeamInfo) SlackTeam {
-	return SlackTeam{
+	t := SlackTeam{
 		ID:          team.ID,
 		Name:        team.Name,
 		Domain:      team.Domain,
@@ -151,4 +151,17 @@ func ConvertSlackAPITeamToInternalTeam(team slack.TeamInfo) SlackTeam {
 			ImageDefault: team.Icon["image_default"].(bool),
 		},
 	}
+	if s, ok := team.Icon["image_34"].(string); ok {
+		t.Icon.Image34 = s
+	}
+	if s, ok := team.Icon["image_68"].(string); ok {
+		t.Icon.Image68 = s
+	}
+	if s, ok := team.Icon["image_132"].(string); ok {
+		t.Icon.Image132 = s
+	}
+	if s, ok := team.Icon["image_default"].(bool); ok {
+		t.Icon.ImageDefault = s
+	}
+	return t
 }
