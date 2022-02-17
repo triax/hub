@@ -238,14 +238,14 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 
 	team, err := api.GetTeamInfoContext(ctx)
 	if err != nil {
-		fmt.Println("[ERROR]", 4001, err)
+		fmt.Println("[ERROR]", 6001, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	users, err := api.GetUsersContext(ctx)
 	if err != nil {
-		fmt.Println("[ERROR]", 4002, err)
+		fmt.Println("[ERROR]", 6002, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -257,7 +257,7 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
-		fmt.Println("[ERROR]", 4005, err.Error())
+		fmt.Println("[ERROR]", 6003, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -283,8 +283,8 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 			}
 
 			// いずれにしても、存在しているSlack上の情報で上書き
-			member.Slack = u
-			member.Team = *team
+			member.Slack = models.ConvertSlackAPIUserToInternalUser(u)
+			member.Team = models.ConvertSlackAPITeamToInternalTeam(*team)
 
 			if _, err := tx.Put(key, &member); err != nil {
 				return err
@@ -292,7 +292,7 @@ func CronFetchSlackMembers(w http.ResponseWriter, req *http.Request) {
 			count++
 			return nil
 		}); err != nil {
-			fmt.Println("[ERROR]", 4005, err)
+			fmt.Println("[ERROR]", 6004, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

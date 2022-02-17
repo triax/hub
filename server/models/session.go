@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/golang-jwt/jwt"
-	"github.com/slack-go/slack"
 )
 
 type (
@@ -12,7 +11,7 @@ type (
 	}
 	Myself struct {
 		OpenID SlackOpenIDUserInfo `json:"openid"`
-		Slack  slack.User          `json:"slack"`
-		Team   slack.TeamInfo      `json:"team"`
+		Slack  SlackUser           `json:"slack"`
+		Team   SlackTeam           `json:"team"`
 	}
 )

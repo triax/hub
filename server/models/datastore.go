@@ -2,7 +2,6 @@ package models
 
 import (
 	"cloud.google.com/go/datastore"
-	"github.com/slack-go/slack"
 )
 
 const (
@@ -31,8 +30,8 @@ type (
 	}
 
 	Member struct {
-		Team  slack.TeamInfo `json:"team"`
-		Slack slack.User     `json:"slack"`
+		Team  SlackTeam `json:"team"`
+		Slack SlackUser `json:"slack"`
 
 		// Status メンバーの（退部済み以外の）参加状態
 		Status MemberStatus `json:"status"`
