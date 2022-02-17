@@ -144,12 +144,12 @@ func ConvertSlackAPITeamToInternalTeam(team slack.TeamInfo) SlackTeam {
 		Name:        team.Name,
 		Domain:      team.Domain,
 		EmailDomain: team.EmailDomain,
-		Icon: TeamIcon{
-			Image34:      team.Icon["image_34"].(string),
-			Image68:      team.Icon["image_68"].(string),
-			Image132:     team.Icon["image_132"].(string),
-			ImageDefault: team.Icon["image_default"].(bool),
-		},
+		// Icon: TeamIcon{
+		// 	Image34:      team.Icon["image_34"].(string),
+		// 	Image68:      team.Icon["image_68"].(string),
+		// 	Image132:     team.Icon["image_132"].(string),
+		// 	ImageDefault: team.Icon["image_default"].(bool),
+		// },
 	}
 	if s, ok := team.Icon["image_34"].(string); ok {
 		t.Icon.Image34 = s
