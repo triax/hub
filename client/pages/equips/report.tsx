@@ -52,9 +52,9 @@ function EquipCard({ equip, selected, toggle }: { equip: Equip, selected: boolea
       className={`rounded-lg px-4 py-2 mb-6 ${card}`}
     >
       <input
+        onClick={() => toggle(equip.id)}
         className="mr-4 leading-tight w-6 h-6" type="checkbox"
         checked={selected}
-        disabled={true}
       />
       <span
         className="text-xl"
