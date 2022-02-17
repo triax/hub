@@ -23,7 +23,7 @@ export default function List(props) {
       >
         <span>+ 新規アイテム登録</span>
       </span> : null}
-      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg">
+      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-16">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
             {equips.map((eq, i) => <EquipItem
@@ -33,9 +33,19 @@ export default function List(props) {
           </tbody>
         </table>
       </div>
-      <div className="flex flex-row-reverse">
+      <div
+        className="
+        px-4 sm:px-6 lg:px-8
+        py-4
+        fixed left-0 bottom-0
+        w-full flex flex-row-reverse
+        "
+      >
         <div
-          className="w-1/3 text-center bg-blue-700 text-white p-2 my-2 rounded-md shadow"
+          className="
+            w-1/3 text-center bg-blue-700 text-white p-2 my-2 rounded-md
+            shadow-md shadow-gray-500
+          "
           onClick={() => router.push("/equips/report")}
         >回収報告</div>
       </div>
