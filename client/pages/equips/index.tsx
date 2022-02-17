@@ -46,10 +46,10 @@ export default function List(props) {
 function Circle({ type }: { type: "practice" | "game" }) {
   switch (type) {
   case "game":
-    return <div className="bg-orange-400 text-center rounded-full text-orange-200 text-xs">G</div>
+    return <div className="bg-orange-400 text-center w-4 h-4 rounded-full text-orange-200 text-xs">G</div>
   case "practice":
   default:
-    return <div className="bg-teal-400 text-center rounded-full text-teal-200 text-xs">P</div>
+    return <div className="bg-teal-400 text-center w-4 h-4 rounded-full text-teal-200 text-xs">P</div>
   }
 }
 
@@ -71,8 +71,8 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
         height={120}
       /></div> : null}</td>
       <td className="p-2">{equip.name}</td>
-      <td className="p-2">{equip.forPractice ? <Circle type="practice" /> : null}</td>
-      <td className="p-2">{equip.forGame ?     <Circle type="game" />     : null}</td>
+      <td className="p-2 w-8">{equip.forPractice ? <Circle type="practice" /> : null}</td>
+      <td className="p-2 w-8">{equip.forGame ?     <Circle type="game" />     : null}</td>
     </tr>
   )
 }
