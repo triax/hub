@@ -49,7 +49,7 @@ function EquipCard({ equip, selected, toggle }: { equip: Equip, selected: boolea
   return (
     <div
       onClick={() => toggle(equip.id)}
-      className={`rounded-lg px-4 py-2 mb-6 ${card}`}
+      className={`flex rounded-lg px-4 py-2 mb-6 ${card}`}
     >
       <input
         onClick={() => toggle(equip.id)}
