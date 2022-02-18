@@ -35,4 +35,8 @@ export default class Equip {
   static draft(): EquipDraft  {
     return { name: "", for_practice: false, for_game: false, description: "" };
   }
+
+  static sort(p: Equip, n: Equip): 1|-1 {
+    return p.name < n.name ? -1 : 1;
+  }
 }

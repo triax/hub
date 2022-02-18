@@ -1,9 +1,8 @@
-import { Router, useRouter } from "next/router";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import Equip from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
-import { PlusIcon } from "@heroicons/react/outline";
 import Member from "../../models/Member";
 import { MemberCache } from "../../repository/MemberRepo";
 import Image from "next/image";
@@ -23,19 +22,29 @@ export default function List(props) {
       >
         <span>+ 新規アイテム登録</span>
       </span> : null}
-      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg">
+      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-16">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
-            {equips.map((eq, i) => <EquipItem
+            {equips.sort(Equip.sort).map((eq, i) => <EquipItem
               key={eq.id} equip={eq} border={i < equips.length - 1}
               jump={() => router.push(`/equips/${eq.id}`)}
             />)}
           </tbody>
         </table>
       </div>
-      <div className="flex flex-row-reverse">
+      <div
+        className="
+        px-4 sm:px-6 lg:px-8
+        py-4
+        fixed left-0 bottom-0
+        w-full flex flex-row-reverse
+        "
+      >
         <div
-          className="w-1/3 text-center bg-blue-700 text-white p-2 my-2 rounded-md shadow"
+          className="
+            w-1/3 text-center bg-blue-700 text-white p-2 my-2 rounded-md
+            shadow-md shadow-gray-500
+          "
           onClick={() => router.push("/equips/report")}
         >回収報告</div>
       </div>
@@ -46,10 +55,10 @@ export default function List(props) {
 function Circle({ type }: { type: "practice" | "game" }) {
   switch (type) {
   case "game":
-    return <div className="bg-orange-400 text-center rounded-full text-orange-200 text-xs">G</div>
+    return <div className="bg-orange-400 text-center w-4 h-4 rounded-full text-orange-200 text-xs">G</div>
   case "practice":
   default:
-    return <div className="bg-teal-400 text-center rounded-full text-teal-200 text-xs">P</div>
+    return <div className="bg-teal-400 text-center w-4 h-4 rounded-full text-teal-200 text-xs">P</div>
   }
 }
 
@@ -71,8 +80,8 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
         height={120}
       /></div> : null}</td>
       <td className="p-2">{equip.name}</td>
-      <td className="p-2">{equip.forPractice ? <Circle type="practice" /> : null}</td>
-      <td className="p-2">{equip.forGame ?     <Circle type="game" />     : null}</td>
+      <td className="p-2 w-8">{equip.forPractice ? <Circle type="practice" /> : null}</td>
+      <td className="p-2 w-8">{equip.forGame ?     <Circle type="game" />     : null}</td>
     </tr>
   )
 }
