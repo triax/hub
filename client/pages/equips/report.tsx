@@ -17,7 +17,7 @@ export default function Report(props) {
     <Layout {...props}>
       <h1 className="my-4 text-2xl font-bold">何を持って帰ってくれましたか?</h1>
       <div className="w-full">
-        {equips.map(e => <EquipCard
+        {equips.sort(Equip.sort).map(e => <EquipCard
           key={e.id} equip={e}
           selected={ids.includes(e.id)}
           toggle={toggle(ids.includes(e.id))}

@@ -1,9 +1,8 @@
-import { Router, useRouter } from "next/router";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import Equip from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
-import { PlusIcon } from "@heroicons/react/outline";
 import Member from "../../models/Member";
 import { MemberCache } from "../../repository/MemberRepo";
 import Image from "next/image";
@@ -26,7 +25,7 @@ export default function List(props) {
       <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-16">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
-            {equips.map((eq, i) => <EquipItem
+            {equips.sort(Equip.sort).map((eq, i) => <EquipItem
               key={eq.id} equip={eq} border={i < equips.length - 1}
               jump={() => router.push(`/equips/${eq.id}`)}
             />)}
