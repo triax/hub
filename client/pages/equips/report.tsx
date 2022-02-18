@@ -55,6 +55,7 @@ function EquipCard({ equip, selected, toggle }: { equip: Equip, selected: boolea
         onClick={() => toggle(equip.id)}
         className="mr-4 leading-tight w-6 h-6" type="checkbox"
         checked={selected}
+        readOnly={true}
       />
       <span
         className="text-xl"
