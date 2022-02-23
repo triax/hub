@@ -5,11 +5,13 @@ import Equip from "../../models/Equip";
 import EquipRepo, { CustodyRepo } from "../../repository/EquipRepo";
 
 export default function Report(props) {
+  const { startLoading, stopLoading } = props;
   const [equips, setEquips] = useState<Equip[]>([]);
   const [ids, setIDs] = useState<number[]>([]);
   const toggle = (y) => y ? (id) => setIDs(ids.filter(i => i != id)) : (id) => setIDs(ids.concat([id]));
   const repo = useMemo(() => new EquipRepo(), []);
   const router = useRouter();
+  equips.length ? stopLoading() : startLoading();
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
