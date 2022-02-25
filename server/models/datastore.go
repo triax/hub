@@ -1,6 +1,10 @@
 package models
 
 import (
+	"encoding/json"
+	"regexp"
+	"strings"
+
 	"cloud.google.com/go/datastore"
 )
 
@@ -93,4 +97,18 @@ const (
 func IsFiledMismatch(err error) bool {
 	_, ok := err.(*datastore.ErrFieldMismatch)
 	return ok
+}
+
+func (e Event) Participations() (Participations, error) {
+	p := Participations{}
+	err := json.NewDecoder(strings.NewReader(e.ParticipationsJSONString)).Decode(&p)
+	return p, err
+}
+
+func (e Event) IsPractice() bool {
+	return regexp.MustCompile("[＃#]練習").MatchString(e.Google.Title)
+}
+
+func (e Event) IsGame() bool {
+	return regexp.MustCompile("[＃#]試合").MatchString(e.Google.Title)
 }
