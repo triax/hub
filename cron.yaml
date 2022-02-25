@@ -13,3 +13,8 @@ cron:
   url: /tasks/check-rsvp
   schedule: every wednesday 12:05
   timezone: Asia/Tokyo
+
+- description: Remind Equip bringing
+  url: /tasks/equips/remind/practice
+  schedule: every friday 17:00
+  timezone: Asia/Tokyo

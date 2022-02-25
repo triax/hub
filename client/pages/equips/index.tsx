@@ -8,9 +8,11 @@ import { MemberCache } from "../../repository/MemberRepo";
 import Image from "next/image";
 
 export default function List(props) {
+  const { startLoading, stopLoading } = props;
   const [equips, setEquips] = useState<Equip[]>([]);
   const repo = useMemo(() => new EquipRepo(), []);
   const router = useRouter();
+  equips.length ? stopLoading() : startLoading();
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
