@@ -133,7 +133,7 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 					"備品を持って帰ってくれている皆さまへ\n%s にて以下の備品を持ってきていただけるようお願いします :bow:",
 					alloc.Event.Google.Title,
 				),
-				true, false,
+				false, false,
 			), nil, nil,
 		),
 	}
