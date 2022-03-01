@@ -31,12 +31,31 @@ export class MemberCache extends MemberRepo {
   private static dict: Record<string, Member> = {};
   get(id: string): Promise<Member> {
     if (MemberCache.dict[id]) {
-      // console.info("Cache hit");
+      // console.info("[MemberCache.get] hit", id);
       return Promise.resolve(MemberCache.dict[id]);
     }
     return super.get(id).then(member => {
       MemberCache.dict[id] = member;
       return Promise.resolve(member);
     });
+  }
+  list(params: { cached: boolean } = { cached: false }): Promise<Member[]> {
+    if (params.cached && Object.keys(MemberCache.dict).length) {
+      // console.info("[MemberCache.list] hit", Object.keys(MemberCache.dict).length);
+      return Promise.resolve(Object.values(MemberCache.dict));
+    }
+    return super.list(params).then(members => {
+      if (params.cached) members.map(m => MemberCache.dict[m.slack.id] = m);
+      return Promise.resolve(members);
+    });
+  }
+
+  /**
+   * Get member sync.
+   * @param {string} id
+   * @returns {Member}
+   */
+  static pick(id: string): Member {
+    return this.dict[id];
   }
 }

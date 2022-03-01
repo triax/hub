@@ -5,13 +5,13 @@ import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
 import { EventDateTime } from "../../../components/Events";
 import TeamEventRepo from "../../../repository/EventRepo";
-import MemberRepo from "../../../repository/MemberRepo";
+import { MemberCache } from "../../../repository/MemberRepo";
 import Member from "../../../models/Member";
 import TeamEvent, { Participation } from "../../../models/TriaxEvent";
 
 export default function EventView(props) {
   const evrepo = useMemo(() => new TeamEventRepo(), []);
-  const merepo = useMemo(() => new MemberRepo(), []);
+  const merepo = useMemo(() => new MemberCache(), []);
   const id = useRouter().query.id as string;
   const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
@@ -23,22 +23,23 @@ export default function EventView(props) {
   }, [id, evrepo, merepo]);
 
   if (!event || !event.google || !event.google.id) return <></>;
+  if (allMembers.length == 0) return <></>;
 
   // 集計
   const sum: {
     yes: Participation[],
     no: Participation[],
     unanswered: Member[],
-  } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, any]) => {
-    if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push(entry);
-    else ctx.no.push(entry);
+  } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, Participation]) => {
+    if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push({...entry, member: MemberCache.pick(id)});
+    else ctx.no.push({ ...entry, member: MemberCache.pick(id) });
     ctx.unanswered = ctx.unanswered.filter(m => m.slack.id !== id);
     return ctx;
   }, { yes: [], no: [], unanswered: allMembers });
 
   // Sort
-  sum.yes = sum.yes.sort((prev, next) => prev.title < next.title ? -1 : 1);
-  sum.no = sum.no.sort((prev, next) => prev.title < next.title ? -1 : 1);
+  sum.yes = sum.yes.sort((prev, next) => prev.member?.slack?.profile?.title < next.member?.slack?.profile?.title ? -1 : 1);
+  sum.no = sum.no.sort((prev, next) => prev.member?.slack?.profile?.title < next.member?.slack?.profile?.title ? -1 : 1);
 
   const onClickDeleteEvent = () => {
     if (!window.confirm(`イベント「${event.google.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
@@ -78,7 +79,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.yes.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.yes.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
+              {sum.yes.map(p => <ParticipationRow key={p.member?.slack.id} entry={p} />)}
             </div>
           </div>
 
@@ -88,7 +89,7 @@ export default function EventView(props) {
               <span className="px-4">{sum.no.length}人</span>
             </div>
             <div className="divide-y">
-              {sum.no.map(entry => <ParticipationRow key={entry.name} entry={entry} />)}
+              {sum.no.map(p => <ParticipationRow key={p.member?.slack.id} entry={p} />)}
             </div>
           </div>
 
@@ -124,11 +125,13 @@ export default function EventView(props) {
 }
 
 function ParticipationRow({ entry }: { entry: Participation }) {
+  const { member } = entry;
+  const name = member.slack?.profile?.display_name || member.slack?.profile?.real_name;
   return (
-    <div key={entry.name} className="flex space-x-2 items-center">
-      <div className="flex-auto">{entry.name}</div>
+    <div key={member.slack?.id} className="flex space-x-2 items-center">
+      <div className="flex-auto">{name}</div>
       <div className="w-1/3 text-xs">
-        {entry.title ? entry.title : <span>
+        {member.slack?.profile?.title ? member.slack?.profile?.title : <span>
           Pos設定方法は
           <a href={process.env.HELP_PAGE_URL} target="_blank" rel="noreferrer"
             className="font-bold text-blue-500"
