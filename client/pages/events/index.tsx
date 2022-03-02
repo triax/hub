@@ -1,3 +1,4 @@
+import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { EventList, EventRow } from "../../components/Events";
 import { RSVPModal } from "../../components/Events/RSVPModal";
@@ -17,6 +18,7 @@ export default function Top(props) {
   const { myself, startLoading, stopLoading } = props;
   const [modalevent, setModalEvent] = useState(null);
   const [events, setEvents] = useState([]);
+  const router = useRouter();
   useEffect(() => {
     fetch(process.env.API_BASE_URL + "/api/1/events") // TODO: Repository作れ
       .then(res => res.json())
@@ -39,6 +41,7 @@ export default function Top(props) {
           key={event.google.id} event={event} myself={myself}
           submit={submit}
           setModalEvent={setModalEvent}
+          router
         />)}
       </EventList>
       <RSVPModal event={modalevent} isOpen={!!modalevent} closeModal={() => setModalEvent(null)} submit={submit} />
