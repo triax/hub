@@ -33,7 +33,7 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.URL.Query().Get("cached") == "1" {
-		age := 4 * 60 * 60 // 4時間
+		age := 2 * 60 * 60 // 2時間
 		w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
 	}
 
@@ -58,7 +58,8 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", 2*60*60)) // 2時間
+	age := 2 * 60 * 60 // 2時間
+	w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
 	render.JSON(http.StatusOK, member)
 }
 
