@@ -18,3 +18,17 @@ cron:
   url: /tasks/equips/remind/practice
   schedule: every friday 17:00
   timezone: Asia/Tokyo
+
+- description: |
+    Equip Report Remind (AM)
+    当日の 02:00-14:00 の間に開始した練習ないし試合に対して、持ち帰り報告のリマインドを投げる
+  url: /tasks/equips/remind/report?from=02:00&to=14:00
+  schedule: everyday 14:00
+  timezone: Asia/Tokyo
+
+- description: |
+    Equip Report Remind (PM)
+    当日の 14:00-21:00 の間に開始した練習ないし試合に対して、持ち帰り報告のリマインドを投げる
+  url: /tasks/equips/remind/report?from=14:00&to=21:00
+  schedule: everyday 21:00
+  timezone: Asia/Tokyo

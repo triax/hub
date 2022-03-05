@@ -14,6 +14,10 @@ import (
 	"github.com/triax/hub/server/models"
 )
 
+var (
+	tokyo, _ = time.LoadLocation("Asia/Tokyo")
+)
+
 type (
 	EquipAlloc struct {
 		Event       models.Event
@@ -153,4 +157,71 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 		)
 	}
 	return slack.MsgOptionBlocks(blocks...)
+}
+
+func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
+
+	ctx := req.Context()
+	render := marmoset.Render(w, true)
+
+	ft, err := time.Parse("15:04", req.URL.Query().Get("from"))
+	if err != nil {
+		log.Println("[ERROR]", 9001, err.Error())
+		render.JSON(http.StatusBadRequest, err.Error())
+		return
+	}
+	tt, err := time.Parse("15:04", req.URL.Query().Get("to"))
+	if err != nil {
+		log.Println("[ERROR]", 9002, err.Error())
+		render.JSON(http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// 本日の、指定時間に開始されているイベントを取得
+	n := time.Now()
+	from := time.Date(n.Year(), n.Month(), n.Day(), ft.Hour(), ft.Minute(), 0, 0, tokyo)
+	to := time.Date(n.Year(), n.Month(), n.Day(), tt.Hour(), tt.Minute(), 0, 0, tokyo)
+
+	query := datastore.NewQuery(models.KindEvent).
+		Filter("Google.StartTime >=", from.Unix()*1000).
+		Filter("Google.StartTime <", to.Unix()*1000).
+		Order("Google.StartTime").Limit(1)
+
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		log.Println("[ERROR]", 9003, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	events := []models.Event{}
+	if _, err := client.GetAll(ctx, query, &events); err != nil {
+		log.Println("[ERROR]", 9004, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	// 該当イベント無し
+	if len(events) == 0 {
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		return
+	}
+
+	ev := events[0]
+	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+	channel := "random"
+
+	if _, _, err = api.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします :bow:\nhttps://hub.triax.football/equips/report", ev.Google.Title), false, false),
+			nil, nil,
+		),
+	)); err != nil {
+		log.Println("[ERROR]", 9005, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	render.JSON(http.StatusOK, ev)
+
 }
