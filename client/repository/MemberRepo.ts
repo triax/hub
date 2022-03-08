@@ -56,6 +56,7 @@ export class MemberCache extends MemberRepo {
    * @returns {Member}
    */
   static pick(id: string): Member {
+    // console.info("[MemberCache.pick]", id, this.dict[id]);
     return this.dict[id];
   }
 }

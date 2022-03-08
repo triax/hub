@@ -112,3 +112,7 @@ func (e Event) IsPractice() bool {
 func (e Event) IsGame() bool {
 	return regexp.MustCompile("[＃#]試合").MatchString(e.Google.Title)
 }
+
+func (t ParticipationType) JoinAnyhow() bool {
+	return t == PTJoin || t == PTJoinLate || t == PTLeaveEarly
+}

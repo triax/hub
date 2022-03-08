@@ -87,6 +87,7 @@ func main() {
 	cron.Get("/fetch-calendar-events", tasks.CronFetchGoogleEvents)
 	cron.Get("/check-rsvp", tasks.CronCheckRSVP)
 	cron.Get("/equips/remind/practice", tasks.EquipsRemindPractice)
+	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
 	r.Mount("/tasks", cron)
 
 	r.NotFound(controllers.NotFound)

@@ -125,6 +125,7 @@ export default function EventView(props) {
 }
 
 function ParticipationRow({ entry }: { entry: Participation }) {
+  if (! entry.member) { console.log("member取得失敗", entry); return <></>; }
   const { member } = entry;
   const name = member.slack?.profile?.display_name || member.slack?.profile?.real_name;
   return (
