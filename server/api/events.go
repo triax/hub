@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"os"
 	"strings"
@@ -10,8 +12,15 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/go-chi/chi/v5"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
+)
+
+var (
+	TplLastMinuteRSVPChange = template.Must(template.New("").Parse(`直近のイベントに欠席回答への変更がありました.
+{{.member.Slack.Profile.RealName}} ({{if .member.Slack.Profile.Title}}{{.member.Slack.Profile.Title}}{{else}}ポジション未設定{{end}})
+[{{.event.Google.Title}}]`))
 )
 
 func GetEvent(w http.ResponseWriter, req *http.Request) {
@@ -111,38 +120,58 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	event := models.Event{}
-	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
-		key := datastore.NameKey(models.KindEvent, body.Event.ID, nil)
-		if err := tx.Get(key, &event); err != nil {
-			return err
+	key := datastore.NameKey(models.KindEvent, body.Event.ID, nil)
+	if err := client.Get(ctx, key, &event); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	if event.ParticipationsJSONString == "" {
+		event.ParticipationsJSONString = "{}"
+	}
+	parts := models.Participations{}
+	if err := json.NewDecoder(strings.NewReader(event.ParticipationsJSONString)).Decode(&parts); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	// 直前の欠席連絡か?
+	if p, ok := parts[slackID]; ok && p.Type.JoinAnyhow() && body.Type == models.PTAbsent {
+		if time.Until(event.Google.Start()) < 48*time.Hour { // 直前とは「48時間前を超えたら」
+			token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+			channel, msg := buildSlackMessageOfLastMinuteRSVPChange(member, event)
+			slack.New(token).PostMessageContext(ctx, channel, msg...) // は〜エラー見るのめんどくせ
 		}
-		if event.ParticipationsJSONString == "" {
-			event.ParticipationsJSONString = "{}"
-		}
-		parts := models.Participations{}
-		if err := json.NewDecoder(strings.NewReader(event.ParticipationsJSONString)).Decode(&parts); err != nil {
-			return err
-		}
-		parts[slackID] = models.Participation{
-			Type:    body.Type,
-			Params:  body.Params,
-			Name:    member.Slack.Profile.RealName,
-			Picture: member.Slack.Profile.Image512,
-			Title:   member.Slack.Profile.Title,
-		}
-		b, err := json.Marshal(parts)
-		if err != nil {
-			return err
-		}
-		event.ParticipationsJSONString = string(b)
-		if _, err := tx.Put(key, &event); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+	}
+
+	parts[slackID] = models.Participation{
+		Type:    body.Type,
+		Params:  body.Params,
+		Name:    member.Slack.Profile.RealName,
+		Picture: member.Slack.Profile.Image512,
+		Title:   member.Slack.Profile.Title,
+	}
+	b, err := json.Marshal(parts)
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	event.ParticipationsJSONString = string(b)
+	if _, err := client.Put(ctx, key, &event); err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
 
 	render.JSON(http.StatusAccepted, event)
+}
+
+func buildSlackMessageOfLastMinuteRSVPChange(m models.Member, e models.Event) (string, []slack.MsgOption) {
+	buf := bytes.NewBuffer(nil)
+	if err := TplLastMinuteRSVPChange.Execute(buf, map[string]interface{}{"member": m, "event": e}); err != nil {
+		return "tech", []slack.MsgOption{
+			slack.MsgOptionBlocks(slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, err.Error(), false, false), nil, nil)),
+		}
+	}
+	return "practice", []slack.MsgOption{
+		slack.MsgOptionBlocks(slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, buf.String(), false, false), nil, nil)),
+	}
 }
