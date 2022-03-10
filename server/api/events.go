@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	TplLastMinuteRSVPChange = template.Must(template.New("").Parse(`直近のイベントに欠席回答への変更がありました.
-{{.member.Slack.Profile.RealName}} ({{if .member.Slack.Profile.Title}}{{.member.Slack.Profile.Title}}{{else}}ポジション未設定{{end}})
-[{{.event.Google.Title}}]`))
+	TplLastMinuteRSVPChange = template.Must(template.New("").Parse(`以下の *{{if .event.IsGame}}試合{{else}}練習{{end}}* に回答変更がありました。
+*{{.event.Google.Start.Format "2006/01/02"}}* [{{.event.Google.Title}}] *{{.prev}} ⇒ {{.next}}*
+{{.member.Slack.Profile.RealName}} ({{if .member.Slack.Profile.Title}}{{.member.Slack.Profile.Title}}{{else}}ポジション未設定{{end}})`))
 )
 
 func GetEvent(w http.ResponseWriter, req *http.Request) {
@@ -134,13 +134,10 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 直前の欠席連絡か?
-	if p, ok := parts[slackID]; ok && p.Type.JoinAnyhow() && body.Type == models.PTAbsent {
-		if time.Until(event.Google.Start()) < 48*time.Hour { // 直前とは「48時間前を超えたら」
-			token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
-			channel, msg := buildSlackMessageOfLastMinuteRSVPChange(member, event)
-			slack.New(token).PostMessageContext(ctx, channel, msg...) // は〜エラー見るのめんどくせ
-		}
+	if p, ok := parts[slackID]; ok && shouldNoticeRSVPChangeToSlack(event, p.Type, body.Type) {
+		token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+		channel, msg := buildSlackMessageOfLastMinuteRSVPChange(member, event, p.Type, body.Type)
+		slack.New(token).PostMessageContext(ctx, channel, msg...) // は〜エラー見るのめんどくせ
 	}
 
 	parts[slackID] = models.Participation{
@@ -164,9 +161,25 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	render.JSON(http.StatusAccepted, event)
 }
 
-func buildSlackMessageOfLastMinuteRSVPChange(m models.Member, e models.Event) (string, []slack.MsgOption) {
+func shouldNoticeRSVPChangeToSlack(event models.Event, prev, next models.ParticipationType) bool {
+	// 試合なら問答無用に通知
+	if event.IsGame() {
+		return true
+	}
+	// 48時間よりも前の変更なら、通知は不要
+	if time.Until(event.Google.Start()) > 48*time.Hour {
+		return false
+	}
+	// 練習は、出席→欠席の場合のみ通知すべき
+	if prev.JoinAnyhow() && next == models.PTAbsent {
+		return true
+	}
+	return false
+}
+
+func buildSlackMessageOfLastMinuteRSVPChange(m models.Member, e models.Event, p, n models.ParticipationType) (string, []slack.MsgOption) {
 	buf := bytes.NewBuffer(nil)
-	if err := TplLastMinuteRSVPChange.Execute(buf, map[string]interface{}{"member": m, "event": e}); err != nil {
+	if err := TplLastMinuteRSVPChange.Execute(buf, map[string]interface{}{"member": m, "event": e, "prev": p, "next": n}); err != nil {
 		return "tech", []slack.MsgOption{
 			slack.MsgOptionBlocks(slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, err.Error(), false, false), nil, nil)),
 		}
