@@ -74,6 +74,23 @@ const (
 	PTUnanswered ParticipationType = "unanswered"
 )
 
+func (pt ParticipationType) String() string {
+	switch pt {
+	case PTJoin:
+		return "出席"
+	case PTJoinLate:
+		return "遅参"
+	case PTLeaveEarly:
+		return "早退"
+	case PTAbsent:
+		return "欠席"
+	case PTUnanswered:
+		return "未回答"
+	default:
+		return "不明"
+	}
+}
+
 const (
 	// MSActive 通常のメンバー. 出欠回答必須
 	MSActive MemberStatus = "active"
