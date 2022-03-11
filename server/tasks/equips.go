@@ -134,7 +134,7 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 			slack.NewTextBlockObject(
 				slack.MarkdownType,
 				fmt.Sprintf(
-					"備品を持って帰ってくれている皆さまへ\n%s にて以下の備品を持ってきていただけるようお願いします :bow:",
+					"【前日連絡】備品を持って帰ってくれている皆さまへ `%s` にて以下の備品を持ってきていただけるようお願いします :bow:",
 					alloc.Event.Google.Title,
 				),
 				false, false,
@@ -144,16 +144,17 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 	for uid, equips := range alloc.OK {
 		names := []string{}
 		for _, e := range equips {
-			names = append(names, "*"+e.Name+"*")
+			if e.NeedsCharge() {
+				names = append(names, ":electric_plug::zap: _"+e.Name+"_")
+			} else {
+				names = append(names, "_"+e.Name+"_")
+			}
 		}
 		blocks = append(blocks,
-			slack.NewContextBlock("",
-				slack.NewTextBlockObject(
-					slack.MarkdownType,
-					fmt.Sprintf("<@%s>", uid)+"\n"+strings.Join(names, " || "),
-					false, false,
-				),
-			),
+			slack.NewSectionBlock(nil, []*slack.TextBlockObject{
+				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("<@%s>", uid), false, false),
+				slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, "\n"), false, false),
+			}, nil),
 		)
 	}
 	return slack.MsgOptionBlocks(blocks...)
