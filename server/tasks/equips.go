@@ -27,13 +27,11 @@ type (
 	}
 )
 
-func EquipsRemindPractice(w http.ResponseWriter, req *http.Request) {
+func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 
 	ctx := req.Context()
 	render := marmoset.Render(w, true)
 
-	// 1) 直近1週間以内の直近のEventを1件だけ取得する
-	// 1-a) Google Datasotreへのアクセスをするクライアントを作成する
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
 		log.Println("[ERROR]", 8001, err.Error())
@@ -42,11 +40,11 @@ func EquipsRemindPractice(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	// 1-b) Eventの取得
+	// 1) 直近24時間以内のイベントを取得
 	events := []models.Event{}
 	query := datastore.NewQuery(models.KindEvent).
 		Filter("Google.StartTime >", time.Now().Unix()*1000).
-		Filter("Google.StartTime <=", time.Now().Add(7*24*time.Hour).Unix()*1000).
+		Filter("Google.StartTime <=", time.Now().Add(24*time.Hour).Unix()*1000).
 		Order("Google.StartTime").
 		Limit(1)
 	if _, err := client.GetAll(ctx, query, &events); err != nil {
@@ -55,18 +53,22 @@ func EquipsRemindPractice(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 2) 1のEventが無ければ終了
+	// Eventが無ければ終了
 	if len(events) == 0 {
 		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
 		return
 	}
+	ev := events[0]
 
 	// 3) 全Equipsの所持者を取得する
 	equips := []models.Equip{}
-	if _, err := client.GetAll(ctx,
-		datastore.NewQuery(models.KindEquip),
-		&equips,
-	); err != nil && !models.IsFiledMismatch(err) {
+	query = datastore.NewQuery(models.KindEquip)
+	if ev.IsGame() {
+		query.Filter("ForGame =", true)
+	} else if ev.IsPractice() {
+		query.Filter("ForPractice =", true)
+	}
+	if _, err := client.GetAll(ctx, query, &equips); err != nil && !models.IsFiledMismatch(err) {
 		log.Println("[ERROR]", 8003, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
@@ -79,13 +81,12 @@ func EquipsRemindPractice(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// 4) 全Equipsの所持者に対してSlackにメンションを送る
-	event := events[0]
-	pats, err := event.Participations()
+	pats, err := ev.Participations()
 	if err != nil {
 		log.Println("[ERROR]", 8004, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 	}
-	alloc := summarizeEquipAllocForTheEvent(event, equips, pats)
+	alloc := summarizeEquipAllocForTheEvent(ev, equips, pats)
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 	msg := buildEquipsReminderMsg(alloc)
@@ -134,7 +135,7 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 			slack.NewTextBlockObject(
 				slack.MarkdownType,
 				fmt.Sprintf(
-					"備品を持って帰ってくれている皆さまへ\n%s にて以下の備品を持ってきていただけるようお願いします :bow:",
+					"【前日確認】備品を持って帰ってくれている皆さまへ `%s` にて以下の備品を持ってきていただけるようお願いします :bow:",
 					alloc.Event.Google.Title,
 				),
 				false, false,
@@ -144,16 +145,17 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 	for uid, equips := range alloc.OK {
 		names := []string{}
 		for _, e := range equips {
-			names = append(names, "*"+e.Name+"*")
+			if e.NeedsCharge() {
+				names = append(names, ":electric_plug::zap: _"+e.Name+"_")
+			} else {
+				names = append(names, "_"+e.Name+"_")
+			}
 		}
 		blocks = append(blocks,
-			slack.NewContextBlock("",
-				slack.NewTextBlockObject(
-					slack.MarkdownType,
-					fmt.Sprintf("<@%s>", uid)+"\n"+strings.Join(names, " || "),
-					false, false,
-				),
-			),
+			slack.NewSectionBlock(nil, []*slack.TextBlockObject{
+				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("<@%s>", uid), false, false),
+				slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, "\n"), false, false),
+			}, nil),
 		)
 	}
 	return slack.MsgOptionBlocks(blocks...)

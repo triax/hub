@@ -133,3 +133,7 @@ func (e Event) IsGame() bool {
 func (t ParticipationType) JoinAnyhow() bool {
 	return t == PTJoin || t == PTJoinLate || t == PTLeaveEarly
 }
+
+func (equip Equip) NeedsCharge() bool {
+	return strings.HasPrefix(equip.Name, "ビデオ")
+}
