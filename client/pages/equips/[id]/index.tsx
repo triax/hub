@@ -1,10 +1,10 @@
 import Image from "next/image";
 import { NextRouter, useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../components/layout";
-import Equip, { Custody } from "../../models/Equip";
-import EquipRepo from "../../repository/EquipRepo";
-import { MemberCache } from "../../repository/MemberRepo";
+import Layout from "../../../components/layout";
+import Equip, { Custody } from "../../../models/Equip";
+import EquipRepo from "../../../repository/EquipRepo";
+import { MemberCache } from "../../../repository/MemberRepo";
 
 export default function Item(props) {
   const id = useRouter().query.id as string;
@@ -39,15 +39,24 @@ export default function Item(props) {
         </div>
       </div>
 
-      {props.myself.slack.is_admin ? <div className="w-1/2">
-        <div
-          onClick={() => {
-            if (window.confirm(`「${equip.name}」を削除しますか?\nこのアクションは取り消せません。`)) {
-              repo.delete(equip.id).then(() => router.push(`/equips`));
-            }
-          }}
-          className="rounded-md bg-red-600 text-white flex justify-center p-2">
-          <span>このアイテムを削除</span>
+      {props.myself.slack.is_admin ? <div className="flex space-x-2">
+        <div className="flex-1">
+          <div
+            onClick={() => {
+              if (window.confirm(`「${equip.name}」を削除しますか?\nこのアクションは取り消せません。`)) {
+                repo.delete(equip.id).then(() => router.push(`/equips`));
+              }
+            }}
+            className="rounded-md bg-red-600 text-white flex justify-center p-2">
+            <span>このアイテムを削除</span>
+          </div>
+        </div>
+        <div className="flex-1">
+          <div
+            onClick={() => router.push(`/equips/${equip.id}/edit`)}
+            className="rounded-md bg-orange-400 text-white flex justify-center p-2">
+            <span>このアイテムを編集</span>
+          </div>
         </div>
       </div> : null}
     </Layout>
