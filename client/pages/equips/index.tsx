@@ -69,7 +69,7 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
   useEffect(() => {
     if (equip.history.length == 0) return;
     (new MemberCache()).get(equip.history[0].member_id).then(setMember);
-  }, []);
+  }, [equip]);
   return (
     <tr key={equip.id} onClick={jump} className={border ? "border-b" : ""}>
       <td className="pl-2">{m?.slack ? <div className="w-6 h-6 rounded-full overflow-hidden"><Image

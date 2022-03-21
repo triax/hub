@@ -98,7 +98,7 @@ function FeedEntry({ timestamp, memberID, comment, cache, router }: {
     cache.get(memberID).then(m => {
       setCustody(new Custody(memberID, timestamp, comment, m));
     });
-  }, [cache]);
+  }, [cache, memberID, timestamp, comment]);
   if (c == null) return null;
   return (
     <div className="flex">
