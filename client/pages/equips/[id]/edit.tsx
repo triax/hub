@@ -39,9 +39,9 @@ export default function EquipEditView(props) {
           <div className="mb-6">
             <label className="md:w-2/3 block text-gray-500 font-bold">
               <input
-                onChange={ev => setDraft({ ...draft, for_practice: ev.target.checked })}
                 className="mr-2 leading-tight" type="checkbox"
-                defaultChecked={draft.for_practice}
+                checked={draft.for_practice}
+                onChange={ev => setDraft({ ...draft, for_practice: ev.target.checked })}
               />
               <span className="">練習で必要</span>
             </label>
@@ -49,9 +49,9 @@ export default function EquipEditView(props) {
           <div className="mb-6">
             <label className="md:w-2/3 block text-gray-500 font-bold">
               <input
-                onChange={ev => setDraft({ ...draft, for_game: ev.target.checked })}
                 className="mr-2 leading-tight" type="checkbox"
-                defaultChecked={draft.for_game}
+                checked={draft.for_game}
+                onChange={ev => setDraft({ ...draft, for_game: ev.target.checked })}
               />
               <span className="">試合で必要</span>
             </label>

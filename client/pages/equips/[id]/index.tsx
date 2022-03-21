@@ -21,16 +21,13 @@ export default function Item(props) {
 
       <div className="w-full">
         <div className="bg-white shadow-md rounded px-4 pt-6 pb-8 mb-4">
-          <div className="mb-4">
+          <div className="mb-2">
             <h1 className="text-2xl font-bold">{equip.name}</h1>
-          </div>
-          <div className="mb-4 flex space-x-2">
-            {equip.forPractice ? <div className="rounded-md bg-teal-600   text-white px-2">練習で必要</div> : null}
-            {equip.forGame     ? <div className="rounded-md bg-orange-600 text-white px-2">試合で必要</div> : null}
+            {equip.forPractice ? <span className="rounded-md bg-teal-600   mr-2 text-white px-2">練習で必要</span> : null}
+            {equip.forGame ?     <span className="rounded-md bg-orange-600 mr-2 text-white px-2">試合で必要</span> : null}
           </div>
 
-
-          <div className="mb-4">
+          <div className="mb-4 text-gray-400 text-sm">
             {equip.description.split("\n").map((line, i) => <div key={i}>{line}</div>)}
           </div>
 
