@@ -10,6 +10,7 @@ export default function EquipEditView(props) {
   const [equip, setEquip] = useState<Equip>(null);
   const [draft, setDraft] = useState<EquipDraft>(Equip.draft());
   const repo = useMemo(() => new EquipRepo(), []);
+  const { startLoading, stopLoading } = props;
   useEffect(() => {
     if (!id) return;
     repo.get(id).then(e => {
@@ -81,9 +82,11 @@ export default function EquipEditView(props) {
 
           <div className="flex items-center justify-between">
             <button
-              onClick={() => {
-                console.log("下書きは以下のとおり", draft);
-                // repo.post(draft).then(() => router.push(`/equips`)).catch(err => console.log(err))
+              onClick={async () => {
+                startLoading();
+                await repo.update(id, draft)
+                stopLoading();
+                router.push(`/equips/${id}`);
               }}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               type="button"

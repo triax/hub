@@ -24,6 +24,10 @@ export default class EquipRepo {
     const endpoint = this.baseURL + `/api/1/equips/${id}/delete`;
     return fetch(endpoint, {method: "POST"}).then(res => res.json());
   }
+  update(id: number|string, draft: EquipDraft): Promise<any> {
+    const endpoint = this.baseURL + `/api/1/equips/${id}/update`;
+    return fetch(endpoint, { method: "POST", body: JSON.stringify(draft) }).then(res => res.json());
+  }
 }
 
 export class CustodyRepo {

@@ -115,6 +115,43 @@ func CreateEquipItem(w http.ResponseWriter, req *http.Request) {
 	render.JSON(http.StatusCreated, equip)
 }
 
+func UpdateEquip(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+	defer req.Body.Close()
+
+	equip := models.Equip{}
+	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&equip); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	if equip.Name == "" {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "Name cannot be empty"})
+		return
+	}
+
+	key := datastore.IDKey(models.KindEquip, id, nil)
+	if _, err := client.Put(ctx, key, &equip); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "Name cannot be empty"})
+		return
+	}
+
+	render.JSON(http.StatusOK, equip)
+}
+
 func DeleteEquip(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
