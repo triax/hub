@@ -1,13 +1,19 @@
 package slackbot
 
 import (
+	"bytes"
 	"encoding/json"
+	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
+	"cloud.google.com/go/datastore"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"github.com/triax/hub/server/models"
 
 	"github.com/otiai10/largo"
 )
@@ -74,6 +80,10 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 	switch tokens[0] {
 	case "既読", "既読チェック", "react", "reaction": // 既読チェック
 		bot.onMentionReadCheck(req, w, payload)
+	case "備品", "備品チェック": // 備品チェック
+		bot.onMentionEquipCheck(req, w, payload)
+	case "予報":
+		bot.onMentionAmesh(req, w, payload)
 	default:
 		bot.echo(tokens, payload)
 	}
@@ -100,3 +110,76 @@ func (bot Bot) onMentionReadCheck(req *http.Request, w http.ResponseWriter, payl
 	}
 	log.Printf("%+v\n", reactions)
 }
+
+func (bot Bot) onMentionEquipCheck(req *http.Request, w http.ResponseWriter, payload Payload) {
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		return
+	}
+	defer client.Close()
+
+	equips := []models.Equip{}
+	query := datastore.NewQuery(models.KindEquip)
+	if _, err := client.GetAll(ctx, query, &equips); err != nil && !models.IsFiledMismatch(err) {
+		return
+	}
+
+	summary := struct {
+		Unmanaged  []models.Equip
+		NotUpdated []models.Equip
+		Since      time.Time
+	}{
+		Since: time.Now().AddDate(0, 0, -7),
+	}
+
+	for i, e := range equips {
+		equips[i].ID = e.Key.ID
+		// 最新のHistoryだけ収集する
+		query := datastore.NewQuery(models.KindCustody).Ancestor(e.Key).Order("-Timestamp").Limit(1)
+		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
+		// Summarizeする
+		if len(equips[i].History) == 0 {
+			summary.Unmanaged = append(summary.Unmanaged, equips[i])
+		} else if !equips[i].HasBeenUpdatedSince(summary.Since) {
+			if equips[i].ForPractice {
+				summary.NotUpdated = append(summary.NotUpdated, equips[i])
+			}
+		}
+	}
+
+	buf := bytes.NewBuffer(nil)
+	if err := tplEquipsManagementSummary.Execute(buf, summary); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	opts := []slack.MsgOption{slack.MsgOptionText(buf.String(), false)}
+	if payload.Event.ThreadTimeStamp != "" {
+		opts = append(opts, slack.MsgOptionTS(payload.Event.ThreadTimeStamp))
+	}
+	_, _, err = bot.SlackAPI.PostMessage(payload.Event.Channel, opts...)
+	log.Printf("[equip] %+v %v", summary, err)
+}
+
+func (bot Bot) onMentionAmesh(req *http.Request, w http.ResponseWriter, payload Payload) {
+	// U01G23SHBQB
+	opts := []slack.MsgOption{slack.MsgOptionText("<@U01G23SHBQB> 予報", false)}
+	if payload.Event.ThreadTimeStamp != "" {
+		opts = append(opts, slack.MsgOptionTS(payload.Event.ThreadTimeStamp))
+	}
+	_, _, err := bot.SlackAPI.PostMessage(payload.Event.Channel, opts...)
+	log.Printf("[amesh] %v", err)
+
+}
+
+var (
+	tplEquipsManagementSummary = template.Must(template.New("").Parse(`備品管理状況は以下の通り:
+{{if len .Unmanaged}}*【1度も回答がついていない備品】*
+{{range .Unmanaged}}- {{.Name}}
+{{end}}--------------{{end}}
+{{if len .NotUpdated}}*【直近7日間で回答がついていない練習用備品】*
+{{range .NotUpdated}}- {{.Name}}
+{{end}}--------------{{end}}
+	`))
+)
