@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/datastore"
 )
@@ -136,4 +137,12 @@ func (t ParticipationType) JoinAnyhow() bool {
 
 func (equip Equip) NeedsCharge() bool {
 	return strings.HasPrefix(equip.Name, "ビデオ")
+}
+
+func (equip Equip) HasBeenUpdatedSince(t time.Time) bool {
+	if len(equip.History) == 0 {
+		return false
+	}
+	lastUpdated := time.Unix(equip.History[0].Timestamp/1000, 0)
+	return lastUpdated.After(t)
 }

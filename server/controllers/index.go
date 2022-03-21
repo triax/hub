@@ -30,3 +30,7 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 func NotFound(w http.ResponseWriter, req *http.Request) {
 	m.Render(w).HTML("404", nil)
 }
+
+func ErrorsPage(w http.ResponseWriter, req *http.Request) {
+	m.Render(w).HTML("errors", nil)
+}

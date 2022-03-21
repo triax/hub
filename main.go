@@ -51,6 +51,7 @@ func main() {
 	v1.Post("/equips/custody", api.EquipCustodyReport)
 	v1.Get("/equips/{id}", api.GetEquip)
 	v1.Post("/equips/{id}/delete", api.DeleteEquip)
+	v1.Post("/equips/{id}/update", api.UpdateEquip)
 	v1.Post("/equips", api.CreateEquipItem)
 	v1.Get("/equips", api.ListEquips)
 	r.Mount("/api/1", v1)
@@ -61,6 +62,7 @@ func main() {
 	r.Post("/logout", controllers.Logout)
 	r.Get("/auth/start", controllers.AuthStart)
 	r.Get("/auth/callback", controllers.AuthCallback)
+	r.Get("/errors", controllers.ErrorsPage)
 
 	// Bot events
 	bot := slackbot.Bot{

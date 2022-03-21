@@ -32,7 +32,11 @@ export default class Equip {
   static listFromAPIResponse(res: { id, key, name, for_practice, for_game, description, history }[]): Equip[] {
     return res.map(Equip.fromAPIResponse);
   }
-  static draft(): EquipDraft  {
+
+  static draft(equip?: Equip): EquipDraft  {
+    if (equip) {
+      return { name: equip.name, for_practice: equip.forPractice, for_game: equip.forGame, description: equip.description };
+    }
     return { name: "", for_practice: false, for_game: false, description: "" };
   }
 

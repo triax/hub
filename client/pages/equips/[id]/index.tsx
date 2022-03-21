@@ -1,10 +1,10 @@
 import Image from "next/image";
 import { NextRouter, useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../components/layout";
-import Equip, { Custody } from "../../models/Equip";
-import EquipRepo from "../../repository/EquipRepo";
-import { MemberCache } from "../../repository/MemberRepo";
+import Layout from "../../../components/layout";
+import Equip, { Custody } from "../../../models/Equip";
+import EquipRepo from "../../../repository/EquipRepo";
+import { MemberCache } from "../../../repository/MemberRepo";
 
 export default function Item(props) {
   const id = useRouter().query.id as string;
@@ -21,16 +21,13 @@ export default function Item(props) {
 
       <div className="w-full">
         <div className="bg-white shadow-md rounded px-4 pt-6 pb-8 mb-4">
-          <div className="mb-4">
+          <div className="mb-2">
             <h1 className="text-2xl font-bold">{equip.name}</h1>
-          </div>
-          <div className="mb-4 flex space-x-2">
-            {equip.forPractice ? <div className="rounded-md bg-teal-600   text-white px-2">練習で必要</div> : null}
-            {equip.forGame     ? <div className="rounded-md bg-orange-600 text-white px-2">試合で必要</div> : null}
+            {equip.forPractice ? <span className="rounded-md bg-teal-600   mr-2 text-white px-2">練習で必要</span> : null}
+            {equip.forGame ?     <span className="rounded-md bg-orange-600 mr-2 text-white px-2">試合で必要</span> : null}
           </div>
 
-
-          <div className="mb-4">
+          <div className="mb-4 text-gray-400 text-sm">
             {equip.description.split("\n").map((line, i) => <div key={i}>{line}</div>)}
           </div>
 
@@ -39,15 +36,24 @@ export default function Item(props) {
         </div>
       </div>
 
-      {props.myself.slack.is_admin ? <div className="w-1/2">
-        <div
-          onClick={() => {
-            if (window.confirm(`「${equip.name}」を削除しますか?\nこのアクションは取り消せません。`)) {
-              repo.delete(equip.id).then(() => router.push(`/equips`));
-            }
-          }}
-          className="rounded-md bg-red-600 text-white flex justify-center p-2">
-          <span>このアイテムを削除</span>
+      {props.myself.slack.is_admin ? <div className="flex space-x-2">
+        <div className="flex-1">
+          <div
+            onClick={() => {
+              if (window.confirm(`「${equip.name}」を削除しますか?\nこのアクションは取り消せません。`)) {
+                repo.delete(equip.id).then(() => router.push(`/equips`));
+              }
+            }}
+            className="rounded-md bg-red-600 text-white flex justify-center p-2">
+            <span>このアイテムを削除</span>
+          </div>
+        </div>
+        <div className="flex-1">
+          <div
+            onClick={() => router.push(`/equips/${equip.id}/edit`)}
+            className="rounded-md bg-orange-400 text-white flex justify-center p-2">
+            <span>このアイテムを編集</span>
+          </div>
         </div>
       </div> : null}
     </Layout>
@@ -92,7 +98,7 @@ function FeedEntry({ timestamp, memberID, comment, cache, router }: {
     cache.get(memberID).then(m => {
       setCustody(new Custody(memberID, timestamp, comment, m));
     });
-  }, [cache]);
+  }, [cache, memberID, timestamp, comment]);
   if (c == null) return null;
   return (
     <div className="flex">

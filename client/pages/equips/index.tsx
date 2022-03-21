@@ -18,13 +18,7 @@ export default function List(props) {
   }, [repo]);
   return (
     <Layout {...props}>
-      {props.myself?.slack?.is_admin ? <span
-        className="py-2 flex text-red-900"
-        onClick={() => router.push("/equips/create")}
-      >
-        <span>+ 新規アイテム登録</span>
-      </span> : null}
-      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-16">
+      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-8">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
             {equips.sort(Equip.sort).map((eq, i) => <EquipItem
@@ -34,6 +28,12 @@ export default function List(props) {
           </tbody>
         </table>
       </div>
+      {props.myself?.slack?.is_admin ? <span
+        className="py-2 flex text-red-900"
+        onClick={() => router.push("/equips/create")}
+      >
+        <span>+ 新規アイテム登録</span>
+      </span> : null}
       <div
         className="
         px-4 sm:px-6 lg:px-8
@@ -69,7 +69,7 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
   useEffect(() => {
     if (equip.history.length == 0) return;
     (new MemberCache()).get(equip.history[0].member_id).then(setMember);
-  }, []);
+  }, [equip]);
   return (
     <tr key={equip.id} onClick={jump} className={border ? "border-b" : ""}>
       <td className="pl-2">{m?.slack ? <div className="w-6 h-6 rounded-full overflow-hidden"><Image
@@ -77,7 +77,7 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
         unoptimized={true}
         src={m?.slack?.profile?.image_512}
         alt={m?.slack?.profile?.real_name}
-        className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
+        className="flex-none w-12 h-12 rounded-md object-cover"
         width={120}
         height={120}
       /></div> : null}</td>
