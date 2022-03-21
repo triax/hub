@@ -129,6 +129,13 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		datastore.NameKey(models.KindMember, info.Sub, nil),
 		&member,
 	); err != nil && !models.IsFiledMismatch(err) {
+		if err == datastore.ErrNoSuchEntity {
+			http.Redirect(
+				w, req, fmt.Sprintf("/errors?code=%d", server.ErrorMemberNotSyncedYet),
+				http.StatusTemporaryRedirect,
+			)
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("datastore.Get: " + err.Error()))
 		return

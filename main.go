@@ -62,6 +62,7 @@ func main() {
 	r.Post("/logout", controllers.Logout)
 	r.Get("/auth/start", controllers.AuthStart)
 	r.Get("/auth/callback", controllers.AuthCallback)
+	r.Get("/errors", controllers.ErrorsPage)
 
 	// Bot events
 	bot := slackbot.Bot{
