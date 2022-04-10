@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ type SlackAPI interface {
 	// 使うAPIだけ追加する
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
+	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
 }
 
@@ -103,12 +105,47 @@ func (bot Bot) onMentionReadCheck(req *http.Request, w http.ResponseWriter, payl
 		bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText("スレッドにおいて有効です", false))
 		return
 	}
-	reactions, err := bot.SlackAPI.GetReactions(slack.NewRefToMessage(payload.Event.Channel, payload.Event.ThreadTimeStamp), slack.NewGetReactionsParameters())
+
+	resp, err := bot.SlackAPI.GetConversationHistory(&slack.GetConversationHistoryParameters{
+		ChannelID: payload.Event.Channel,
+		Latest:    payload.Event.ThreadTimeStamp,
+		Oldest:    payload.Event.ThreadTimeStamp,
+		Limit:     1,
+		Inclusive: true,
+	})
 	if err != nil {
-		log.Println(err.Error())
+		bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText(err.Error(), false))
 		return
 	}
-	log.Printf("%+v\n", reactions)
+	if len(resp.Messages) == 0 {
+		bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText("NOT FOUND", false))
+		return
+	}
+	parent := resp.Messages[0]
+	users := regexp.MustCompile("<@[a-zA-Z0-9]+>").FindAllString(parent.Text, -1)
+	reactions, err := bot.SlackAPI.GetReactions(slack.NewRefToMessage(payload.Event.Channel, payload.Event.ThreadTimeStamp), slack.NewGetReactionsParameters())
+	if err != nil {
+		bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText(err.Error(), false))
+		return
+	}
+	expected := users
+	for _, r := range reactions {
+		for _, ru := range r.Users {
+			for i, u := range users {
+				if strings.Contains(u, ru) {
+					users = append(users[:i], users[i+1:]...)
+				}
+			}
+		}
+	}
+
+	buf := bytes.NewBuffer(nil)
+	err = tplReadCheck.Execute(buf, map[string]interface{}{"Expected": expected, "NotReacted": users})
+	if err != nil {
+		bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText(err.Error(), false))
+		return
+	}
+	bot.SlackAPI.PostMessage(payload.Event.Channel, slack.MsgOptionText(buf.String(), false))
 }
 
 func (bot Bot) onMentionEquipCheck(req *http.Request, w http.ResponseWriter, payload Payload) {
@@ -181,5 +218,10 @@ var (
 {{if len .NotUpdated}}*【直近7日間で回答がついていない練習用備品】*
 {{range .NotUpdated}}- {{.Name}}
 {{end}}--------------{{end}}
-	`))
+https://hub.triax.football/equips`))
+
+	tplReadCheck = template.Must(template.New("").Parse(`このメッセージに返信が期待されている人:
+{{range .Expected}}{{.}} {{end}}
+しかしリアクションしてない人
+{{range .NotReacted}}{{.}} {{end}}`))
 )
