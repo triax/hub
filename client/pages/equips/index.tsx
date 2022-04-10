@@ -18,7 +18,7 @@ export default function List(props) {
   }, [repo]);
   return (
     <Layout {...props}>
-      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-8">
+      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-14">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
             {equips.sort(Equip.sort).map((eq, i) => <EquipItem
@@ -28,27 +28,31 @@ export default function List(props) {
           </tbody>
         </table>
       </div>
-      {props.myself?.slack?.is_admin ? <span
-        className="py-2 flex text-red-900"
-        onClick={() => router.push("/equips/create")}
-      >
-        <span>+ 新規アイテム登録</span>
-      </span> : null}
       <div
         className="
         px-4 sm:px-6 lg:px-8
         py-4
         fixed left-0 bottom-0
         w-full flex flex-row-reverse
+        space-x-4 space-x-reverse
         "
       >
         <div
           className="
-            w-1/3 text-center bg-blue-700 text-white p-2 my-2 rounded-md
+            basis-1/3
+            text-center bg-blue-700 text-white p-2 rounded-md
             shadow-md shadow-gray-500
           "
           onClick={() => router.push("/equips/report")}
         >回収報告</div>
+        {props.myself?.slack?.is_admin ? <div
+          className="
+            basis-2/3
+            text-center bg-red-900 text-white p-2 rounded-md
+            shadow-md shadow-gray-500
+          "
+          onClick={() => router.push("/equips/create")}
+        >新規アイテム登録</div> : null}
       </div>
     </Layout>
   )
