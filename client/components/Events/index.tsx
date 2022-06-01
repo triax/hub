@@ -1,4 +1,3 @@
-import { getRouteRegex } from "next/dist/shared/lib/router/utils";
 import Image from "next/image";
 
 function cn(...classes): string {
@@ -57,7 +56,7 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
 }
 
 export function EventRow({ event, myself, submit, setModalEvent, router }) {
-  const pats = JSON.parse(event.participations_json_str || "{}");
+  const pats = event.participations;
   const answer = pats[myself.slack.id] || {};
   const id = event.google.id.replace(/@google\.com$/, "");
   return (
