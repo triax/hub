@@ -59,6 +59,7 @@ export function EventRow({ event, myself, submit, setModalEvent, router }) {
   const pats = event.participations;
   const answer = pats[myself.slack.id] || {};
   const id = event.google.id.replace(/@google\.com$/, "");
+  if (event.google?.title?.match(/#ignore$/)) return null;
   return (
     <div className="px-0 py-4">
       <div onClick={() => router.push(`/events/${id}`)}>
