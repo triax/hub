@@ -54,6 +54,12 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	recent := events[0]
+
+	if recent.ShouldSkipReminders() {
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		return
+	}
+
 	participations := map[string]models.Participation{}
 	if err := json.NewDecoder(strings.NewReader(recent.ParticipationsJSONString)).Decode(&participations); err != nil {
 		log.Println("[ERROR]", 4004, err.Error())

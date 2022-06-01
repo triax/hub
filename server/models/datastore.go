@@ -131,6 +131,10 @@ func (e Event) IsGame() bool {
 	return regexp.MustCompile("[＃#]試合").MatchString(e.Google.Title)
 }
 
+func (e Event) ShouldSkipReminders() bool {
+	return regexp.MustCompile("(?i)[＃#]ignore$").MatchString(e.Google.Title)
+}
+
 func (t ParticipationType) JoinAnyhow() bool {
 	return t == PTJoin || t == PTJoinLate || t == PTLeaveEarly
 }
