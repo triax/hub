@@ -3,31 +3,22 @@ import { useEffect, useMemo, useState } from "react";
 import { EventList, EventRow } from "../components/Events";
 import { RSVPModal } from "../components/Events/RSVPModal";
 import Layout from "../components/layout";
+import TeamEvent from "../models/TriaxEvent";
 import TeamEventRepo from "../repository/EventRepo";
 
-async function submitRSVP({event, answer, params}) {
-  const endpoint = process.env.API_BASE_URL + "/api/1/events/answer";
-  const res = await fetch(endpoint, { method: "POST", body: JSON.stringify({
-    event: { id: event.google.id }, type: answer, params: params ? params : null,
-  })});
-  const result = await res.json();
-  return result;
-}
+const repo = new TeamEventRepo();
 
 export default function Top(props) {
   const { myself, startLoading, stopLoading } = props;
   const [modalevent, setModalEvent] = useState(null);
-  const [events, setEvents] = useState([]);
-  const repo = useMemo(() => new TeamEventRepo(), []);
+  const [events, setEvents] = useState<TeamEvent[]>([]);
   const router = useRouter();
   useEffect(() => {
-    fetch(process.env.API_BASE_URL + "/api/1/events") // TODO: Repository作れ
-      .then(res => res.json())
-      .then(evts => setEvents(evts));
-  }, [repo]);
+    repo.list().then(setEvents);
+  }, []);
   const submit = async function(params) {
     startLoading();
-    const updated = await submitRSVP(params);
+    const updated = await repo.rsvp(params);
     const newlist = events.map(ev => ev.google.id == updated.google.id ? updated : ev);
     setEvents(newlist);
     stopLoading();

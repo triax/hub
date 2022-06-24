@@ -60,6 +60,11 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 	}
 	ev := events[0]
 
+	if ev.ShouldSkipReminders() {
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		return
+	}
+
 	// 3) 全Equipsの所持者を取得する
 	equips := []models.Equip{}
 	query = datastore.NewQuery(models.KindEquip)
@@ -211,6 +216,12 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ev := events[0]
+
+	if ev.ShouldSkipReminders() {
+		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		return
+	}
+
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 	channel := "random"
 

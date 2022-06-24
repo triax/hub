@@ -70,6 +70,7 @@ func main() {
 		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
 	}
 	r.Post("/slack/events", bot.Webhook)
+	r.Post("/slack/shortcuts", bot.Shortcuts)
 
 	// Pages
 	page := &filters.Auth{API: false, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
