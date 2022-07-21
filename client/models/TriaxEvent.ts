@@ -32,7 +32,7 @@ export default class TeamEvent {
       public participations: Record<string, Participation>,
   ) { }
   static fromAPIResponse({google, participations_json_str}): TeamEvent {
-    const pats: Record<string, Participation> = JSON.parse(participations_json_str);
+    const pats: Record<string, Participation> = JSON.parse(participations_json_str || "{}");
     return new TeamEvent(google, pats);
   }
   static placeholder(): TeamEvent {
