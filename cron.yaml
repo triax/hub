@@ -30,7 +30,7 @@ cron:
   timezone: Asia/Tokyo
 
 - description: 事前コンディションチェック
-  url: /tasks/condition/precheck-form
+  url: /tasks/condition/precheck
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 

@@ -91,7 +91,7 @@ func main() {
 	cron.Get("/check-rsvp", tasks.CronCheckRSVP)
 	cron.Get("/equips/remind/bring", tasks.EquipsRemindBring)
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
-	cron.Get("/condition/precheck-form", tasks.ConditionPrecheck)
+	cron.Get("/condition/precheck", tasks.ConditionPrecheck)
 	cron.Get("/condition/postcheck", tasks.ConditionPostcheck)
 	r.Mount("/tasks", cron)
 
