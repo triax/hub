@@ -13,8 +13,12 @@ import (
 	"github.com/triax/hub/server/models"
 )
 
-const (
-	conditioningLeader = "U029FBE284T" // 笹子さん
+var (
+	conditioningLeader       = "U029FBE284T" // 笹子さん
+	conditionPrecheckHeader  = "おはようございます！\n*朝のコンディショニングチェックシートのご入力宜しくお願い致します！*\n:triax: "
+	conditionPostcheckHeader = "お疲れさまでした！\n*運動後のコンディショニングチェックシートのご入力宜しくお願い致します！*\n:triax: "
+	conditionCheckSheetURL   = "https://docs.google.com/forms/d/e/1FAIpQLSfQWL3aOUsZx868vyOZ88uVLSI5W10S1Q_qF7w5v6eZMCQ40g/viewform"
+	conditionCheckFooter     = fmt.Sprintf("回答状況は各ポジションリーダーによってとりまとめ、 <@%s>さんへ報告されます :face_with_rolling_eyes::pray:", conditioningLeader)
 )
 
 // 練習や試合前に事前にコンディションチェックのフォーム入力を促すメッセージ
@@ -56,32 +60,28 @@ func ConditionPrecheck(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	title := ev.Google.Title
+
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 
-	msg := slack.MsgOptionBlocks(
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, ":triax: おはようございます\n:muscle: *朝のコンディショニングチェックシートのご入力宜しくお願い致します！*", false, false),
-			nil, nil,
-		),
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "*<https://docs.google.com/forms/d/e/1FAIpQLSfQWL3aOUsZx868vyOZ88uVLSI5W10S1Q_qF7w5v6eZMCQ40g/viewform>*", false, false),
-			nil, nil,
-		),
-		slack.NewContextBlock("", slack.NewTextBlockObject(
-			slack.MarkdownType,
-			fmt.Sprintf(
-				"回答状況は各ポジションリーダーによってとりまとめ、 <@%s>さんへ報告されます :face_with_rolling_eyes::pray::triax:",
-				conditioningLeader,
-			), false, false,
-		), nil, nil),
-	)
+	blocks := []slack.Block{
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, conditionPrecheckHeader+title, false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, conditionCheckSheetURL, false, false), nil, nil),
+		slack.NewContextBlock("", slack.NewTextBlockObject(slack.MarkdownType, conditionCheckFooter, false, false)),
+	}
+	msg := slack.MsgOptionBlocks(blocks...)
 
-	channel := "general"
+	channel := req.URL.Query().Get("channel")
+	if channel == "" {
+		channel = "general"
+	}
+
 	if _, _, err := api.PostMessageContext(ctx, channel, msg); err != nil {
 		log.Println("[ERROR]", 8005, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		render.JSON(http.StatusInternalServerError, marmoset.P{"success": false, "error": err.Error(), "blocks": blocks})
+	} else {
+		render.JSON(http.StatusOK, marmoset.P{"success": true, "blocks": blocks, "channel": channel, "title": title})
 	}
-	render.JSON(http.StatusOK, ev)
 }
 
 func ConditionPostcheck(w http.ResponseWriter, req *http.Request) {
@@ -139,32 +139,26 @@ func ConditionPostcheck(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	title := ev.Google.Title
+
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 
-	msg := slack.MsgOptionBlocks(
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, ":triax: お疲れさまでした\n:muscle: *運動後のコンディショニングチェックシートのご入力宜しくお願い致します！*", false, false),
-			nil, nil,
-		),
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "*<https://docs.google.com/forms/d/e/1FAIpQLSfQWL3aOUsZx868vyOZ88uVLSI5W10S1Q_qF7w5v6eZMCQ40g/viewform>*", false, false),
-			nil, nil,
-		),
-		slack.NewContextBlock("", slack.NewTextBlockObject(
-			slack.MarkdownType,
-			fmt.Sprintf(
-				"回答状況は各ポジションリーダーによってとりまとめ、 <@%s>さんへ報告されます :pray:",
-				conditioningLeader,
-			), false, false,
-		), nil, nil),
-	)
-
-	channel := "general"
-	if _, _, err = api.PostMessageContext(ctx, channel, msg); err != nil {
-		log.Println("[ERROR]", 9005, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
+	blocks := []slack.Block{
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, conditionPostcheckHeader+title, false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, conditionCheckSheetURL, false, false), nil, nil),
+		slack.NewContextBlock("", slack.NewTextBlockObject(slack.MarkdownType, conditionCheckFooter, false, false)),
 	}
-	render.JSON(http.StatusOK, ev)
+	msg := slack.MsgOptionBlocks(blocks...)
 
+	channel := req.URL.Query().Get("channel")
+	if channel == "" {
+		channel = "general"
+	}
+
+	if _, _, err := api.PostMessageContext(ctx, channel, msg); err != nil {
+		log.Println("[ERROR]", 8005, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"success": false, "error": err.Error(), "blocks": blocks})
+	} else {
+		render.JSON(http.StatusOK, marmoset.P{"success": true, "blocks": blocks, "channel": channel, "title": title})
+	}
 }
