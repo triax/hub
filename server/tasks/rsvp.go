@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
+	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
 
@@ -66,7 +67,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	msg := buildFinalCallMessage(ev.Google.Title, roles, report)
+	msg := buildFinalCallMessage(ev, roles, report)
 	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
 	api := slack.New(token)
 	if _, _, err = api.PostMessage("#"+channel, msg); err != nil {
@@ -217,10 +218,12 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 	)
 }
 
-func buildFinalCallMessage(title string, roles []string, report map[string][]models.Participation) slack.MsgOption {
+func buildFinalCallMessage(event models.Event, roles []string, report map[string][]models.Participation) slack.MsgOption {
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("_%s_ の出欠状況 %v", title, roles), false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+				"<%s/events/%s|%s> の出欠状況 %v", server.HubBaseURL, event.Google.ID, event.Google.Title, roles,
+			), false, false),
 			nil, nil,
 		),
 		slack.NewDividerBlock(),
