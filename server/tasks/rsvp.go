@@ -226,11 +226,13 @@ func buildFinalCallMessage(title string, roles []string, report map[string][]mod
 		slack.NewDividerBlock(),
 	}
 	for i, role := range roles {
-		blocks = append(blocks,
-			slack.NewContextBlock("",
-				slack.NewTextBlockObject(slack.MarkdownType, "*"+strings.ToUpper(role)+"*", false, false),
-			),
-		)
+		if len(roles) > 1 {
+			blocks = append(blocks,
+				slack.NewContextBlock("",
+					slack.NewTextBlockObject(slack.MarkdownType, "*"+strings.ToUpper(role)+"*", false, false),
+				),
+			)
+		}
 		if len(report[role]) == 0 {
 			blocks = append(blocks, slack.NewContextBlock("",
 				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
@@ -244,8 +246,9 @@ func buildFinalCallMessage(title string, roles []string, report map[string][]mod
 				names = append(names, m.Name)
 			}
 			blocks = append(blocks,
-				slack.NewContextBlock("",
-					slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, ", "), false, false),
+				slack.NewSectionBlock(
+					slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, ",  "), false, false),
+					nil, nil,
 				),
 			)
 		}
