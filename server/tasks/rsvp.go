@@ -226,20 +226,29 @@ func buildFinalCallMessage(title string, roles []string, report map[string][]mod
 		slack.NewDividerBlock(),
 	}
 	for i, role := range roles {
-		names := []string{}
-		for _, m := range report[role] {
-			names = append(names, m.Name)
-		}
 		blocks = append(blocks,
-			slack.NewSectionBlock(
+			slack.NewContextBlock("",
 				slack.NewTextBlockObject(slack.MarkdownType, "*"+strings.ToUpper(role)+"*", false, false),
-				nil, nil,
-			),
-			slack.NewSectionBlock(
-				slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, ", "), false, false),
-				nil, nil,
 			),
 		)
+		if len(report[role]) == 0 {
+			blocks = append(blocks, slack.NewContextBlock("",
+				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+					"Slackプロフィールで「役職（Title）」を「%s」や「%s」などに設定している人はいません.",
+					role, strings.ToUpper(role),
+				), false, false),
+			))
+		} else {
+			names := []string{}
+			for _, m := range report[role] {
+				names = append(names, m.Name)
+			}
+			blocks = append(blocks,
+				slack.NewContextBlock("",
+					slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, ", "), false, false),
+				),
+			)
+		}
 		if i+1 < len(roles) {
 			blocks = append(blocks, slack.NewDividerBlock())
 		}
