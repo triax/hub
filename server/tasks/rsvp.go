@@ -45,6 +45,11 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ev := events[0]
+
+	if ev.ShouldSkipReminders() {
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "error": fmt.Errorf("should ignore: " + ev.Google.Title)})
+		return
+	}
 	pats, err := ev.Participations()
 	if err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": fmt.Errorf("JSON decode error: %v", err)})
