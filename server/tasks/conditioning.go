@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
@@ -27,24 +26,9 @@ func ConditionPrecheck(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	render := marmoset.Render(w, true)
 
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	events, err := models.FindEventsBetween(ctx)
 	if err != nil {
-		log.Println("[ERROR]", 8001, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
-	}
-	defer client.Close()
-
-	// 1) 直近24時間以内のイベントを取得
-	events := []models.Event{}
-	query := datastore.NewQuery(models.KindEvent).
-		Filter("Google.StartTime >", time.Now().Unix()*1000).
-		Filter("Google.StartTime <=", time.Now().Add(24*time.Hour).Unix()*1000).
-		Order("Google.StartTime").
-		Limit(1)
-	if _, err := client.GetAll(ctx, query, &events); err != nil {
-		log.Println("[ERROR]", 8002, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		render.JSON(http.StatusBadRequest, marmoset.P{"events": events, "error": err})
 		return
 	}
 
@@ -106,23 +90,9 @@ func ConditionPostcheck(w http.ResponseWriter, req *http.Request) {
 	from := time.Date(n.Year(), n.Month(), n.Day(), ft.Hour(), ft.Minute(), 0, 0, tokyo)
 	to := time.Date(n.Year(), n.Month(), n.Day(), tt.Hour(), tt.Minute(), 0, 0, tokyo)
 
-	query := datastore.NewQuery(models.KindEvent).
-		Filter("Google.StartTime >=", from.Unix()*1000).
-		Filter("Google.StartTime <", to.Unix()*1000).
-		Order("Google.StartTime").Limit(1)
-
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	events, err := models.FindEventsBetween(ctx, from, to)
 	if err != nil {
-		log.Println("[ERROR]", 9003, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
-	}
-	defer client.Close()
-
-	events := []models.Event{}
-	if _, err := client.GetAll(ctx, query, &events); err != nil {
-		log.Println("[ERROR]", 9004, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		render.JSON(http.StatusBadRequest, marmoset.P{"events": events, "error": err})
 		return
 	}
 
