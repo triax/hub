@@ -105,6 +105,8 @@ jobs:
         APP_SECRETS_PROD_YAML: ${{ secrets.APP_SECRETS_PROD_YAML }}
     - name: Deploy PROD
       run: gcloud app deploy ./app.yaml --quiet
+    - name: Deploy CRON
+      run: gcloud app deploy ./cron.yaml --quiet
     - name: Announce on Slack
       run: |
         curl -XPOST \
