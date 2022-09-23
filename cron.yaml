@@ -14,6 +14,11 @@ cron:
   schedule: every wednesday 12:05
   timezone: Asia/Tokyo
 
+- description: Final call (staff)
+  url: /tasks/final-call?role=staff,trainer&channel=staff
+  schedule: everyday 18:10
+  timezone: Asia/Tokyo
+
 - description: 前日備品連絡
   url: /tasks/equips/remind/bring
   schedule: everyday 17:00

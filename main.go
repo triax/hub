@@ -89,6 +89,7 @@ func main() {
 	cron.Get("/fetch-slack-members", tasks.CronFetchSlackMembers)
 	cron.Get("/fetch-calendar-events", tasks.CronFetchGoogleEvents)
 	cron.Get("/check-rsvp", tasks.CronCheckRSVP)
+	cron.Get("/final-call", tasks.FinalCall)
 	cron.Get("/equips/remind/bring", tasks.EquipsRemindBring)
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
 	cron.Get("/condition/precheck", tasks.ConditionPrecheck)

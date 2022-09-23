@@ -1,7 +1,10 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -149,4 +152,36 @@ func (equip Equip) HasBeenUpdatedSince(t time.Time) bool {
 	}
 	lastUpdated := time.Unix(equip.History[0].Timestamp/1000, 0)
 	return lastUpdated.After(t)
+}
+
+// Accessor methods
+func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Event, err error) {
+
+	if len(timebound) == 0 {
+		timebound = []time.Time{time.Now()}
+	}
+	if len(timebound) == 1 {
+		timebound = append(timebound, timebound[0].Add(24*time.Hour))
+	}
+	from := timebound[0]
+	to := timebound[1]
+	if !from.Before(to) {
+		return nil, fmt.Errorf("invalid time-bound")
+	}
+
+	query := datastore.NewQuery(KindEvent).
+		Filter("Google.StartTime >=", from.Unix()*1000).
+		Filter("Google.StartTime <", to.Unix()*1000).
+		Order("Google.StartTime").Limit(1)
+
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		return nil, fmt.Errorf("datastore client initiation error: %v", err)
+	}
+	defer client.Close()
+
+	if _, err = client.GetAll(ctx, query, &events); err != nil {
+		return nil, fmt.Errorf("datastore query error: %v", err)
+	}
+	return
 }
