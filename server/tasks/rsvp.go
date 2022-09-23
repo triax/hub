@@ -60,7 +60,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 	}
 	for _, m := range pats {
 		for r, exp := range exps {
-			if exp.MatchString(m.Title) {
+			if exp.MatchString(m.Title) && m.Type.JoinAnyhow() {
 				report[r] = append(report[r], m)
 			}
 		}
