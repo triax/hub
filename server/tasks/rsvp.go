@@ -222,7 +222,7 @@ func buildFinalCallMessage(event models.Event, roles []string, report map[string
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-				"<%s/events/%s|%s> の出欠状況 %v", server.HubBaseURL, event.Google.ID, event.Google.Title, roles,
+				"<%s/events/%s|%s> の出欠状況 （ポジション設定: %v）", server.HubBaseURL, event.Google.ID, event.Google.Title, roles,
 			), false, false),
 			nil, nil,
 		),
