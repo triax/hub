@@ -87,7 +87,7 @@ type (
 		TeamImage102     string `json:"https://slack.com/team_image_102"`
 		TeamImage132     string `json:"https://slack.com/team_image_132"`
 		TeamImage230     string `json:"https://slack.com/team_image_230"`
-		TeamImageDefault string `json:"https://slack.com/team_image_default"`
+		TeamImageDefault bool   `json:"https://slack.com/team_image_default"`
 	}
 	/**
 	 * {
