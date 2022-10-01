@@ -14,6 +14,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 
 	"github.com/otiai10/largo"
@@ -218,7 +219,7 @@ var (
 {{if len .NotUpdated}}*【直近7日間で回答がついていない練習用備品】*
 {{range .NotUpdated}}- {{.Name}}
 {{end}}--------------{{end}}
-https://hub.triax.football/equips`))
+` + server.HubBaseURL + "/equips"))
 
 	tplReadCheck = template.Must(template.New("").Parse(`このメッセージに返信が期待されている人:
 {{range .Expected}}{{.}} {{end}}

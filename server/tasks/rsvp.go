@@ -20,7 +20,6 @@ import (
 )
 
 var (
-	appbase  = os.Getenv("APP_BASE_URL")
 	helplink = os.Getenv("HELP_PAGE_URL")
 
 	rsvp = template.Must(template.New("x").Parse(
@@ -165,7 +164,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "random"
 	}
-	link := "<" + appbase + "|:football: :football: :football: " + appbase + ">"
+	link := "<" + server.HubBaseURL + "|:football: :football: :football: " + server.HubBaseURL + ">"
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		log.Println("[ERROR]", 4006, err.Error())
@@ -210,7 +209,7 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 	return slack.MsgOptionBlocks(
 		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, "出欠未回答の皆さまへ", false, false)),
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+appbase+"|【Triax Team Hub】>*", false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+server.HubBaseURL+"|【Triax Team Hub】>*", false, false),
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://avatars.slack-edge.com/2021-08-16/2369588425687_e490e60131c70bf52eee_192.png", "Triax Team Hub")),
 		),
 		slack.NewSectionBlock(

@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
+	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
 
@@ -227,7 +228,7 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 
 	if _, _, err = api.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします :bow:\nhttps://hub.triax.football/equips/report", ev.Google.Title), false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします :bow:\n%s/equips/report", ev.Google.Title, server.HubBaseURL), false, false),
 			nil, nil,
 		),
 	)); err != nil {
