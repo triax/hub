@@ -144,7 +144,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 	t := jwt.New(jwt.GetSigningMethod(os.Getenv("JWT_SIGNING_METHOD")))
 	t.Claims = &models.SessionUserClaims{
 		StandardClaims: &jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Hour * 24 * 7).Unix(),
+			ExpiresAt: time.Now().Add(server.ServerSessionExpire).Unix(),
 		},
 		SlackID: member.Slack.ID,
 	}
@@ -162,7 +162,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		Name:    server.SessionCookieName,
 		Value:   tokenstr,
 		Path:    "/",
-		Expires: time.Now().Add(time.Hour * 24 * 7),
+		Expires: time.Now().Add(server.ServerSessionExpire),
 	})
 
 	http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
