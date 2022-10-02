@@ -34,7 +34,13 @@ function Loading({isLoading}) {
   )
 }
 
-export default function Layout({ children, myself, isLoading } : { children: React.ReactNode, myself: Member, isLoading: boolean }) {
+export interface LayoutProps {
+  children: React.ReactNode,
+  myself: Member,
+  isLoading: boolean,
+}
+
+export default function Layout({ children, myself, isLoading }: LayoutProps) {
   const { pathname } = useRouter();
   const teamIcon: string = myself.team?.icon?.image_132 || defaultTeamIcon;
   const teamName: string = myself.team?.name || defaultTeamName;

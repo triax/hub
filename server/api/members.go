@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 
 	"cloud.google.com/go/datastore"
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,22 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 	if _, err := client.GetAll(ctx, query, &members); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	if w := req.URL.Query().Get("keyword"); w != "" {
+		exp, err := regexp.Compile("(?i)" + w)
+		if err != nil {
+			render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+			return
+		}
+		filtered := []models.Member{}
+		for _, m := range members {
+			if exp.MatchString(m.Slack.Name) || exp.MatchString(m.Slack.RealName) || exp.MatchString(m.Slack.Profile.DisplayName) {
+				filtered = append(filtered, m)
+			}
+		}
+		render.JSON(http.StatusOK, filtered)
 		return
 	}
 

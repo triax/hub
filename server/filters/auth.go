@@ -46,7 +46,10 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 		}
 
 		if auth.LocalDev {
-			f, _ := os.Open("server/filters/local-user.json")
+			f, err := os.Open("server/filters/local-user.json")
+			if err != nil {
+				panic(err)
+			}
 			myself := models.Myself{}
 			json.NewDecoder(f).Decode(&myself)
 			f.Close()
