@@ -8,6 +8,8 @@ interface SlackMember {
     image_512: string,
     title: string,
   },
+  name?: string,
+  real_name?: string,
   is_admin: boolean,
   deleted: boolean,
 }

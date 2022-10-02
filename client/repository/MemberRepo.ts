@@ -12,9 +12,10 @@ export default class MemberRepo {
     const endpoint = this.baseURL + `/api/1/members/${id}`;
     return fetch(endpoint).then(res => res.json()).then(Member.fromAPIResponse);
   }
-  list(params: { cached: boolean } = { cached: false }): Promise<Member[]> {
+  list(params: { cached?: boolean, keyword?: string } = { cached: false }): Promise<Member[]> {
     const query = new URLSearchParams();
     if (params.cached) query.set("cached", "1");
+    if (params.keyword) query.set("keyword", params.keyword);
     const endpoint = this.baseURL + `/api/1/members` + '?' + query.toString();
     return fetch(endpoint).then(res => res.json()).then(Member.listFromAPIResponse);
   }
