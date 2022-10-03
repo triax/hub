@@ -219,7 +219,7 @@ var (
 {{if len .NotUpdated}}*【直近7日間で回答がついていない練習用備品】*
 {{range .NotUpdated}}- {{.Name}}
 {{end}}--------------{{end}}
-` + server.HubBaseURL + "/equips"))
+` + server.HubBaseURL() + "/equips"))
 
 	tplReadCheck = template.Must(template.New("").Parse(`このメッセージに返信が期待されている人:
 {{range .Expected}}{{.}} {{end}}
