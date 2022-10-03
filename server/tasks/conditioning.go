@@ -178,14 +178,15 @@ func ConditionFrom(w http.ResponseWriter, req *http.Request) {
 	}
 	title := ev.Google.Title
 
-	blocks := createConditioningMessageBlocks(ev, label, position)
-	msg := slack.MsgOptionBlocks(blocks...)
+	blocks := createConditioningMessageBlocks(ev, label, position, "", "")
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	if _, _, err := api.PostMessageContext(ctx, channel, msg); err != nil {
+	if ch, ts, err := api.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(blocks...)); err != nil {
 		log.Println("[ERROR]", 8005, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"success": false, "error": err.Error(), "blocks": blocks})
 	} else {
 		render.JSON(http.StatusOK, marmoset.P{"success": true, "blocks": blocks, "channel": channel, "title": title})
+		blocks := createConditioningMessageBlocks(ev, label, position, ch, ts)
+		api.UpdateMessage(ch, ts, slack.MsgOptionBlocks(blocks...))
 	}
 }
 
@@ -203,10 +204,14 @@ func defineTimeRangeByRequest(n time.Time, req *http.Request) (f time.Time, t ti
 	return f, t, nil
 }
 
-func createConditioningMessageBlocks(ev models.Event, label, position string) (blocks []slack.Block) {
+func createConditioningMessageBlocks(ev models.Event, label, position, ch, timestamp string) (blocks []slack.Block) {
 	text := fmt.Sprintf("コンディショニングチェックシートのご入力宜しくお願い致します！ *【%s】*\n%s", strings.ToUpper(position), ev.Google.Title)
 	link := fmt.Sprintf("%s/api/1/redirect/conditioning-form", server.HubBaseURL())
 	query := url.Values{"label": []string{label}, "position": []string{position}}
+	if timestamp != "" && ch != "" {
+		query.Add("slack_timestamp", timestamp)
+		query.Add("response_channel", ch)
+	}
 	switch label {
 	case "before":
 		text = fmt.Sprintf("*【運動前】* %s", text)
@@ -220,7 +225,7 @@ func createConditioningMessageBlocks(ev models.Event, label, position string) (b
 			"",
 			&slack.ButtonBlockElement{
 				Type:  slack.METButton,
-				Text:  slack.NewTextBlockObject(slack.PlainTextType, "コンディショニングチェックシートを開く", false, false),
+				Text:  slack.NewTextBlockObject(slack.PlainTextType, "チェックシートを開く", false, false),
 				Style: slack.StylePrimary,
 				URL:   link + "?" + query.Encode(),
 			},

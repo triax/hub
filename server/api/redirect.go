@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
@@ -50,4 +51,9 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	)
 
 	http.Redirect(w, req, link, http.StatusTemporaryRedirect)
+
+	ts := req.URL.Query().Get("slack_timestamp")
+	ch := req.URL.Query().Get("response_channel")
+	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+	api.PostMessage(ch, slack.MsgOptionText(":white_check_mark: "+myself.Slack.Profile.DisplayName, false), slack.MsgOptionTS(ts))
 }
