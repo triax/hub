@@ -87,6 +87,8 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 		bot.onMentionEquipCheck(req, w, payload)
 	case "予報":
 		bot.onMentionAmesh(req, w, payload)
+	case "HUB_WEBPAGE_BASE_URL", "HUB_CONDITIONING_CHECK_SHEET_URL":
+		bot.onEnvDump(req, w, payload)
 	default:
 		bot.echo(tokens, payload)
 	}
@@ -209,6 +211,14 @@ func (bot Bot) onMentionAmesh(req *http.Request, w http.ResponseWriter, payload 
 	_, _, err := bot.SlackAPI.PostMessage(payload.Event.Channel, opts...)
 	log.Printf("[amesh] %v", err)
 
+}
+
+func (bot Bot) onEnvDump(req *http.Request, w http.ResponseWriter, payload Payload) {
+	name := largo.Tokenize(payload.Event.Text)[1:][0]
+	_, _, err := bot.SlackAPI.PostMessage(payload.Event.Channel,
+		slack.MsgOptionText("`"+os.Getenv(name)+"`", false),
+	)
+	log.Printf("[env] %v", err)
 }
 
 var (
