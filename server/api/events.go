@@ -162,6 +162,10 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 }
 
 func shouldNoticeRSVPChangeToSlack(event models.Event, prev, next models.ParticipationType) bool {
+	// 同じものの場合は除外
+	if prev == next {
+		return false
+	}
 	// 試合なら問答無用に通知
 	if event.IsGame() {
 		return true
