@@ -56,13 +56,13 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 
 	// Eventが無ければ終了
 	if len(events) == 0 {
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 	ev := events[0]
 
 	if ev.ShouldSkipReminders() {
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 
@@ -212,14 +212,14 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 
 	// 該当イベント無し
 	if len(events) == 0 {
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 
 	ev := events[0]
 
 	if ev.ShouldSkipReminders() {
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 

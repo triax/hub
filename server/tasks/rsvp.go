@@ -103,22 +103,21 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(events) == 0 {
-		log.Println("[ERROR]", 4003, err.Error())
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 
 	recent := events[0]
 
 	if recent.ShouldSkipReminders() {
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events})
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
 
 	participations := map[string]models.Participation{}
 	if err := json.NewDecoder(strings.NewReader(recent.ParticipationsJSONString)).Decode(&participations); err != nil {
 		log.Println("[ERROR]", 4004, err.Error())
-		render.JSON(http.StatusNotFound, marmoset.P{"events": events, "error": err.Error()})
+		render.JSON(http.StatusBadRequest, marmoset.P{"events": events, "error": err.Error()})
 		return
 	}
 
