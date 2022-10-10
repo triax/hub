@@ -53,5 +53,5 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	ts := req.URL.Query().Get("slack_timestamp")
 	ch := req.URL.Query().Get("response_channel")
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	api.PostMessage(ch, slack.MsgOptionText(":white_check_mark: "+myself.Slack.Profile.DisplayName, false), slack.MsgOptionTS(ts))
+	api.PostMessage(ch, slack.MsgOptionText(":white_check_mark: "+myself.Name(), false), slack.MsgOptionTS(ts))
 }
