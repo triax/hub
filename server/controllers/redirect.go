@@ -43,7 +43,7 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	link := fmt.Sprintf(
 		server.HubConditioningCheckSheetURL(),
 		myself.Slack.ID,
-		myself.Slack.Profile.DisplayName,
+		myself.Name(),
 		strings.ToUpper(position),
 		label,
 	)
