@@ -36,31 +36,31 @@ cron:
 
 # {{{ 練習前 Conditioning Check
 - description: ポジションごとの、運動「前」コンディショニングチェック（DB）
-  url: /tasks/condition/form?channel=db&position=db&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=db&position=db&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（LB）
-  url: /tasks/condition/form?channel=lb&position=lb&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=lb&position=lb&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（DL）
-  url: /tasks/condition/form?channel=d-lines&position=dl&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=d-lines&position=dl&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（OL/TE）
-  url: /tasks/condition/form?channel=o-lines&position=ol&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=o-lines&position=ol&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（RB）
-  url: /tasks/condition/form?channel=rb&position=rb&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=rb&position=rb&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（WR）
-  url: /tasks/condition/form?channel=wr&position=wr&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=wr&position=wr&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 - description: ポジションごとの、運動「前」コンディショニングチェック（QB）
-  url: /tasks/condition/form?channel=qb&position=qb&label=before&from=01:00&to=21:00
+  url: /tasks/condition/form?channel=qb&position=qb&label=before
   schedule: everyday 6:00
   timezone: Asia/Tokyo
 # }}}

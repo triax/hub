@@ -93,8 +93,6 @@ func main() {
 	cron.Get("/final-call", tasks.FinalCall)
 	cron.Get("/equips/remind/bring", tasks.EquipsRemindBring)
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
-	cron.Get("/condition/precheck", tasks.ConditionPrecheck)   // TODO: 削除
-	cron.Get("/condition/postcheck", tasks.ConditionPostcheck) // TODO: 削除
 	cron.Get("/condition/form", tasks.ConditionFrom)
 	r.Mount("/tasks", cron)
 
