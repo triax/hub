@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -57,12 +58,14 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 			return
 		}
 
+		destination := url.QueryEscape(req.URL.String())
+
 		cookie, err := req.Cookie(server.SessionCookieName)
 		if err != nil {
 			if auth.API {
 				w.WriteHeader(http.StatusUnauthorized)
 			} else {
-				http.Redirect(w, req, "/login?error="+err.Error(), http.StatusTemporaryRedirect)
+				http.Redirect(w, req, "/login?goto="+destination, http.StatusTemporaryRedirect)
 			}
 			return
 		}
@@ -79,7 +82,7 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 					Value: "", Path: "/", Expires: time.Unix(0, 0),
 					MaxAge: -1, HttpOnly: true,
 				})
-				http.Redirect(w, req, "/login?error="+err.Error(), http.StatusTemporaryRedirect)
+				http.Redirect(w, req, "/login?goto="+destination, http.StatusTemporaryRedirect)
 			}
 			return
 		}
@@ -89,7 +92,7 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 				Value: "", Path: "/", Expires: time.Unix(0, 0),
 				MaxAge: -1, HttpOnly: true,
 			})
-			http.Redirect(w, req, "/login?error=reset", http.StatusTemporaryRedirect)
+			http.Redirect(w, req, "/login?goto="+destination, http.StatusTemporaryRedirect)
 			return
 		}
 		next.ServeHTTP(w, SetSessionUserContext(req, claims.SlackID))

@@ -10,6 +10,8 @@ var (
 	HubHelpPageURL    = os.Getenv("HUB_HELP_PAGE_URL")
 
 	ServerSessionExpire = time.Hour * 24 * 14
+
+	ServiceLocation, _ = time.LoadLocation("Asia/Tokyo")
 )
 
 func HubBaseURL() string {

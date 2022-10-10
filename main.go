@@ -54,8 +54,6 @@ func main() {
 	v1.Post("/equips/{id}/update", api.UpdateEquip)
 	v1.Post("/equips", api.CreateEquipItem)
 	v1.Get("/equips", api.ListEquips)
-	// Redirects
-	v1.Get("/redirect/conditioning-form", api.RedirectConditioningForm)
 	r.Mount("/api/1", v1)
 
 	// Unauthorized pages
@@ -85,6 +83,7 @@ func main() {
 	r.With(page.Handle).Get("/equips/create", controllers.EquipCreate)
 	r.With(page.Handle).Get("/equips/report", controllers.EquipReport)
 	r.With(page.Handle).Get("/equips/{id}", controllers.Equip)
+	r.With(page.Handle).Get("/redirect/conditioning-form", controllers.RedirectConditioningForm)
 
 	// Cloud Tasks
 	cron := chi.NewRouter()
@@ -94,8 +93,6 @@ func main() {
 	cron.Get("/final-call", tasks.FinalCall)
 	cron.Get("/equips/remind/bring", tasks.EquipsRemindBring)
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
-	cron.Get("/condition/precheck", tasks.ConditionPrecheck)   // TODO: 削除
-	cron.Get("/condition/postcheck", tasks.ConditionPostcheck) // TODO: 削除
 	cron.Get("/condition/form", tasks.ConditionFrom)
 	r.Mount("/tasks", cron)
 

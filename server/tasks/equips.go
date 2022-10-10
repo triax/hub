@@ -15,10 +15,6 @@ import (
 	"github.com/triax/hub/server/models"
 )
 
-var (
-	tokyo, _ = time.LoadLocation("Asia/Tokyo")
-)
-
 type (
 	EquipAlloc struct {
 		Event       models.Event
@@ -172,40 +168,17 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	render := marmoset.Render(w, true)
 
-	ft, err := time.Parse("15:04", req.URL.Query().Get("from"))
+	// 本日の、指定時間に開始されているイベントを取得
+	from, to, err := defineTimeRangeByRequest(time.Now(), req)
 	if err != nil {
 		log.Println("[ERROR]", 9001, err.Error())
 		render.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
-	tt, err := time.Parse("15:04", req.URL.Query().Get("to"))
+
+	events, err := models.FindEventsBetween(ctx, from, to)
 	if err != nil {
 		log.Println("[ERROR]", 9002, err.Error())
-		render.JSON(http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// 本日の、指定時間に開始されているイベントを取得
-	n := time.Now()
-	from := time.Date(n.Year(), n.Month(), n.Day(), ft.Hour(), ft.Minute(), 0, 0, tokyo)
-	to := time.Date(n.Year(), n.Month(), n.Day(), tt.Hour(), tt.Minute(), 0, 0, tokyo)
-
-	query := datastore.NewQuery(models.KindEvent).
-		Filter("Google.StartTime >=", from.Unix()*1000).
-		Filter("Google.StartTime <", to.Unix()*1000).
-		Order("Google.StartTime").Limit(1)
-
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-	if err != nil {
-		log.Println("[ERROR]", 9003, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
-	}
-	defer client.Close()
-
-	events := []models.Event{}
-	if _, err := client.GetAll(ctx, query, &events); err != nil {
-		log.Println("[ERROR]", 9004, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}

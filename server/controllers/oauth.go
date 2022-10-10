@@ -24,6 +24,10 @@ const (
 func AuthStart(w http.ResponseWriter, req *http.Request) {
 	// "https://slack.com/.well-known/openid-configuration"
 	authorizationEndpoint := "https://slack.com/openid/connect/authorize"
+	redirectURI := "https://" + req.Host + "/auth/callback"
+	if destination := req.URL.Query().Get("goto"); destination != "" {
+		redirectURI += ("?goto=" + url.QueryEscape(destination))
+	}
 	u, _ := url.Parse(authorizationEndpoint)
 	// https://api.slack.com/authentication/sign-in-with-slack#request
 	q := url.Values{
@@ -33,7 +37,7 @@ func AuthStart(w http.ResponseWriter, req *http.Request) {
 		"team":          {os.Getenv("SLACK_INSTALLED_TEAM_ID")},
 		"state":         {state},
 		"nonce":         {nonce},
-		"redirect_uri":  {"https://" + req.Host + "/auth/callback"},
+		"redirect_uri":  {redirectURI},
 	}
 	u.RawQuery = q.Encode()
 	http.SetCookie(w, &http.Cookie{
@@ -60,6 +64,12 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	redirectURI := "https://" + req.Host + "/auth/callback"
+	destination := req.URL.Query().Get("goto")
+	if destination != "" {
+		redirectURI += ("?goto=" + url.QueryEscape(destination))
+	}
+
 	// https://api.slack.com/authentication/sign-in-with-slack#exchange
 	tokenExchangeEndpoint := "https://slack.com/api/openid.connect.token"
 	q := url.Values{
@@ -67,13 +77,12 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		"client_secret": {os.Getenv("SLACK_CLIENT_SECRET")},
 		"code":          {code},
 		"grant_type":    {"authorization_code"},
-		"redirect_uri":  {"https://" + req.Host + "/auth/callback"},
+		"redirect_uri":  {redirectURI},
 	}
 
 	exchange, err := http.NewRequest("POST", tokenExchangeEndpoint, strings.NewReader(q.Encode()))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 6001, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 	exchange.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -100,8 +109,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if !token.OK {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("OAuth handshake failed: " + token.Error))
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%+v", 6002, token), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -118,8 +126,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("datastore.Client: " + err.Error()))
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 4001, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 	defer client.Close()
@@ -136,8 +143,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 			)
 			return
 		}
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("datastore.Get: " + err.Error()))
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 4002, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -151,8 +157,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 
 	tokenstr, err := t.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Tokenize session: " + err.Error()))
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 6003, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -165,7 +170,11 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		Expires: time.Now().Add(server.ServerSessionExpire),
 	})
 
-	http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
+	if destination != "" {
+		http.Redirect(w, req, destination, http.StatusTemporaryRedirect)
+	} else {
+		http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
+	}
 }
 
 func FetchCurrentUserInfo(token string) (info *models.SlackOpenIDUserInfo, err error) {

@@ -120,6 +120,16 @@ func IsFiledMismatch(err error) bool {
 	return ok
 }
 
+func (m Member) Name() string {
+	if m.Slack.RealName != "" {
+		return m.Slack.RealName
+	}
+	if m.Slack.Profile.RealName != "" {
+		return m.Slack.Profile.RealName
+	}
+	return m.Slack.Profile.DisplayName
+}
+
 func (e Event) Participations() (Participations, error) {
 	p := Participations{}
 	err := json.NewDecoder(strings.NewReader(e.ParticipationsJSONString)).Decode(&p)

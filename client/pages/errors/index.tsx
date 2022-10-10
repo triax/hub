@@ -3,26 +3,33 @@ import { useRouter } from "next/router"
 
 export default function Errors() {
   const router = useRouter();
-  const code = router.query["code"] as string;
+  const code: number = parseInt(router.query["code"] as string);
+  const error: string = router.query["error"] as string;
   return (
     <section className="h-screen w-screen flex flex-col items-center justify-center bg-gray-100">
       <h1 className="text-center font-bold text-xl py-2">エラー: {code}</h1>
+      {error ? <pre className="text-gray-500 text-xs bg-slate-200 whitespace-pre-wrap p-2 rounded-sm">{error}</pre> : null}
       <div className="mx-8 mb-4">
         <ErrorDescriptionForCode code={code} />
       </div>
-      <div className="w-2/3"><ErrorIcon /></div>
+      <div className="w-2/3 flex justify-center"><ErrorIcon /></div>
       <div>ゴメンね！</div>
     </section>
   )
 }
 
-function ErrorDescriptionForCode(props: { code: string }) {
+const ErrorMap = {
+  1001: ErrorMemberNotSyncedYet,
+  4001: ErrorDatastoreClientInit,
+  4002: ErrorDatastoreObjectMap,
+}
+
+function ErrorDescriptionForCode(props: { code: number }) {
   const {code} = props;
   if (!code) return <ErrorUndefined />;
-  switch (code) {
-  case "1001": return <ErrorMemberNotSyncedYet />;
-  default: return <ErrorUnknown />;
-  }
+  const Elem = ErrorMap[code];
+  if (!Elem) return <ErrorUnknown />;
+  return <Elem />;
 }
 
 function ErrorMemberNotSyncedYet() {
@@ -35,6 +42,18 @@ function ErrorUndefined() {
 
 function ErrorUnknown() {
   return <div>不明なエラーコードです. この画面のスクリーンショットを撮って、#tech チャンネルにて管理者にお問い合わせください.</div>;
+}
+
+function ErrorDatastoreClientInit() {
+  return <__ErrorSystemError__ />;
+}
+
+function ErrorDatastoreObjectMap() {
+  return <__ErrorSystemError__ />;
+}
+
+function __ErrorSystemError__() {
+  return <div>システムエラーです. この画面のスクリーンショットを撮って、 #tech チャンネルにて管理者にお問い合わせください.</div>
 }
 
 function ErrorIcon() {

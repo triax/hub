@@ -1,4 +1,4 @@
-package api
+package controllers
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/datastore"
-	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/filters"
@@ -16,12 +15,11 @@ import (
 
 func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 
-	render := marmoset.Render(w, true)
 	id := filters.GetSessionUserContext(req)
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 4001, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 	defer client.Close()
@@ -30,7 +28,7 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	if err := client.Get(
 		ctx, datastore.NameKey(models.KindMember, id, nil), &myself,
 	); err != nil && !models.IsFiledMismatch(err) {
-		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 4002, err.Error()), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -45,7 +43,7 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	link := fmt.Sprintf(
 		server.HubConditioningCheckSheetURL(),
 		myself.Slack.ID,
-		myself.Slack.Profile.DisplayName,
+		myself.Name(),
 		strings.ToUpper(position),
 		label,
 	)
