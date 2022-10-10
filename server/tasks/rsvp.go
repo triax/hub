@@ -34,6 +34,12 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 	roles := strings.Split(req.URL.Query().Get("role"), ",")
 	channel := req.URL.Query().Get("channel")
 
+	members, err := models.GetAllMembersAsDict(ctx)
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err})
+		return
+	}
+
 	events, err := models.FindEventsBetween(ctx)
 	if err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err})
@@ -63,10 +69,12 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
-	for _, m := range pats {
+
+	for id, p := range pats {
+		m := members[id]
 		for r, exp := range exps {
-			if exp.MatchString(m.Title) && m.Type.JoinAnyhow() {
-				report[r] = append(report[r], m)
+			if exp.MatchString(m.Slack.Profile.Title) && p.Type.JoinAnyhow() {
+				report[r] = append(report[r], p)
 			}
 		}
 	}
