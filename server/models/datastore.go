@@ -195,3 +195,33 @@ func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Ev
 	}
 	return
 }
+
+func GetAllMembers(ctx context.Context) ([]Member, error) {
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialized datastore client: %v", err)
+	}
+	defer client.Close()
+	members := []Member{}
+	query := datastore.NewQuery(KindMember)
+	query = query.Filter("Slack.Deleted =", false)
+	if _, err := client.GetAll(ctx, query, &members); err != nil && !IsFiledMismatch(err) {
+		return nil, fmt.Errorf("failed to execute datastore query: %v", err)
+	}
+	return members, nil
+}
+
+func GetAllMembersAsDict(ctx context.Context) (map[string]Member, error) {
+	members, err := GetAllMembers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to GetAllMembers: %v", err)
+	}
+	return MembersToDict(members), nil
+}
+
+func MembersToDict(members []Member) (dict map[string]Member) {
+	for _, m := range members {
+		dict[m.Slack.ID] = m
+	}
+	return dict
+}
