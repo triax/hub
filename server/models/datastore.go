@@ -219,7 +219,8 @@ func GetAllMembersAsDict(ctx context.Context) (map[string]Member, error) {
 	return MembersToDict(members), nil
 }
 
-func MembersToDict(members []Member) (dict map[string]Member) {
+func MembersToDict(members []Member) map[string]Member {
+	dict := map[string]Member{}
 	for _, m := range members {
 		dict[m.Slack.ID] = m
 	}
