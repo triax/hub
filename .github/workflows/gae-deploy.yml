@@ -46,6 +46,18 @@ jobs:
     needs: [go-test, js-test]
     runs-on: ubuntu-latest
     steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+      with:
+        ref: develop
+        fetch-depth: 0
+    - name: Debug
+      run: |
+        echo "::debug::`git branch`"
+        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=0`
+        echo "::debug::PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
+        COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
+        echo "::debug::COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
     - name: Set up Go 1.16
       uses: actions/setup-go@v1
       with:
@@ -54,8 +66,6 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: 14.x
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
     - name: Install dependencies
       run: npm install
     - name: Export assets
@@ -72,13 +82,6 @@ jobs:
         APP_SECRETS_DEV_YAML: ${{ secrets.APP_SECRETS_DEV_YAML }}
     - name: Deploy DEV
       run: gcloud app deploy ./app.dev.yaml --quiet
-    - name: Debug
-      run: |
-        echo "::debug::`git branch`"
-        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=0`
-        echo "::debug::PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
-        COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
-        echo "::debug::COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
 
   gae-deploy-prod:
     name: GAE Deploy PROD
