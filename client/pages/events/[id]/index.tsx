@@ -128,13 +128,24 @@ export default function EventView(props) {
   );
 }
 
+function getTimeLimitation(entry: Participation) {
+  switch (entry.type) {
+  case 'join_late':
+    return <span className="ml-2 px-1 rounded bg-green-500 text-white text-sm">遅参 {entry.params?.time}</span>;
+  case 'leave_early':
+    return <span className="ml-2 px-1 rounded bg-green-500 text-white text-sm">{entry.params?.time} 早退</span>;
+  default:
+    return null;
+  }
+}
+
 function ParticipationRow({ entry }: { entry: Participation }) {
   if (! entry.member) { console.log("member取得失敗", entry); return <></>; }
   const { member } = entry;
   const name = member.slack?.profile?.display_name || member.slack?.profile?.real_name;
   return (
     <div key={member.slack?.id} className="flex space-x-2 items-center">
-      <div className="flex-auto">{name}</div>
+      <div className="flex-auto">{name}{getTimeLimitation(entry)}</div>
       <div className="w-1/3 text-xs">
         {member.slack?.profile?.title ? member.slack?.profile?.title : <span>
           Pos設定方法は
