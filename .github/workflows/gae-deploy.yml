@@ -109,10 +109,12 @@ jobs:
       run: gcloud app deploy ./cron.yaml --quiet
     - name: Announce on Slack
       run: |
+        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
+        COMMITS_INCLUDED=`git log $PREVIOUS_MERGE_COMMIT.. --no-merges --pretty="* %s"`
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
-            \"text\": \":robot_face: 新しいバージョンがproduction環境にデプロイされました :tada:\nhttps://github.com/${GITHUB_REPOSITORY}/commits/main\"
+            \"text\": \":robot_face: 新しいバージョンがproduction環境にデプロイされました :tada:\n${COMMITS_INCLUDED}\n${PREVIOUS_MERGE_COMMIT}\ngithub.com/${GITHUB_REPOSITORY}/commits/main\"
           }" \
           -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
