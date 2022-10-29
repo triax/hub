@@ -48,16 +48,6 @@ jobs:
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
-      with:
-        ref: develop
-        fetch-depth: 0
-    - name: Debug
-      run: |
-        echo "::debug::`git branch`"
-        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=0`
-        echo "::debug::PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
-        COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
-        echo "::debug::COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
     - name: Set up Go 1.16
       uses: actions/setup-go@v1
       with:
@@ -123,9 +113,9 @@ jobs:
     - name: Announce on Slack
       run: |
         PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
-        echo "::debug::PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
+        echo "[INFO] PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
         COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
-        echo "::debug::COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
+        echo "[INFO] COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
