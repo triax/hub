@@ -110,7 +110,9 @@ jobs:
     - name: Announce on Slack
       run: |
         PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
-        COMMITS_INCLUDED=`git log $PREVIOUS_MERGE_COMMIT.. --no-merges --pretty="* %s"`
+        echo "::debug::PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
+        COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
+        echo "::debug::COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
