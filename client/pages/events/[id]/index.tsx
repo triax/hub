@@ -9,6 +9,10 @@ import { MemberCache } from "../../../repository/MemberRepo";
 import Member from "../../../models/Member";
 import TeamEvent, { Participation } from "../../../models/TriaxEvent";
 
+function memberSortFunc(prev: Participation, next: Participation): number {
+  return prev.member?.slack?.profile?.title.toUpperCase() < next.member?.slack?.profile?.title.toUpperCase() ? -1 : 1;
+}
+
 export default function EventView(props) {
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
@@ -38,8 +42,8 @@ export default function EventView(props) {
   }, { yes: [], no: [], unanswered: allMembers });
 
   // Sort
-  sum.yes = sum.yes.sort((prev, next) => prev.member?.slack?.profile?.title < next.member?.slack?.profile?.title ? -1 : 1);
-  sum.no = sum.no.sort((prev, next) => prev.member?.slack?.profile?.title < next.member?.slack?.profile?.title ? -1 : 1);
+  sum.yes = sum.yes.sort(memberSortFunc);
+  sum.no = sum.no.sort(memberSortFunc);
 
   const onClickDeleteEvent = () => {
     if (!window.confirm(`イベント「${event.google.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
