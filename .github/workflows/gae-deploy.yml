@@ -113,13 +113,13 @@ jobs:
     - name: Announce on Slack
       run: |
         PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
-        echo "[INFO] PREVIOUS_COMMIT\t${PREVIOUS_MERGE_COMMIT}"
-        COMMITS_INCLUDED=`git log --no-merges --pretty="* %s" $PREVIOUS_MERGE_COMMIT..`
-        echo "[INFO] COMMITS_INCLUDED\t${COMMITS_INCLUDED}"
+        echo "[INFO] PREVIOUS_MERGE_COMMIT  ${PREVIOUS_MERGE_COMMIT}"
+        COMMITS_INCLUDED=`git log --no-merges --pretty="・ %s" $PREVIOUS_MERGE_COMMIT..`
+        echo "[INFO] COMMITS_INCLUDED ${COMMITS_INCLUDED}"
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
-            \"text\": \":robot_face: 新しいバージョンがproduction環境にデプロイされました :tada:\n${COMMITS_INCLUDED}\n${PREVIOUS_MERGE_COMMIT}\ngithub.com/${GITHUB_REPOSITORY}/commits/main\"
+            \"text\": \":robot_face: New Production Deploy\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_MERGE_COMMIT}..main\"
           }" \
           -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
