@@ -34,97 +34,15 @@ cron:
   schedule: everyday 21:10
   timezone: Asia/Tokyo
 
-# {{{ 練習前 Conditioning Check
-- description: ポジションごとの、運動「前」コンディショニングチェック（DB）
-  url: /tasks/condition/form?channel=db&position=db&label=before&from=01:00&to=23:00
+- description: 運動「前」コンディショニングチェック
+  url: /tasks/condition/form?channel=condi-check&label=before&from=01:00&to=23:00
   schedule: everyday 6:00
   timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（LB）
-  url: /tasks/condition/form?channel=lb&position=lb&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
+- description: 運動「後」コンディショニングチェック（午前）
+  url: /tasks/condition/form?channel=condi-check&label=after&from=02:00&to=15:00
+  schedule: everyday 15:00
   timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（DL）
-  url: /tasks/condition/form?channel=d-lines&position=dl&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（OL/TE）
-  url: /tasks/condition/form?channel=o-lines&position=ol&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（RB）
-  url: /tasks/condition/form?channel=rb&position=rb&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（WR）
-  url: /tasks/condition/form?channel=wr&position=wr&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「前」コンディショニングチェック（QB）
-  url: /tasks/condition/form?channel=qb&position=qb&label=before&from=01:00&to=23:00
-  schedule: everyday 6:00
-  timezone: Asia/Tokyo
-# }}}
-
-# {{{ 練習後 Conditioning Check（午前）
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（DB）
-  url: /tasks/condition/form?channel=db&position=db&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（LB）
-  url: /tasks/condition/form?channel=lb&position=lb&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（DL）
-  url: /tasks/condition/form?channel=d-lines&position=dl&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（OL）
-  url: /tasks/condition/form?channel=o-lines&position=ol&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（RB）
-  url: /tasks/condition/form?channel=rb&position=rb&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（WR）
-  url: /tasks/condition/form?channel=wr&position=wr&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午前）（QB）
-  url: /tasks/condition/form?channel=qb&position=qb&label=after&from=02:00&to=14:00
-  schedule: everyday 14:00
-  timezone: Asia/Tokyo
-# }}}
-
-# {{{ 練習後 Conditioning Check（午後）
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（DB）
-  url: /tasks/condition/form?channel=db&position=db&label=after&from=14:00&to=21:00
+- description: 運動「後」コンディショニングチェック（午後）
+  url: /tasks/condition/form?channel=condi-check&label=after&from=15:00&to=21:00
   schedule: everyday 21:00
   timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（LB）
-  url: /tasks/condition/form?channel=lb&position=lb&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（DL）
-  url: /tasks/condition/form?channel=d-lines&position=dl&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（OL）
-  url: /tasks/condition/form?channel=o-lines&position=ol&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（RB）
-  url: /tasks/condition/form?channel=rb&position=rb&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（WR）
-  url: /tasks/condition/form?channel=wr&position=wr&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-- description: ポジションごとの、運動「後」コンディショニングチェック（午後）（QB）
-  url: /tasks/condition/form?channel=qb&position=qb&label=after&from=14:00&to=21:00
-  schedule: everyday 21:00
-  timezone: Asia/Tokyo
-# }}}

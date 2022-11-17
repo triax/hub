@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/otiai10/marmoset"
@@ -21,14 +20,11 @@ func ConditionFrom(w http.ResponseWriter, req *http.Request) {
 
 	channel := req.URL.Query().Get("channel")
 	if channel == "" {
-		render.JSON(http.StatusBadRequest, marmoset.P{"error": "`channel` is required"})
-		return
+		channel = "condi-check"
 	}
+
 	position := req.URL.Query().Get("position")
-	if position == "" {
-		render.JSON(http.StatusBadRequest, marmoset.P{"error": "`position` is required"})
-		return
-	}
+
 	label := req.URL.Query().Get("label")
 	if label == "" {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": "`label` is required"})
@@ -70,19 +66,22 @@ func ConditionFrom(w http.ResponseWriter, req *http.Request) {
 }
 
 func createConditioningMessageBlocks(ev models.Event, label, position, ch, timestamp string) (blocks []slack.Block) {
-	text := fmt.Sprintf("コンディショニングチェックシートのご入力宜しくお願い致します！ *【%s】*\n%s", strings.ToUpper(position), ev.Google.Title)
-	link := fmt.Sprintf("%s/redirect/conditioning-form", server.HubBaseURL())
-	query := url.Values{"label": []string{label}, "position": []string{position}}
-	if timestamp != "" && ch != "" {
-		query.Add("slack_timestamp", timestamp)
-		query.Add("response_channel", ch)
-	}
+
+	text := ev.Google.Title // + "\nコンディショニングチェックシートのご入力宜しくお願い致します"
 	switch label {
 	case "before":
 		text = fmt.Sprintf("*【運動前】* %s", text)
 	case "after":
 		text = fmt.Sprintf("*【運動後】* %s", text)
 	}
+
+	query := url.Values{"label": []string{label}} // , "position": []string{position}}
+	if timestamp != "" && ch != "" {
+		query.Add("slack_timestamp", timestamp)
+		query.Add("response_channel", ch)
+	}
+	link := fmt.Sprintf("%s/redirect/conditioning-form?%s", server.HubBaseURL(), query.Encode())
+
 	blocks = append(
 		blocks,
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil, nil),
@@ -92,7 +91,7 @@ func createConditioningMessageBlocks(ev models.Event, label, position, ch, times
 				Type:  slack.METButton,
 				Text:  slack.NewTextBlockObject(slack.PlainTextType, "チェックシートを開く", false, false),
 				Style: slack.StylePrimary,
-				URL:   link + "?" + query.Encode(),
+				URL:   link,
 			},
 		),
 	)

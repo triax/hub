@@ -32,7 +32,9 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	position := req.URL.Query().Get("position")
+	// position := req.URL.Query().Get("position")
+	position := strings.Split(myself.Slack.Profile.Title, "/")[0]
+
 	label := req.URL.Query().Get("label")
 	switch label {
 	case "after":
@@ -53,5 +55,6 @@ func RedirectConditioningForm(w http.ResponseWriter, req *http.Request) {
 	ts := req.URL.Query().Get("slack_timestamp")
 	ch := req.URL.Query().Get("response_channel")
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	api.PostMessage(ch, slack.MsgOptionText(":white_check_mark: "+myself.Name(), false), slack.MsgOptionTS(ts))
+	text := fmt.Sprintf("[%s] %s", position, myself.Name())
+	api.PostMessage(ch, slack.MsgOptionText(text, false), slack.MsgOptionTS(ts))
 }
