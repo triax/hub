@@ -60,11 +60,12 @@ jobs:
       run: npm install
     - name: Export assets
       run: npm run export
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v0
+    - name: Auth GCP
+      uses: google-github-actions/auth@v1
       with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
     - name: Recover App Secrets DEV
       run: 'echo "$APP_SECRETS_DEV_YAML" > secrets.dev.yaml'
       shell: bash
@@ -96,11 +97,12 @@ jobs:
       run: npm install
     - name: Export assets
       run: npm run export
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v0
+    - name: Auth GCP
+      uses: google-github-actions/auth@v1
       with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
     - name: Recover App Secrets PROD
       run: 'echo "$APP_SECRETS_PROD_YAML" > secrets.yaml'
       shell: bash
