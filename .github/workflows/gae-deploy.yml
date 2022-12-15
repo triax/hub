@@ -45,7 +45,7 @@ jobs:
 
   gae-deploy-dev:
     name: GAE Deploy DEV
-    if: github.ref == 'refs/heads/develop'
+    if: github.event.pull_request.head.ref == 'develop'
     needs: [go-test, js-test]
     runs-on: ubuntu-latest
     steps:
