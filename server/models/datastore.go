@@ -130,6 +130,26 @@ func (m Member) Name() string {
 	return m.Slack.Profile.DisplayName
 }
 
+// regexp.Compileのコストを減らしたい
+var onMemRoleExpCache = map[string]*regexp.Regexp{}
+
+func (m Member) IsMemberOf(roles ...string) (yes bool, role string, err error) {
+	for _, r := range roles {
+		exp, ok := onMemRoleExpCache[r]
+		if !ok {
+			exp, err = regexp.Compile("(?i)" + r)
+			if err != nil {
+				return false, "", err
+			}
+			onMemRoleExpCache[r] = exp
+		}
+		if exp.MatchString(m.Slack.Profile.Title) {
+			return true, r, nil
+		}
+	}
+	return false, "", nil
+}
+
 func (e Event) Participations() (Participations, error) {
 	p := Participations{}
 	err := json.NewDecoder(strings.NewReader(e.ParticipationsJSONString)).Decode(&p)
@@ -150,6 +170,10 @@ func (e Event) ShouldSkipReminders() bool {
 
 func (t ParticipationType) JoinAnyhow() bool {
 	return t == PTJoin || t == PTJoinLate || t == PTLeaveEarly
+}
+
+func (t ParticipationType) Unanswered() bool {
+	return t == "" || t == PTUnanswered
 }
 
 func (equip Equip) NeedsCharge() bool {

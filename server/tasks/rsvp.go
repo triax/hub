@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -60,26 +59,27 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": fmt.Errorf("JSON decode error: %v", err)})
 		return
 	}
-	report := map[string][]models.Participation{}
-	exps := map[string]*regexp.Regexp{}
-	for _, r := range roles {
-		report[r] = []models.Participation{}
-		if exps[r], err = regexp.Compile("(?i)" + r); err != nil {
-			render.JSON(http.StatusBadRequest, marmoset.P{"error": err})
+
+	joins := map[string][]models.Participation{}
+	unans := []models.Member{}
+
+	for id, member := range members {
+		yes, role, err := member.IsMemberOf(roles...)
+		if err != nil {
+			render.JSON(http.StatusBadRequest, marmoset.P{"error": fmt.Errorf("title regexp compile error: %v", err)})
 			return
 		}
-	}
-
-	for id, p := range pats {
-		m := members[id]
-		for r, exp := range exps {
-			if exp.MatchString(m.Slack.Profile.Title) && p.Type.JoinAnyhow() {
-				report[r] = append(report[r], p)
-			}
+		if !yes {
+			continue
+		}
+		if pats[id].Type.JoinAnyhow() {
+			joins[role] = append(joins[role], pats[id])
+		} else if pats[id].Type.Unanswered() {
+			unans = append(unans, member)
 		}
 	}
 
-	msg := buildFinalCallMessage(ev, roles, report)
+	msg := buildFinalCallMessage(ev, roles, joins, unans)
 	token := os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")
 	api := slack.New(token)
 	if _, _, err = api.PostMessage("#"+channel, msg); err != nil {
@@ -87,7 +87,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	render.JSON(http.StatusOK, marmoset.P{"roles": roles, "channel": channel, "report": report})
+	render.JSON(http.StatusOK, marmoset.P{"roles": roles, "channel": channel, "joins": joins, "unans": unans})
 }
 
 func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
@@ -229,7 +229,7 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 	)
 }
 
-func buildFinalCallMessage(event models.Event, roles []string, report map[string][]models.Participation) slack.MsgOption {
+func buildFinalCallMessage(event models.Event, roles []string, joins map[string][]models.Participation, unans []models.Member) slack.MsgOption {
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
@@ -247,7 +247,7 @@ func buildFinalCallMessage(event models.Event, roles []string, report map[string
 				),
 			)
 		}
-		if len(report[role]) == 0 {
+		if len(joins[role]) == 0 {
 			blocks = append(blocks, slack.NewContextBlock("",
 				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
 					"Slackプロフィールで「役職（Title）」を「%s」や「%s」などに設定している人はいません.",
@@ -256,7 +256,7 @@ func buildFinalCallMessage(event models.Event, roles []string, report map[string
 			))
 		} else {
 			names := []string{}
-			for _, m := range report[role] {
+			for _, m := range joins[role] {
 				names = append(names, m.Name)
 			}
 			blocks = append(blocks,
@@ -269,6 +269,19 @@ func buildFinalCallMessage(event models.Event, roles []string, report map[string
 		if i+1 < len(roles) {
 			blocks = append(blocks, slack.NewDividerBlock())
 		}
+	}
+	if len(unans) > 0 {
+		mentions := []string{}
+		for _, unanswer := range unans {
+			mentions = append(mentions, fmt.Sprintf("<@%s>", unanswer.Slack.ID))
+		}
+		blocks = append(blocks,
+			slack.NewDividerBlock(),
+			slack.NewContextBlock("",
+				slack.NewTextBlockObject(slack.MarkdownType, "未回答", false, false),
+				slack.NewTextBlockObject(slack.MarkdownType, strings.Join(mentions, ","), false, false),
+			),
+		)
 	}
 	return slack.MsgOptionBlocks(blocks...)
 }
