@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -211,4 +212,82 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 	}
 	render.JSON(http.StatusOK, ev)
 
+}
+
+func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w, true)
+	offsetHours, err := strconv.Atoi(req.URL.Query().Get("oh"))
+	if err != nil {
+		render.JSON(http.StatusBadRequest, map[string]any{"error": err})
+		return
+	}
+	ctx := req.Context()
+
+	// oh（offset_hours）で指定されている時間から現在に至るまでのイベントを取得.
+	events, err := models.FindEventsBetween(ctx, time.Now().Add(time.Duration(-1*offsetHours)*time.Hour), time.Now())
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+	if len(events) == 0 {
+		render.JSON(http.StatusOK, map[string]any{"offset_hours": offsetHours, "events": events})
+		return
+	}
+
+	latest := events[0]
+
+	all := []models.Equip{}
+	// unreported := []models.Equip{}
+	unreported := []string{}
+
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+	defer client.Close()
+
+	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+
+	for _, equip := range all {
+		if !equip.ForPractice && !equip.ForGame {
+			continue
+		}
+		query := datastore.NewQuery(models.KindCustody).Ancestor(equip.Key).Order("-Timestamp").Limit(1)
+		if _, err = client.GetAll(ctx, query, &equip.History); err != nil {
+			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+			return
+		}
+		if len(equip.History) == 0 {
+			unreported = append(unreported, fmt.Sprintf("・%s [報告ゼロ]", equip.Name))
+		} else if equip.History[0].Timestamp < latest.Google.EndTime {
+			unreported = append(unreported, fmt.Sprintf("・%s [直近:<@%s>]", equip.Name, equip.History[0].MemberID))
+		}
+	}
+
+	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+	channel := req.URL.Query().Get("channel")
+	if _, _, err := api.PostMessage(channel, slack.MsgOptionBlocks(
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+			"以下の備品は「%s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
+			latest.Google.Title,
+		), false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(
+			unreported, "\n",
+		), false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+			"%s/equips/report", server.HubBaseURL(),
+		), false, false), nil, nil),
+	)); err != nil {
+		log.Println("[ERROR]", 9001, err.Error())
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err})
+		return
+	}
+	render.JSON(http.StatusOK, map[string]any{
+		"event":      latest,
+		"unreported": unreported,
+	})
 }

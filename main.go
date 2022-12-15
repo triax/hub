@@ -93,6 +93,7 @@ func main() {
 	cron.Get("/final-call", tasks.FinalCall)
 	cron.Get("/equips/remind/bring", tasks.EquipsRemindBring)
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReport)
+	cron.Get("/equips/scan-unreported", tasks.EquipsScanUnreported)
 	cron.Get("/condition/form", tasks.ConditionFrom)
 	r.Mount("/tasks", cron)
 

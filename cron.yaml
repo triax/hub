@@ -34,6 +34,11 @@ cron:
   schedule: everyday 21:10
   timezone: Asia/Tokyo
 
+- description: 一定時間以上前の直近のイベントから現在にいたるまでに備品報告の更新が無いものをアラート
+  name: /tasks/equips/scan-unreported?oh=48&channel=staff
+  schedule: everyday 20:00
+  timezone: Asia/Tokyo
+
 - description: 運動「前」コンディショニングチェック
   url: /tasks/condition/form?channel=condi-check&label=before&from=01:00&to=23:00
   schedule: everyday 6:00
