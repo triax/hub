@@ -253,7 +253,7 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 
 	for _, equip := range all {
-		if !equip.ForPractice && !equip.ForGame {
+		if !equip.ShouldBringFor(latest) {
 			continue
 		}
 		query := datastore.NewQuery(models.KindCustody).Ancestor(equip.Key).Order("-Timestamp").Limit(1)
@@ -261,10 +261,7 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 			return
 		}
-		if len(equip.History) == 0 {
-			unreported = append(unreported, fmt.Sprintf("・%s [報告ゼロ]", equip.Name))
-		} else if equip.History[0].Timestamp < latest.Google.EndTime {
-			// unreported = append(unreported, fmt.Sprintf("・%s [直近:<@%s>]", equip.Name, equip.History[0].MemberID))
+		if !equip.HasBeenUpdatedSince(latest.Google.Start()) {
 			unreported = append(unreported, fmt.Sprintf("・<%s/equips/%d|%s>", server.HubBaseURL(), equip.ID, equip.Name))
 		}
 	}

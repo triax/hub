@@ -195,6 +195,19 @@ func (equip Equip) HasBeenUpdatedSince(t time.Time) bool {
 	return lastUpdated.After(t)
 }
 
+func (equip Equip) ShouldBringFor(event Event) bool {
+	if !equip.ForPractice && !equip.ForGame {
+		return false
+	}
+	if event.IsGame() {
+		return equip.ForGame
+	}
+	if event.IsPractice() {
+		return equip.ForPractice
+	}
+	return false
+}
+
 // Accessor methods
 func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Event, err error) {
 
