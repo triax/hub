@@ -288,7 +288,8 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	render.JSON(http.StatusOK, map[string]any{
-		"event":      latest,
+		"events":     events,
+		"latest":     latest,
 		"unreported": unreported,
 	})
 }
