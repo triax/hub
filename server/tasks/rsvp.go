@@ -64,6 +64,9 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 	unans := []models.Member{}
 
 	for id, member := range members {
+		if !member.IsExpectedToRSVP() {
+			continue
+		}
 		yes, role, err := member.IsMemberOf(roles...)
 		if err != nil {
 			render.JSON(http.StatusBadRequest, marmoset.P{"error": fmt.Errorf("title regexp compile error: %v", err)})
@@ -144,8 +147,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	for _, member := range members {
-		if member.Status == models.MSLimited || member.Status == models.MSInactive {
-			// 練習外部員や、休眠部員には、未回答メンションを送らなくてよい
+		if !member.IsExpectedToRSVP() {
 			continue
 		}
 		if p, ok := participations[member.Slack.ID]; ok {
