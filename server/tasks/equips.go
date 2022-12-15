@@ -262,7 +262,7 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if !equip.HasBeenUpdatedSince(latest.Google.Start()) {
-			unreported = append(unreported, fmt.Sprintf("・<%s/equips/%d|%s>", server.HubBaseURL(), equip.ID, equip.Name))
+			unreported = append(unreported, fmt.Sprintf("・<%s/equips/%d|%s>", server.HubBaseURL(), equip.Key.ID, equip.Name))
 		}
 	}
 
