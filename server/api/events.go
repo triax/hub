@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -18,9 +18,8 @@ import (
 )
 
 var (
-	TplLastMinuteRSVPChange = template.Must(template.New("").Parse(`以下の *{{if .event.IsGame}}試合{{else}}練習{{end}}* に回答変更がありました。
-*{{.event.Google.Start.Format "2006/01/02"}}* [{{.event.Google.Title}}] *{{.prev}} ⇒ {{.next}}*
-{{.member.Slack.Profile.RealName}} ({{if .member.Slack.Profile.Title}}{{.member.Slack.Profile.Title}}{{else}}ポジション未設定{{end}})`))
+	TplLastMinuteRSVPChange = template.Must(template.New("").Parse(`*{{.event.Google.Start.Format "2006/01/02"}}* {{.event.Google.Title}}
+*{{.prev}} ⇒ {{.next}}* {{.member.Slack.Profile.RealName}} ({{if .member.Slack.Profile.Title}}{{.member.Slack.Profile.Title}}{{else}}ポジション未設定{{end}})`))
 )
 
 func GetEvent(w http.ResponseWriter, req *http.Request) {
@@ -178,13 +177,10 @@ func shouldNoticeRSVPChangeToSlack(event models.Event, prev, next models.Partici
 }
 
 func buildSlackMessageOfLastMinuteRSVPChange(m models.Member, e models.Event, p, n models.ParticipationType) (string, []slack.MsgOption) {
-	buf := bytes.NewBuffer(nil)
-	if err := TplLastMinuteRSVPChange.Execute(buf, map[string]interface{}{"member": m, "event": e, "prev": p, "next": n}); err != nil {
-		return "tech", []slack.MsgOption{
-			slack.MsgOptionBlocks(slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, err.Error(), false, false), nil, nil)),
-		}
-	}
 	return "practice", []slack.MsgOption{
-		slack.MsgOptionBlocks(slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, buf.String(), false, false), nil, nil)),
+		slack.MsgOptionBlocks(
+			slack.NewContextBlock("", slack.NewTextBlockObject(slack.MarkdownType, e.Google.Start().Format("2006/01/02 ")+e.Google.Title, false, false)),
+			slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*%s ⇒ %s* %s", p, n, m.Name()), false, false), nil, nil),
+		),
 	}
 }
