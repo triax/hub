@@ -223,8 +223,8 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 	ctx := req.Context()
 
-	// oh（offset_hours）で指定されている時間から現在に至るまでのイベントを取得.
-	events, err := models.FindEventsBetween(ctx, time.Now().Add(time.Duration(-1*offsetHours)*time.Hour), time.Now())
+	// oh（offset_hours）で指定されている時間よりも前のイベントを取得.
+	events, err := models.FindEventsBetween(ctx, time.Time{}, time.Now().Add(time.Duration(-1*offsetHours)*time.Hour))
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
@@ -264,7 +264,8 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		if len(equip.History) == 0 {
 			unreported = append(unreported, fmt.Sprintf("・%s [報告ゼロ]", equip.Name))
 		} else if equip.History[0].Timestamp < latest.Google.EndTime {
-			unreported = append(unreported, fmt.Sprintf("・%s [直近:<@%s>]", equip.Name, equip.History[0].MemberID))
+			// unreported = append(unreported, fmt.Sprintf("・%s [直近:<@%s>]", equip.Name, equip.History[0].MemberID))
+			unreported = append(unreported, fmt.Sprintf("・<%s/equips/%d|%s>", server.HubBaseURL(), equip.ID, equip.Name))
 		}
 	}
 
@@ -272,12 +273,15 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	channel := req.URL.Query().Get("channel")
 	if _, _, err := api.PostMessage(channel, slack.MsgOptionBlocks(
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"以下の備品は「%s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
+			"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
+			latest.Google.Start().Format("2006/01/02"),
 			latest.Google.Title,
 		), false, false), nil, nil),
+		slack.NewDividerBlock(),
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(
 			unreported, "\n",
 		), false, false), nil, nil),
+		slack.NewDividerBlock(),
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
 			"%s/equips/report", server.HubBaseURL(),
 		), false, false), nil, nil),
