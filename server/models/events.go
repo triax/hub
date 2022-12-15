@@ -100,13 +100,13 @@ func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Ev
 
 	query := datastore.NewQuery(KindEvent)
 	if !from.IsZero() {
-		query.Filter("Google.StartTime >=", from.Unix()*1000)
+		query = query.Filter("Google.StartTime >=", from.Unix()*1000)
 	}
 	if !to.IsZero() {
-		query.Filter("Google.StartTime <", to.Unix()*1000)
+		query = query.Filter("Google.StartTime <", to.Unix()*1000)
 	}
-	query.Order("-Google.StartTime")
-	// query.Limit(1)
+	query = query.Order("-Google.StartTime")
+	query = query.Limit(10)
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
