@@ -105,8 +105,10 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	events := []models.Event{}
+	within := 2 * 7 * 24 * time.Hour // 2週間以内
 	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindEvent).
 		Filter("Google.StartTime >", time.Now().Unix()*1000).
+		Filter("Google.StartTime <", time.Now().Add(within).Unix()*1000).
 		Order("Google.StartTime").Limit(1), &events); err != nil {
 		log.Println("[ERROR]", 4002, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
