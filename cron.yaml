@@ -35,7 +35,7 @@ cron:
   timezone: Asia/Tokyo
 
 - description: 一定時間以上前の直近のイベントから現在にいたるまでに備品報告の更新が無いものをアラート
-  name: /tasks/equips/scan-unreported?oh=48&channel=staff
+  url: /tasks/equips/scan-unreported?oh=48&channel=staff
   schedule: everyday 20:00
   timezone: Asia/Tokyo
 
