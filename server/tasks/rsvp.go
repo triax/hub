@@ -19,8 +19,6 @@ import (
 )
 
 var (
-	helplink = os.Getenv("HELP_PAGE_URL")
-
 	rsvp = template.Must(template.New("x").Parse(
 		`参加:		{{len (index . "join")}}
 不参加:	{{len (index . "absent")}}
@@ -224,7 +222,7 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://avatars.slack-edge.com/2021-08-16/2369588425687_e490e60131c70bf52eee_192.png", "Triax Team Hub")),
 		),
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "使い方やログイン方法が分からない場合は、下記のリンクで詳しい解説があるので、ご参考ください。\n*<"+helplink+"|【hubの使い方】>*", false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, "使い方やログイン方法が分からない場合は、下記のリンクで詳しい解説があるので、ご参考ください。\n*<"+server.HubHelpPageURL+"|【hubの使い方】>*", false, false),
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://drive.google.com/uc?id=1OdopRR5hbOCoAftxfc4enVPbDHF37jcj", "How to use")),
 		),
 		slack.NewDividerBlock(),
