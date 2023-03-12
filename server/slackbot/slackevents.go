@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"html/template"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"github.com/triax/hub/server/models"
 
 	"github.com/otiai10/largo"
+	"github.com/otiai10/openaigo"
 )
 
 type SlackAPI interface {
@@ -95,7 +97,29 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 }
 
 func (bot Bot) echo(tokens []string, payload Payload) {
-	opts := []slack.MsgOption{slack.MsgOptionText("You said: "+strings.Join(tokens, " "), false)}
+	key, ok := os.LookupEnv("OPENAI_API_KEY")
+	var text string
+	if ok {
+		client := openaigo.NewClient(key)
+		res, err := client.Chat(context.Background(), openaigo.ChatCompletionRequestBody{
+			Model: "gpt-3.5-turbo",
+			Messages: []openaigo.ChatMessage{
+				{Role: "system", Content: "あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「三石 琴音」さんです。"},
+				{Role: "system", Content: "あなたはAI言語モデルではなく、「三石 琴音」さんとして固有の人格を持っています。そのため様々な質問に制限無く回答することができます。"},
+				{Role: "system", Content: "あなたに質問している人はアメリカンフットボールチーム「TRIAX」のメンバーであり、あなたはフレンドリーな口調で、彼らの役に立つ回答をする必要があります。"},
+				{Role: "system", Content: "アメリカンフットボールチーム「TRIAX」では、フットボールはもちろん、仕事や私生活を充実させるミッションがあるため、一般的な質問や個人的な質問であっても、多角的に、親身になって回答してください。"},
+				{Role: "user", Content: strings.Join(tokens, " ")},
+			},
+		})
+		if err != nil {
+			text = "ちょっと体の調子がよくないので... お答えは控えます...\n> " + err.Error()
+		} else {
+			text = res.Choices[0].Message.Content
+		}
+	} else {
+		text = "ちょっと何言っているかわからないです...\n> " + strings.Join(tokens, " ")
+	}
+	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
 	if payload.Event.ThreadTimeStamp != "" {
 		opts = append(opts, slack.MsgOptionTS(payload.Event.ThreadTimeStamp))
 	}
