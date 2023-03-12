@@ -58,16 +58,15 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
-
 	switch {
 	case payload.Type == slackevents.URLVerification:
 		bot.onURLVerification(req, w, payload)
 	case payload.Event.Type == slackevents.AppMention:
-		bot.onMention(req, w, payload)
+		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte("ok"))
+		go bot.onMention(req, w, payload)
 	default:
 		log.Printf("UNKNOWN EVENT TYPE: %+v\n", payload)
-		w.WriteHeader(http.StatusNotFound)
 	}
 }
 

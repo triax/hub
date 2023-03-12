@@ -124,7 +124,7 @@ jobs:
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
-            \"text\": \":robot_face: New Production Deploy\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_MERGE_COMMIT}..main\"
+            \"text\": \"あたらしいバージョンがリリースされました！ :tada:\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_MERGE_COMMIT}..main\"
           }" \
           -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
