@@ -66,7 +66,7 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("ok"))
 		go bot.onMention(req, w, payload)
 	default:
-		log.Printf("UNKNOWN EVENT TYPE: %+v\n", payload)
+		log.Printf("UNKNOWN EVENT TYPE: %+v\n", payload.Event.Type)
 	}
 }
 
