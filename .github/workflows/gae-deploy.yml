@@ -75,7 +75,7 @@ jobs:
       env:
         APP_SECRETS_DEV_YAML: ${{ secrets.APP_SECRETS_DEV_YAML }}
     - name: Deploy DEV
-      run: gcloud app deploy ./app.dev.yaml --quiet
+      run: gcloud app deploy ./app.dev.yaml --quiet --no-cache
 
   gae-deploy-prod:
     name: GAE Deploy PROD
@@ -112,9 +112,9 @@ jobs:
       env:
         APP_SECRETS_PROD_YAML: ${{ secrets.APP_SECRETS_PROD_YAML }}
     - name: Deploy PROD
-      run: gcloud app deploy ./app.yaml --quiet
+      run: gcloud app deploy ./app.yaml --quiet --no-cache
     - name: Deploy CRON
-      run: gcloud app deploy ./cron.yaml --quiet
+      run: gcloud app deploy ./cron.yaml --quiet --no-cache
     - name: Announce on Slack
       run: |
         PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
