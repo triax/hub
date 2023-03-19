@@ -12,6 +12,7 @@
 # below:
 .git
 .gitignore
+.github
 
 client/*
 !client/dest
@@ -35,3 +36,7 @@ package-lock.json
 
 # Editors
 .vscode
+
+# App
+__tests__
+dev

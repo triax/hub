@@ -25,6 +25,10 @@ type (
 	MemberStatus string
 )
 
+var (
+	memberCache = map[string]Member{}
+)
+
 const (
 	// MSActive 通常のメンバー. 出欠回答必須
 	MSActive MemberStatus = "active"
@@ -103,4 +107,19 @@ func MembersToDict(members []Member) map[string]Member {
 		dict[m.Slack.ID] = m
 	}
 	return dict
+}
+
+func GetMemberInfoByCache(ctx context.Context, id string) (m Member, err error) {
+	if m, ok := memberCache[id]; ok {
+		return m, nil
+	}
+	memberCache, err = GetAllMembersAsDict(ctx)
+	if err != nil {
+		return m, err
+	}
+	if m, ok := memberCache[id]; !ok {
+		return m, fmt.Errorf("not found for id:%v", id)
+	} else {
+		return m, nil
+	}
 }
