@@ -237,8 +237,22 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	latest := events[0]
 
 	all := []models.Equip{}
-	// unreported := []models.Equip{}
-	unreported := []string{}
+	unreported := []models.Equip{}
+	blocks := []slack.Block{
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+			"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。現在の備品の所在を登録してください。",
+			latest.Google.Start().Format("2006/01/02"),
+			latest.Google.Title,
+		), false, false), nil, nil),
+	}
+
+	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+	channel := req.URL.Query().Get("channel")
+	_, ts, err := api.PostMessage(channel, slack.MsgOptionBlocks(blocks...))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
@@ -261,32 +275,59 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 			return
 		}
-		if !equip.HasBeenUpdatedSince(latest.Google.Start()) {
-			unreported = append(unreported, fmt.Sprintf("・<%s/equips/%d|%s>", server.HubBaseURL(), equip.Key.ID, equip.Name))
+		if equip.HasBeenUpdatedSince(latest.Google.Start()) {
+			continue
+		}
+		text := equip.Name
+		if len(equip.History) > 0 {
+			if m, err := models.GetMemberInfoByCache(ctx, equip.History[0].MemberID); err == nil {
+				text += "\n(前回: " + m.Name() + ")"
+			}
+		}
+		unreported = append(unreported, equip)
+
+		block := slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil,
+			slack.NewAccessory(slack.NewOptionsSelectBlockElement("users_select", nil, fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, latest.Google.Title))),
+		)
+
+		_, _, err = api.PostMessage(channel, slack.MsgOptionBlocks(block), slack.MsgOptionTS(ts))
+		if err != nil {
+			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+			return
 		}
 	}
 
-	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	channel := req.URL.Query().Get("channel")
-	if _, _, err := api.PostMessage(channel, slack.MsgOptionBlocks(
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
-			latest.Google.Start().Format("2006/01/02"),
-			latest.Google.Title,
-		), false, false), nil, nil),
-		slack.NewDividerBlock(),
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(
-			unreported, "\n",
-		), false, false), nil, nil),
-		slack.NewDividerBlock(),
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"%s/equips/report", server.HubBaseURL(),
-		), false, false), nil, nil),
-	)); err != nil {
-		log.Println("[ERROR]", 9001, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err})
+	if len(unreported) == 0 {
+		render.JSON(http.StatusOK, map[string]any{
+			"offset_hours": offsetHours,
+			"latest_event": latest.Google,
+			"unreported":   unreported,
+			"blocks":       blocks,
+		})
 		return
 	}
+
+	// if _, _, err := api.PostMessage(channel, slack.MsgOptionBlocks(
+	// 	blocks...,
+	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+	// // 	"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
+	// // 	latest.Google.Start().Format("2006/01/02"),
+	// // 	latest.Google.Title,
+	// // ), false, false), nil, nil),
+	// // slack.NewDividerBlock(),
+	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(
+	// // 	unreported, "\n",
+	// // ), false, false), nil, nil),
+	// // slack.NewDividerBlock(),
+	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+	// // 	"%s/equips/report", server.HubBaseURL(),
+	// // ), false, false), nil, nil),
+	// )); err != nil {
+	// 	log.Println("[ERROR]", 9001, err.Error())
+	// 	render.JSON(http.StatusInternalServerError, marmoset.P{"error": err})
+	// 	return
+	// }
 	render.JSON(http.StatusOK, map[string]any{
 		"events":     len(events),
 		"latest":     latest,
