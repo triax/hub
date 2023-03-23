@@ -1,6 +1,7 @@
 package models
 
 import (
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +27,10 @@ type (
 	}
 )
 
+var (
+	EquipmentExceptionExpression = regexp.MustCompile("!\\(([^)]+)\\)")
+)
+
 func (equip Equip) NeedsCharge() bool {
 	return strings.HasPrefix(equip.Name, "ビデオ")
 }
@@ -42,11 +47,21 @@ func (equip Equip) ShouldBringFor(event Event) bool {
 	if !equip.ForPractice && !equip.ForGame {
 		return false
 	}
-	if event.IsGame() {
-		return equip.ForGame
+	if event.IsGame() && equip.ForGame {
+		return true
 	}
-	if event.IsPractice() {
+	if !event.IsPractice() || !equip.ForPractice {
+		return false
+	}
+	// 以下、練習用の特殊ケース
+	match := EquipmentExceptionExpression.FindStringSubmatch(equip.Description)
+	if len(match) < 2 {
 		return equip.ForPractice
 	}
-	return false
+	for _, exception := range strings.Split(match[1], ",") {
+		if strings.Contains(event.Google.Title, exception) {
+			return false
+		}
+	}
+	return equip.ForPractice
 }
