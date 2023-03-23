@@ -63,7 +63,7 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 3) 全Equipsの所持者を取得する
+	// 3) 全Equipsを取得する
 	equips := []models.Equip{}
 	query = datastore.NewQuery(models.KindEquip)
 	if ev.IsGame() {
@@ -76,20 +76,27 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
-	for i, e := range equips {
-		equips[i].ID = e.Key.ID
+
+	// 4) 必要なequipの場合は所有者を取得する
+	targets := []models.Equip{}
+	for i, eq := range equips {
+		if !eq.ShouldBringFor(ev) {
+			continue
+		}
+		equips[i].ID = eq.Key.ID
 		// 最新のHistoryだけ収集する
-		query := datastore.NewQuery(models.KindCustody).Ancestor(e.Key).Order("-Timestamp").Limit(1)
+		query := datastore.NewQuery(models.KindCustody).Ancestor(eq.Key).Order("-Timestamp").Limit(1)
 		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
+		targets = append(targets, equips[i])
 	}
 
-	// 4) 全Equipsの所持者に対してSlackにメンションを送る
+	// 5) 該当するEquipsの所持者に対してSlackにメンションを送る
 	pats, err := ev.Participations()
 	if err != nil {
 		log.Println("[ERROR]", 8004, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 	}
-	alloc := summarizeEquipAllocForTheEvent(ev, equips, pats)
+	alloc := summarizeEquipAllocForTheEvent(ev, targets, pats)
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 	msg := buildEquipsReminderMsg(alloc)
