@@ -100,7 +100,7 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 	msg := buildEquipsReminderMsg(alloc)
-	if _, _, err := api.PostMessageContext(ctx, "random", msg); err != nil {
+	if _, _, err := api.PostMessageContext(ctx, "general", msg); err != nil {
 		log.Println("[ERROR]", 8005, err.Error())
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 	}
@@ -205,7 +205,7 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 	}
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	channel := "random"
+	channel := "general"
 
 	if _, _, err = api.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
 		slack.NewSectionBlock(
