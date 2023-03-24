@@ -171,7 +171,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 
 	channel := req.URL.Query().Get("channel")
 	if channel == "" {
-		channel = "random"
+		channel = "general"
 	}
 	link := "<" + server.HubBaseURL() + "|:football: :football: :football: " + server.HubBaseURL() + ">"
 	text := bytes.NewBuffer(nil)
