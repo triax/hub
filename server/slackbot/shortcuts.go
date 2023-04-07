@@ -53,9 +53,15 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 		// ev := u.Query().Get("ev")
 
 		ctx := context.Background()
+		member, err := models.GetMemberInfoByCache(ctx, mid)
+		if err != nil {
+			fmt.Println(err) // TODO: Error log
+			return
+		}
+
 		client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println(err) // TODO: Error log
 			return
 		}
 		defer client.Close()
@@ -63,14 +69,19 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 			MemberID:  mid,
 			Timestamp: time.Now().Unix() * 1000,
 		}
-		id, _ := strconv.ParseInt(eid, 10, 32)
-		_, err = client.Put(ctx, datastore.IncompleteKey(models.KindCustody, datastore.IDKey(models.KindEquip, id, nil)), custody)
-		if err != nil {
-			fmt.Println(err)
+		eidnumeric, _ := strconv.Atoi(eid)
+		if _, err = client.Put(ctx, datastore.IncompleteKey(
+			models.KindCustody,
+			datastore.IDKey(models.KindEquip, int64(eidnumeric), nil)),
+			custody,
+		); err != nil {
+			fmt.Println(err) // TODO: Error log
 			return
 		}
 
-		http.Post(payload.ResponseURL, "application/json", strings.NewReader(fmt.Sprintf(`{"text":":check: %s :bow:"}`, eid)))
+		http.Post(payload.ResponseURL, "application/json", strings.NewReader(
+			fmt.Sprintf(`{"text":":white_check_mark: %s ⇒ %s\n:bow:"}`, payload.Message.Text, member.Name()),
+		))
 	}
 
 	// for i, act := range payload.ActionCallback.BlockActions {
