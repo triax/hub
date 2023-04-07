@@ -165,12 +165,13 @@ func shouldNoticeRSVPChangeToSlack(event models.Event, prev, next models.Partici
 	if prev == next {
 		return false
 	}
-	// 試合なら問答無用に通知
+	// 試合なら「欠席」の場合通知
 	if event.IsGame() {
-		return true
+		return next == models.PTAbsent
 	}
-	// 48時間以内のものは、いずれにしても通知
-	if time.Until(event.Google.Start()) <= 48*time.Hour {
+	// 以下、練習など: 水曜正午から、という想定のもと、計算めんどくさいので決め打ちで
+	// 水曜 12 + 木曜 24 + 金曜 24 + 土曜 7 = 67時間前 としてます.
+	if time.Until(event.Google.Start()) <= 67*time.Hour {
 		return true
 	}
 	return false
