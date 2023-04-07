@@ -307,6 +307,7 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 
 	if len(unreported) == 0 {
 		render.JSON(http.StatusOK, map[string]any{
+			"events":       len(events),
 			"offset_hours": offsetHours,
 			"latest_event": latest.Google,
 			"unreported":   unreported,
@@ -336,8 +337,10 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	// 	return
 	// }
 	render.JSON(http.StatusOK, map[string]any{
-		"events":     len(events),
-		"latest":     latest,
-		"unreported": unreported,
+		"events":       len(events),
+		"offset_hours": offsetHours,
+		"latest_event": latest.Google,
+		"unreported":   unreported,
+		"blocks":       blocks,
 	})
 }
