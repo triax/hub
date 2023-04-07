@@ -69,15 +69,18 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 			MemberID:  mid,
 			Timestamp: time.Now().Unix() * 1000,
 		}
-		id, _ := strconv.ParseInt(eid, 10, 32)
-		_, err = client.Put(ctx, datastore.IncompleteKey(models.KindCustody, datastore.IDKey(models.KindEquip, id, nil)), custody)
-		if err != nil {
-			fmt.Println(err)
+		eidnumeric, _ := strconv.Atoi(eid)
+		if _, err = client.Put(ctx, datastore.IncompleteKey(
+			models.KindCustody,
+			datastore.IDKey(models.KindEquip, int64(eidnumeric), nil)),
+			custody,
+		); err != nil {
+			fmt.Println(err) // TODO: Error log
 			return
 		}
 
 		http.Post(payload.ResponseURL, "application/json", strings.NewReader(
-			fmt.Sprintf(`{"text":":check: [eid:%s,id:%d] ⇒ %s\n:bow:"}`, eid, id, member.Name()),
+			fmt.Sprintf(`{"text":":white_check_mark: %s ⇒ %s\n:bow:"}`, payload.Message.Text, member.Name()),
 		))
 	}
 
