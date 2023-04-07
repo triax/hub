@@ -305,37 +305,6 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if len(unreported) == 0 {
-		render.JSON(http.StatusOK, map[string]any{
-			"events":       len(events),
-			"offset_hours": offsetHours,
-			"latest_event": latest.Google,
-			"unreported":   unreported,
-			"blocks":       blocks,
-		})
-		return
-	}
-
-	// if _, _, err := api.PostMessage(channel, slack.MsgOptionBlocks(
-	// 	blocks...,
-	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-	// // 	"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。必要なら代理報告機能を使って、備品の所在を登録してください。",
-	// // 	latest.Google.Start().Format("2006/01/02"),
-	// // 	latest.Google.Title,
-	// // ), false, false), nil, nil),
-	// // slack.NewDividerBlock(),
-	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(
-	// // 	unreported, "\n",
-	// // ), false, false), nil, nil),
-	// // slack.NewDividerBlock(),
-	// // slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-	// // 	"%s/equips/report", server.HubBaseURL(),
-	// // ), false, false), nil, nil),
-	// )); err != nil {
-	// 	log.Println("[ERROR]", 9001, err.Error())
-	// 	render.JSON(http.StatusInternalServerError, marmoset.P{"error": err})
-	// 	return
-	// }
 	render.JSON(http.StatusOK, map[string]any{
 		"events":       len(events),
 		"offset_hours": offsetHours,

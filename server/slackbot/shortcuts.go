@@ -53,9 +53,15 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 		// ev := u.Query().Get("ev")
 
 		ctx := context.Background()
+		member, err := models.GetMemberInfoByCache(ctx, mid)
+		if err != nil {
+			fmt.Println(err) // TODO: Error log
+			return
+		}
+
 		client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println(err) // TODO: Error log
 			return
 		}
 		defer client.Close()
@@ -70,7 +76,9 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		http.Post(payload.ResponseURL, "application/json", strings.NewReader(fmt.Sprintf(`{"text":":check: %s :bow:"}`, eid)))
+		http.Post(payload.ResponseURL, "application/json", strings.NewReader(
+			fmt.Sprintf(`{"text":":check: [eid:%s,id:%d] ⇒ %s\n:bow:"}`, eid, id, member.Name()),
+		))
 	}
 
 	// for i, act := range payload.ActionCallback.BlockActions {
