@@ -83,7 +83,8 @@ func (t ParticipationType) Unanswered() bool {
 	return t == "" || t == PTUnanswered
 }
 
-// Accessor methods
+// timeboud[0] == いつから
+// timeboud[1] == いつまで
 func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Event, err error) {
 
 	if len(timebound) == 0 {

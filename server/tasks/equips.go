@@ -230,8 +230,8 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 	ctx := req.Context()
 
-	// oh（offset_hours）で指定されている時間よりも前のイベントを取得.
-	events, err := models.FindEventsBetween(ctx, time.Time{}, time.Now().Add(time.Duration(-1*offsetHours)*time.Hour))
+	// 最大10件のイベントをすべて取得
+	events, err := models.FindEventsBetween(ctx, time.Time{}, time.Now())
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
@@ -242,12 +242,22 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 
 	latest := events[0]
+	if time.Now().Add(-1 * time.Duration(offsetHours) * time.Hour).Before(latest.Google.Start()) {
+		render.JSON(http.StatusOK, map[string]any{
+			"offset_hours": offsetHours,
+			"latest":       latest.Google,
+			"start":        latest.Google.Start(),
+			"message":      fmt.Sprintf("このイベントは、発生から%d時間経っていないので、まだスキャンしない", offsetHours),
+		})
+		return
+	}
 
 	all := []models.Equip{}
 	unreported := []models.Equip{}
 	blocks := []slack.Block{
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"以下の備品は「%s: %s」から現時点までで備品報告の無いものです。現在の備品の所在を登録してください。",
+			"以下の備品は<%s/events/%s|「%s: %s」>から現時点までで備品報告の無いものです。現在の備品の所在を登録してください。",
+			server.HubBaseURL(), latest.Google.ID,
 			latest.Google.Start().Format("2006/01/02"),
 			latest.Google.Title,
 		), false, false), nil, nil),
@@ -288,7 +298,7 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		text := equip.Name
 		if len(equip.History) > 0 {
 			if m, err := models.GetMemberInfoByCache(ctx, equip.History[0].MemberID); err == nil {
-				text += "\n(前回: " + m.Name() + ")"
+				text += fmt.Sprintf("\n(前回: <%s/equips/%d|%s>)", server.HubBaseURL(), equip.Key.ID, m.Name())
 			}
 		}
 		unreported = append(unreported, equip)
