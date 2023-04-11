@@ -252,8 +252,47 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+	defer client.Close()
+
+	// 全件取得
 	all := []models.Equip{}
+	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+
+	// 未報告をスキャン
 	unreported := []models.Equip{}
+	for _, equip := range all {
+		if !equip.ShouldBringFor(latest) {
+			continue
+		}
+		query := datastore.NewQuery(models.KindCustody).Ancestor(equip.Key).Order("-Timestamp").Limit(1)
+		if _, err = client.GetAll(ctx, query, &equip.History); err != nil {
+			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+			return
+		}
+		if equip.HasBeenUpdatedSince(latest.Google.Start()) {
+			continue
+		}
+		unreported = append(unreported, equip)
+	}
+
+	if len(unreported) == 0 {
+		render.JSON(http.StatusOK, map[string]any{
+			"events":       len(events),
+			"offset_hours": offsetHours,
+			"latest_event": latest.Google,
+			"unreported":   unreported,
+		})
+		return
+	}
+
 	blocks := []slack.Block{
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
 			"以下の備品は<%s/events/%s|「%s: %s」>から現時点までで備品報告の無いものです。現在の備品の所在を登録してください。",
@@ -271,43 +310,17 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-	if err != nil {
-		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
-		return
-	}
-	defer client.Close()
-
-	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
-		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
-		return
-	}
-
-	for _, equip := range all {
-		if !equip.ShouldBringFor(latest) {
-			continue
-		}
-		query := datastore.NewQuery(models.KindCustody).Ancestor(equip.Key).Order("-Timestamp").Limit(1)
-		if _, err = client.GetAll(ctx, query, &equip.History); err != nil {
-			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
-			return
-		}
-		if equip.HasBeenUpdatedSince(latest.Google.Start()) {
-			continue
-		}
+	for _, equip := range unreported {
 		text := equip.Name
 		if len(equip.History) > 0 {
 			if m, err := models.GetMemberInfoByCache(ctx, equip.History[0].MemberID); err == nil {
 				text += fmt.Sprintf("\n(前回: <%s/equips/%d|%s>)", server.HubBaseURL(), equip.Key.ID, m.Name())
 			}
 		}
-		unreported = append(unreported, equip)
-
 		block := slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil,
 			slack.NewAccessory(slack.NewOptionsSelectBlockElement("users_select", nil, fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, latest.Google.Title))),
 		)
-
 		_, _, err = api.PostMessage(channel, slack.MsgOptionBlocks(block), slack.MsgOptionTS(ts))
 		if err != nil {
 			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
@@ -320,6 +333,6 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		"offset_hours": offsetHours,
 		"latest_event": latest.Google,
 		"unreported":   unreported,
-		"blocks":       blocks,
 	})
+
 }

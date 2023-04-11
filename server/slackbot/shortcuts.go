@@ -80,14 +80,11 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 		}
 
 		http.Post(payload.ResponseURL, "application/json", strings.NewReader(
-			fmt.Sprintf(`{"text":":white_check_mark: %s ⇒ %s\n:bow:"}`, payload.Message.Text, member.Name()),
+			fmt.Sprintf(`{"text":":white_check_mark: %s ⇒ %s"}`, payload.Message.Text, member.Name()),
 		))
-	}
 
-	// for i, act := range payload.ActionCallback.BlockActions {
-	// 	fmt.Printf("[%d]\t%+v\n", i, act)
-	// 	fmt.Println(act.SelectedUser)
-	// }
+		// TODO: 全回答フィードバック
+	}
 
 	if err != nil {
 		log.Println(err)
