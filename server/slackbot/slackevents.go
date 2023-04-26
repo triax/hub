@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -69,7 +71,13 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
 		go bot.onMention(req, w, payload)
+	case payload.Event["type"] == slackevents.Message:
+		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte("ok"))
+		go bot.onMessage(req, w, payload)
 	default:
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
 		log.Printf("UNKNOWN EVENT TYPE: %+v\n", payload.Event["type"])
 	}
 }
@@ -102,6 +110,73 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 		bot.onEnvDump(req, w, event)
 	default:
 		bot.echo(tokens, event)
+	}
+}
+
+func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Payload) {
+	event := slackevents.MessageEvent{}
+	buf := bytes.NewBuffer(nil)
+	json.NewEncoder(buf).Encode(payload.Event)
+	json.NewDecoder(buf).Decode(&event)
+
+	switch event.SubType {
+	case "bot_message", "message_changed", "message_deleted":
+		return
+	}
+
+	exp := regexp.MustCompile("<!here>|<!channel>") // TODO: 対象ユーザへのメンションを含める
+	if !exp.MatchString(event.Text) {
+		return
+	}
+
+	// TODO: 対象となるチャンネルを絞る
+
+	// {{{ TODO: module
+	params := url.Values{}
+	params.Add("auth_key", os.Getenv("DEEPL_API_TOKEN"))
+	params.Add("text", strings.Trim(exp.ReplaceAllString(event.Text, ""), " 　"))
+	params.Add("target_lang", "FR")
+	params.Add("source_lang", "JA")
+	deepl, err := http.NewRequestWithContext(context.Background(), "GET", "https://api-free.deepl.com/v2/translate"+"?"+params.Encode(), nil)
+	if err != nil {
+		log.Println("http_request_initialization_failed:", err)
+		return // err
+	}
+	res, err := http.DefaultClient.Do(deepl)
+	if err != nil {
+		log.Println("http_execution_failed:", err)
+		return // err
+	}
+	translated := struct {
+		Translations []struct {
+			Text string `json:"text"`
+		} `json:"translations"`
+	}{}
+	json.NewDecoder(res.Body).Decode(&translated)
+	if len(translated.Translations) == 0 {
+		log.Println("translation_notfound", translated)
+		return // fmt.Errorf("failed to translate with 0 entry")
+	}
+	// }}}
+
+	var text string
+	team := os.Getenv("SLACK_WORKSPACE_NAME")
+	if team == "" {
+		team = os.Getenv("GOOGLE_CLOUD_PROJECT")
+	}
+	if team != "" {
+		permalink := fmt.Sprintf("https://%s.slack.com/archives/%s/p%s", team, event.Channel, event.TimeStamp)
+		text = fmt.Sprintf("<%s|_Ce message_> _m'a semblé important, donc je l'ai traduit_\n", permalink)
+	} else {
+		text = "_Ce message m'a semblé important, donc je l'ai traduit:_\n"
+	}
+	for _, line := range strings.Split(translated.Translations[0].Text, "\n") {
+		text += "> " + line + "\n"
+	}
+
+	_, _, err = bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText(text, false))
+	if err != nil {
+		log.Println("post_message:", err)
 	}
 }
 
