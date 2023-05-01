@@ -7,6 +7,7 @@ import (
 
 	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
+	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
@@ -68,6 +69,7 @@ func main() {
 	bot := slackbot.Bot{
 		VerificationToken: os.Getenv("SLACK_BOT_EVENTS_VERIFICATION_TOKEN"),
 		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
+		ChatGPT:           openaigo.NewClient(os.Getenv("OPENAI_API_KEY")),
 	}
 	r.Post("/slack/events", bot.Webhook)
 	r.Post("/slack/shortcuts", bot.Shortcuts)

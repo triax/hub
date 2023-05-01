@@ -8,7 +8,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -28,17 +27,30 @@ const (
 	BotAssistantName = "佐藤 朋美"
 )
 
+var (
+	TranslatedChannelSuffix = regexp.MustCompile(`_(?P<lang>[a-zA-Z]{2})$`)
+)
+
 type SlackAPI interface {
 	// 使うAPIだけ追加する
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
+	GetUserInfo(user string) (*slack.User, error)
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
 	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
+	GetConversations(params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
+	GetConversationInfo(channelID string, includeLocale bool) (*slack.Channel, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
+}
+
+// This interface represents *openaigo.Client.
+type ChatGPT interface {
+	Chat(ctx context.Context, req openaigo.ChatCompletionRequestBody) (openaigo.ChatCompletionResponse, error)
 }
 
 type Bot struct {
 	VerificationToken string
 	SlackAPI          SlackAPI
+	ChatGPT           ChatGPT
 }
 
 type (
@@ -114,70 +126,93 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 }
 
 func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Payload) {
+
 	event := slackevents.MessageEvent{}
 	buf := bytes.NewBuffer(nil)
 	json.NewEncoder(buf).Encode(payload.Event)
 	json.NewDecoder(buf).Decode(&event)
 
 	switch event.SubType {
-	case "bot_message", "message_changed", "message_deleted":
+	case "bot_message", "message_changed", "message_deleted", "channel_join":
+		return
+	}
+	if event.BotID != "" {
 		return
 	}
 
-	exp := regexp.MustCompile("<!here>|<!channel>") // TODO: 対象ユーザへのメンションを含める
-	if !exp.MatchString(event.Text) {
+	orig, err := bot.SlackAPI.GetConversationInfo(event.Channel, false)
+	if err != nil {
+		log.Println("get_channel_info:", err)
 		return
 	}
 
-	// TODO: 対象となるチャンネルを絞る
+	var targetName string
+	var targetLang string
+	var sourceLang string
+	m := TranslatedChannelSuffix.FindStringSubmatch(orig.Name)
+	if len(m) > 1 {
+		sourceLang = m[1]
+		targetLang = "ja"
+		targetName = orig.Name[:len(orig.Name)-len(m[0])]
+	} else {
+		sourceLang = "ja"
+		targetLang = "fr" // TODO: フランス語だけか？
+		targetName = orig.Name + "_" + targetLang
+	}
 
-	// {{{ TODO: module
-	params := url.Values{}
-	params.Add("auth_key", os.Getenv("DEEPL_API_TOKEN"))
-	params.Add("text", strings.Trim(exp.ReplaceAllString(event.Text, ""), " 　"))
-	params.Add("target_lang", "FR")
-	params.Add("source_lang", "JA")
-	deepl, err := http.NewRequestWithContext(context.Background(), "GET", "https://api-free.deepl.com/v2/translate"+"?"+params.Encode(), nil)
+	target, err := bot.getTranslationTargetChanne(targetName)
 	if err != nil {
-		log.Println("http_request_initialization_failed:", err)
-		return // err
+		log.Println("get_translation_target_channel:", err)
+		return
 	}
-	res, err := http.DefaultClient.Do(deepl)
+
+	ctx := context.Background()
+	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatCompletionRequestBody{
+		Messages: []openaigo.ChatMessage{
+			{Role: "system", Content: "You are a great translator!"},
+			{Role: "user", Content: fmt.Sprintf("I want to translate this message from `%s` to `%s`:\n%s", sourceLang, targetLang, event.Text)},
+		},
+		Model: openaigo.GPT3_5Turbo,
+	})
 	if err != nil {
-		log.Println("http_execution_failed:", err)
-		return // err
+		log.Println("chatgpt_translation:", err)
+		return
 	}
-	translated := struct {
-		Translations []struct {
-			Text string `json:"text"`
-		} `json:"translations"`
-	}{}
-	json.NewDecoder(res.Body).Decode(&translated)
-	if len(translated.Translations) == 0 {
-		log.Println("translation_notfound", translated)
-		return // fmt.Errorf("failed to translate with 0 entry")
+	text := res.Choices[0].Message.Content
+
+	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
+
+	// {{{
+	user, err := bot.SlackAPI.GetUserInfo(event.User)
+	// member, err := models.GetMemberInfoByCache(ctx, event.User)
+	if err == nil {
+		opts = append(opts, slack.MsgOptionUsername(user.Profile.DisplayName), slack.MsgOptionIconURL(user.Profile.Image192))
+	} else {
+		log.Println("get_member_info:", err)
 	}
 	// }}}
 
-	var text string
-	team := os.Getenv("SLACK_WORKSPACE_NAME")
-	if team == "" {
-		team = os.Getenv("GOOGLE_CLOUD_PROJECT")
-	}
-	if team != "" {
-		permalink := fmt.Sprintf("https://%s.slack.com/archives/%s/p%s", team, event.Channel, event.TimeStamp)
-		text = fmt.Sprintf("<%s|_Ce message_> _m'a semblé important, donc je l'ai traduit_\n", permalink)
-	} else {
-		text = "_Ce message m'a semblé important, donc je l'ai traduit:_\n"
-	}
-	for _, line := range strings.Split(translated.Translations[0].Text, "\n") {
-		text += "> " + line + "\n"
-	}
-
-	_, _, err = bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText(text, false))
+	_, _, err = bot.SlackAPI.PostMessage(target.ID, opts...)
 	if err != nil {
 		log.Println("post_message:", err)
 	}
+}
+
+func (bot Bot) getTranslationTargetChanne(name string) (slack.Channel, error) {
+	chans, _, err := bot.SlackAPI.GetConversations(&slack.GetConversationsParameters{
+		Types:           []string{"public_channel"},
+		ExcludeArchived: true,
+		Limit:           100,
+	})
+	if err != nil {
+		return slack.Channel{}, err
+	}
+	for _, ch := range chans {
+		if ch.Name == name {
+			return ch, nil
+		}
+	}
+	return slack.Channel{}, fmt.Errorf("channel not found")
 }
 
 func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
