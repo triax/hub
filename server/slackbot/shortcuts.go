@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 )
@@ -34,10 +35,16 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(200)
 
+	ctx := context.Background()
+
 	var err error
-	switch {
-	case payload.CallbackID == "translate_to_eng":
-		err = bot.TranslateToEng(req.Context(), payload)
+	switch { // TODO: 言語コードは2文字に統一したい
+	case payload.CallbackID == "translate_to_eng" || payload.CallbackID == "translate_to_en":
+		err = bot.Translate(ctx, payload, "EN")
+	case payload.CallbackID == "translate_to_jpn" || payload.CallbackID == "translate_to_ja":
+		err = bot.Translate(ctx, payload, "JA")
+	case payload.CallbackID == "translate_to_fra" || payload.CallbackID == "translate_to_fr":
+		err = bot.Translate(ctx, payload, "FR")
 	case payload.Type == "block_actions":
 		if len(payload.ActionCallback.BlockActions) == 0 {
 			return
@@ -91,40 +98,25 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (bot Bot) TranslateToEng(ctx context.Context, payload slack.InteractionCallback) error {
-	// {{{ TODO: module
-	params := url.Values{}
-	params.Add("auth_key", os.Getenv("DEEPL_API_TOKEN"))
-	params.Add("text", payload.Message.Text)
-	params.Add("target_lang", "EN")
-	params.Add("source_lang", "JA")
-	deepl, err := http.NewRequestWithContext(ctx, "GET", "https://api-free.deepl.com/v2/translate"+"?"+params.Encode(), nil)
+// Translate method translate original message to given language by OpenAI API,
+// and post it in a thread of the original message.
+func (bot Bot) Translate(ctx context.Context, payload slack.InteractionCallback, lang string) error {
+	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatCompletionRequestBody{
+		Messages: []openaigo.ChatMessage{
+			{Role: "system", Content: "You are a great translator!"},
+			{Role: "user", Content: fmt.Sprintf("I want to translate this message to `%s`:\n%s", lang, payload.Message.Text)},
+		},
+		Model: openaigo.GPT3_5Turbo,
+	})
+	if err != nil {
+		return fmt.Errorf("chatgpt_translation: %v", err)
+	}
+	text := res.Choices[0].Message.Content
+	slackres, err := http.Post(payload.ResponseURL, "application/json", strings.NewReader(
+		fmt.Sprintf(`{"text": "%s"}`, text),
+	))
 	if err != nil {
 		return err
 	}
-	fmt.Println(deepl.URL.String(), err)
-	res, err := http.DefaultClient.Do(deepl)
-	if err != nil {
-		return err
-	}
-	translated := struct {
-		Translations []struct {
-			Text string `json:"text"`
-		} `json:"translations"`
-	}{}
-	json.NewDecoder(res.Body).Decode(&translated)
-	if len(translated.Translations) == 0 {
-		return fmt.Errorf("failed to translate with 0 entry")
-	}
-	// }}}
-
-	text := translated.Translations[0].Text
-
-	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
-	if payload.MessageTs != "" {
-		opts = append(opts, slack.MsgOptionTS(payload.MessageTs))
-	}
-	a, b, err := bot.SlackAPI.PostMessage(payload.Channel.ID, opts...)
-	fmt.Println(a, b, err)
-	return nil
+	return slackres.Body.Close()
 }

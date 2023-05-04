@@ -171,7 +171,7 @@ func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
 	return slack.MsgOptionBlocks(blocks...)
 }
 
-func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
+func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 
 	ctx := req.Context()
 	render := marmoset.Render(w, true)
@@ -199,25 +199,64 @@ func EquipsRemindReport(w http.ResponseWriter, req *http.Request) {
 
 	ev := events[0]
 
-	if ev.ShouldSkipReminders() {
-		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
+	}
+	defer client.Close()
+
+	// 全件取得
+	all := []models.Equip{}
+	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
+	}
+
+	targets := []models.Equip{}
+	for _, equip := range all {
+		if equip.ShouldBringFor(ev) {
+			targets = append(targets, equip)
+		}
+	}
+
+	blocks := []slack.Block{
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
+			"@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします！",
+			ev.Google.Title,
+		), false, false), nil, nil),
 	}
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	channel := "general"
+	channel := req.URL.Query().Get("channel")
+	if channel == "" {
+		channel = "general"
+	}
 
-	if _, _, err = api.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします :bow:\n%s/equips/report", ev.Google.Title, server.HubBaseURL()), false, false),
-			nil, nil,
-		),
-	)); err != nil {
-		log.Println("[ERROR]", 9005, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+	_, ts, err := api.PostMessage(channel, slack.MsgOptionBlocks(blocks...))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
 	}
-	render.JSON(http.StatusOK, ev)
+
+	for _, equip := range targets {
+		text := equip.Name
+		block := slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil,
+			slack.NewAccessory(slack.NewOptionsSelectBlockElement("users_select", nil, fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, ev.Google.Title))),
+		)
+		_, _, err = api.PostMessage(channel, slack.MsgOptionBlocks(block), slack.MsgOptionTS(ts))
+		if err != nil {
+			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+			return
+		}
+	}
+
+	render.JSON(http.StatusOK, map[string]any{
+		"event":   ev.Google,
+		"targets": targets,
+		"channel": channel,
+	})
 
 }
 
