@@ -45,7 +45,7 @@ export default function List(props) {
           "
           onClick={() => router.push("/equips/report")}
         >回収報告</div>
-        {props.myself?.slack?.is_admin ? <div
+        {props.myself?.slack?.profile?.title?.match(/staff/i) ? <div
           className="
             basis-2/3
             text-center bg-red-900 text-white p-2 rounded-md
