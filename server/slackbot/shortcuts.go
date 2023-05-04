@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 )
@@ -34,10 +35,14 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(200)
 
+	ctx := context.Background()
+
 	var err error
 	switch {
 	case payload.CallbackID == "translate_to_eng":
-		err = bot.TranslateToEng(req.Context(), payload)
+		err = bot.TranslateToEng(ctx, payload)
+	case payload.CallbackID == "translate_to_fr":
+		err = bot.Translate(ctx, payload, "FR")
 	case payload.Type == "block_actions":
 		if len(payload.ActionCallback.BlockActions) == 0 {
 			return
@@ -127,4 +132,24 @@ func (bot Bot) TranslateToEng(ctx context.Context, payload slack.InteractionCall
 	a, b, err := bot.SlackAPI.PostMessage(payload.Channel.ID, opts...)
 	fmt.Println(a, b, err)
 	return nil
+}
+
+// Translate method translate original message to given language by OpenAI API,
+// and post it in a thread of the original message.
+func (bot Bot) Translate(ctx context.Context, payload slack.InteractionCallback, lang string) error {
+	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatCompletionRequestBody{
+		Messages: []openaigo.ChatMessage{
+			{Role: "system", Content: "You are a great translator!"},
+			{Role: "user", Content: fmt.Sprintf("I want to translate this message to `%s`:\n%s", lang, payload.Message.Text)},
+		},
+		Model: openaigo.GPT3_5Turbo,
+	})
+	if err != nil {
+		return fmt.Errorf("chatgpt_translation: %v", err)
+	}
+	text := res.Choices[0].Message.Content
+	_, err = http.Post(payload.ResponseURL, "application/json", strings.NewReader(
+		fmt.Sprintf(`{"text":": "%s"}`, text),
+	))
+	return err
 }
