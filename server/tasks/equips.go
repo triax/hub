@@ -221,10 +221,11 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	blocks := []slack.Block{
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"@channel お疲れさまでした！ *%s*\n備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします！",
-			ev.Google.Title,
-		), false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join([]string{
+			fmt.Sprintf("@channel お疲れさまでした！ *%s*", ev.Google.Title),
+			"備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします！",
+			fmt.Sprintf("複数の備品回収を一括で報告する場合は、<%s/equips/report|こちらのリンク>から登録ください！ ", server.HubBaseURL()),
+		}, "\n"), false, false), nil, nil),
 	}
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
