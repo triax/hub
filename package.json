@@ -38,7 +38,7 @@
     "autoprefixer": "^10.3.1",
     "babel-jest": "^27.2.4",
     "eslint": "8.11.0",
-    "eslint-config-next": "13.4.3",
+    "eslint-config-next": "13.4.4",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^27.2.4",
     "jestil": "0.0.3",
