@@ -71,9 +71,10 @@ func ListEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
+	var offset time.Duration = 24 * time.Hour
 	events := []models.Event{}
 	query := datastore.NewQuery(models.KindEvent).
-		Filter("Google.StartTime >", time.Now().Unix()*1000).
+		Filter("Google.StartTime >", time.Now().Add(-offset).Unix()*1000).
 		Order("Google.StartTime")
 
 	if _, err := client.GetAll(ctx, query, &events); err != nil {
