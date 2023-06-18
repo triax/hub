@@ -8,7 +8,6 @@ export default function EventRSVPButtonsRow({
   setModalEvent,
   submit,
 }) {
-  if (event.google.start_time < Date.now()) return null;
   return (
     <div className="px-0 pt-4 flex items-center">
       <div className="flex">

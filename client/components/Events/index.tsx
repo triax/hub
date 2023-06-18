@@ -57,19 +57,21 @@ export function EventRow({ event, myself, submit, setModalEvent, router }) {
   const id = event.google.id.replace(/@google\.com$/, "");
   if (event.google?.title?.match(/#ignore$/)) return null;
   return (
-    <div className="px-0 py-4">
+    <div className={"px-0 py-4 " + (event.google.start_time < Date.now() ? "bg-slate-400" : "")}>
       <div onClick={() => router.push(`/events/${id}`)}>
         <EventDateTime timestamp={event.google.start_time} />
         <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
-        <EventLocation location={event.google.location} />
-        <EventParticipantsIcons pats={pats} />
+        {event.google.start_time < Date.now() ? null : <>
+          <EventLocation location={event.google.location} />
+          <EventParticipantsIcons pats={pats} />
+        </>}
       </div>
-      <EventRSVPButtonsRow
+      {event.google.start_time < Date.now() ? null : <EventRSVPButtonsRow
         event={event}
         answer={answer}
         setModalEvent={setModalEvent}
         submit={submit}
-      />
+      />}
     </div>
   );
 }
