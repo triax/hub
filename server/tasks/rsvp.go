@@ -232,10 +232,11 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 }
 
 func buildFinalCallMessage(event models.Event, roles []string, joins map[string][]models.Participation, unans []models.Member) slack.MsgOption {
+	pos := strings.Join(roles, "/")
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-				"<%s/events/%s|%s> の出欠状況 （ポジション設定: %v）", server.HubBaseURL(), event.Google.ID, event.Google.Title, roles,
+				"直前確認 <%s/events/%s|%s>\nポジション設定:[%s]", server.HubBaseURL(), event.Google.ID, event.Google.Title, pos,
 			), false, false),
 			nil, nil,
 		),
