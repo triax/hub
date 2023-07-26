@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -58,6 +59,9 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 
 	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 		for _, item := range events.Items {
+			if strings.Contains(item.Summary, "#ignore") {
+				continue
+			}
 			ev := models.Event{}
 			key := datastore.NameKey(models.KindEvent, item.Id, nil)
 			if err := tx.Get(key, &ev); err != nil {
