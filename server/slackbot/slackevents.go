@@ -38,7 +38,7 @@ type SlackAPI interface {
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
 	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
 	GetConversations(params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
-	GetConversationInfo(channelID string, includeLocale bool) (*slack.Channel, error)
+	GetConversationInfo(input *slack.GetConversationInfoInput) (*slack.Channel, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
 }
 
@@ -140,7 +140,10 @@ func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Paylo
 		return
 	}
 
-	orig, err := bot.SlackAPI.GetConversationInfo(event.Channel, false)
+	orig, err := bot.SlackAPI.GetConversationInfo(&slack.GetConversationInfoInput{
+		ChannelID:     event.Channel,
+		IncludeLocale: false,
+	})
 	if err != nil {
 		log.Println("get_channel_info:", err)
 		return
