@@ -34,6 +34,7 @@ var (
 type SlackAPI interface {
 	// 使うAPIだけ追加する
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
+	GetUsers(options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUserInfo(user string) (*slack.User, error)
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
 	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)

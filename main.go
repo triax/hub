@@ -73,6 +73,7 @@ func main() {
 	}
 	r.Post("/slack/events", bot.Webhook)
 	r.Post("/slack/shortcuts", bot.Shortcuts)
+	r.Post("/slack/slashcommands", bot.SlashCommands)
 
 	// Pages
 	page := &filters.Auth{API: false, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
