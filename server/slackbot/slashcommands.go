@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/datastore"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 )
 
@@ -50,9 +51,9 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	users := []models.Member{}
+	members := []models.Member{}
 	query := datastore.NewQuery(models.KindMember).FilterField("Slack.Name", "in", names)
-	if _, err := client.GetAll(ctx, query, &users); err != nil {
+	if _, err := client.GetAll(ctx, query, &members); err != nil {
 		b, err := json.Marshal(map[string]string{
 			"text": fmt.Sprintf("データストアからのデータ取得に失敗しました。 @ten までご連絡ください。\n```%s```", err.Error()),
 		})
@@ -64,12 +65,20 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 		http.Post(req.Form.Get("response_url"), "application/json", bytes.NewReader(b))
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK) // とりあえずここまででSlackにレスポンスを返す
 
-	t := "ありがとう！を "
-	for _, u := range users {
-		t += fmt.Sprintf("<@%s> さん ", u.Slack.ID)
+	announce := ""
+	feedback := "ありがとう！を "
+	for _, m := range members {
+		// 1) conversations.open to get DM channel
+
+		// 2) sendMessage to the DM
+
+		feedback += fmt.Sprintf("<@%s> さん ", m.Slack.ID)
+		announce += ":heart:"
 	}
-	t += "に伝えました。"
-	http.Post(req.Form.Get("response_url"), "application/json", strings.NewReader(`{"text":"`+t+`"}`))
+	feedback += "に伝えました。\n> " + mentionExp.ReplaceAllString(text, "")
+
+	http.Post(req.Form.Get("response_url"), "application/json", strings.NewReader(`{"text":"`+feedback+`"}`))
+	bot.SlackAPI.PostMessage("thankyou", slack.MsgOptionText(announce, false))
 }

@@ -41,6 +41,8 @@ type SlackAPI interface {
 	GetConversations(params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
 	GetConversationInfo(input *slack.GetConversationInfoInput) (*slack.Channel, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
+
+	// OpenConversation(params *slack.OpenConversationParameters) (*slack.Channel, bool, bool, error)
 }
 
 // This interface represents *openaigo.Client.
