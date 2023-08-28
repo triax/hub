@@ -67,17 +67,34 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK) // とりあえずここまででSlackにレスポンスを返す
 
+	message := mentionExp.ReplaceAllString(text, "")
 	announce := ""
 	feedback := "ありがとう！を "
 	for _, m := range members {
-		// 1) conversations.open to get DM channel
-
-		// 2) sendMessage to the DM
+		// 2-a) conversations.open to get DM channel
+		ch, _, _, err := bot.SlackAPI.OpenConversation(&slack.OpenConversationParameters{
+			Users: []string{m.Slack.ID},
+		})
+		if err != nil {
+			fmt.Println("[ERROR]", 6004, err.Error())
+			continue
+		}
+		// 2-b) sendMessage to the DM
+		_, _, err = bot.SlackAPI.PostMessage(
+			ch.ID,
+			slack.MsgOptionText(
+				fmt.Sprintf("%sさんからありがとう！が届きました。\n> %s", m.Slack.Profile.DisplayName, message), false,
+			),
+		)
+		if err != nil {
+			fmt.Println("[ERROR]", 6005, err.Error())
+			continue
+		}
 
 		feedback += fmt.Sprintf("<@%s> さん ", m.Slack.ID)
 		announce += ":heart:"
 	}
-	feedback += "に伝えました。\n> " + mentionExp.ReplaceAllString(text, "")
+	feedback += "に伝えました。\n" + message
 
 	http.Post(req.Form.Get("response_url"), "application/json", strings.NewReader(`{"text":"`+feedback+`"}`))
 	bot.SlackAPI.PostMessage("thankyou", slack.MsgOptionText(announce, false))
