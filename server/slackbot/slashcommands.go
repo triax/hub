@@ -67,6 +67,7 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK) // とりあえずここまででSlackにレスポンスを返す
 
+	senderID := req.Form.Get("user_id")
 	message := mentionExp.ReplaceAllString(text, "")
 	announce := ""
 	feedback := "ありがとう！を "
@@ -82,9 +83,7 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 		// 2-b) sendMessage to the DM
 		_, _, err = bot.SlackAPI.PostMessage(
 			ch.ID,
-			slack.MsgOptionText(
-				fmt.Sprintf("%sさんからありがとう！が届きました。\n> %s", m.Slack.Profile.DisplayName, message), false,
-			),
+			slack.MsgOptionText(fmt.Sprintf("<@%s>さんからありがとう！が届きました。\n> %s", senderID, message), false),
 		)
 		if err != nil {
 			fmt.Println("[ERROR]", 6005, err.Error())
