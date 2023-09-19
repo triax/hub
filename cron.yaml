@@ -15,13 +15,18 @@ cron:
   timezone: Asia/Tokyo
 
 # {{{ Final Call
-- description: Final call (staff)
+- description: Final call (STAFF)
   url: /tasks/final-call?role=staff,trainer&channel=staff
   schedule: everyday 18:10
   timezone: Asia/Tokyo
 
-- description: Final call (offence)
+- description: Final call (OFFENCE)
   url: /tasks/final-call?role=rb,wr,qb,ol,te&channel=offence
+  schedule: everyday 18:15
+  timezone: Asia/Tokyo
+
+- description: Final call (DEFENCE)
+  url: /tasks/final-call?role=dl,lb,db&channel=defence
   schedule: everyday 18:20
   timezone: Asia/Tokyo
 # }}}

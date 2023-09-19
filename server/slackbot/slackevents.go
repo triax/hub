@@ -34,12 +34,14 @@ var (
 type SlackAPI interface {
 	// 使うAPIだけ追加する
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
+	GetUsers(options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUserInfo(user string) (*slack.User, error)
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
 	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
 	GetConversations(params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
-	GetConversationInfo(channelID string, includeLocale bool) (*slack.Channel, error)
+	GetConversationInfo(input *slack.GetConversationInfoInput) (*slack.Channel, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
+	OpenConversation(params *slack.OpenConversationParameters) (*slack.Channel, bool, bool, error)
 }
 
 // This interface represents *openaigo.Client.
@@ -140,7 +142,10 @@ func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Paylo
 		return
 	}
 
-	orig, err := bot.SlackAPI.GetConversationInfo(event.Channel, false)
+	orig, err := bot.SlackAPI.GetConversationInfo(&slack.GetConversationInfoInput{
+		ChannelID:     event.Channel,
+		IncludeLocale: false,
+	})
 	if err != nil {
 		log.Println("get_channel_info:", err)
 		return
