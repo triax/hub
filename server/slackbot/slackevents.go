@@ -81,11 +81,11 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 	switch {
 	case payload.Type == slackevents.URLVerification:
 		bot.onURLVerification(req, w, payload)
-	case payload.Event["type"] == slackevents.AppMention:
+	case payload.Event["type"] == string(slackevents.AppMention):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
 		go bot.onMention(req, w, payload)
-	case payload.Event["type"] == slackevents.Message:
+	case payload.Event["type"] == string(slackevents.Message):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
 		go bot.onMessage(req, w, payload)
