@@ -9,6 +9,9 @@ secrets.yaml
 secrets.dev.yaml
 secrets.local.yaml
 
+# Google Service Account JSON
+triax-football-*.json
+
 # Development
 dev
 
