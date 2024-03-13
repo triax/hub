@@ -1,4 +1,6 @@
 cron:
+
+# {{{ Sync
 - description: Fetch Slack Members
   url: /tasks/fetch-slack-members
   schedule: everyday 04:00
@@ -8,11 +10,14 @@ cron:
   url: /tasks/fetch-calendar-events
   schedule: everyday 04:00
   timezone: Asia/Tokyo
+# }}}
 
+# {{{ RSVP
 - description: Check RSVP of recent event
   url: /tasks/check-rsvp
   schedule: every wednesday 12:05
   timezone: Asia/Tokyo
+# }}}
 
 # {{{ Final Call
 - description: Final call (STAFF)
@@ -31,6 +36,7 @@ cron:
   timezone: Asia/Tokyo
 # }}}
 
+# {{{ Equips
 - description: 前日備品連絡
   url: /tasks/equips/remind/bring
   schedule: everyday 17:00
@@ -48,8 +54,9 @@ cron:
 
 - description: 一定時間以上前の直近のイベントから現在にいたるまでに備品報告の更新が無いものをアラート
   url: /tasks/equips/scan-unreported?oh=48&channel=staff
-  schedule: everyday 20:00
+  schedule: every tuesday 12:00
   timezone: Asia/Tokyo
+# }}}
 
 # - description: 運動「前」コンディショニングチェック
 #   url: /tasks/condition/form?channel=condi-check&label=before&from=01:00&to=23:00
