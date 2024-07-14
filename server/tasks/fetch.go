@@ -15,6 +15,10 @@ import (
 	"google.golang.org/api/option"
 )
 
+const (
+	eventFetchDurationMonths = 4
+)
+
 func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	jsonstr := os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -28,12 +32,12 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	id := os.Getenv("GOOGLE_CALENDAR_ID")
 
-	t := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	events, err := service.Events.List(id).
 		ShowDeleted(false).
 		SingleEvents(true).
-		TimeMin(t).
-		MaxResults(20).
+		TimeMin(now.Format(time.RFC3339)).
+		TimeMax(now.AddDate(0, eventFetchDurationMonths, 0).Format(time.RFC3339)).
 		OrderBy("startTime").
 		Do()
 	if err != nil {
@@ -57,14 +61,18 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
+	var ignored, created int
+
 	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 		for _, item := range events.Items {
 			if strings.Contains(item.Summary, "#ignore") {
+				ignored += 1
 				continue
 			}
 			ev := models.Event{}
 			key := datastore.NameKey(models.KindEvent, item.Id, nil)
 			if err := tx.Get(key, &ev); err != nil {
+				created += 1
 				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", item)
 			}
 			ev.Google = models.CreateEventFromCalendarAPI(item)
@@ -82,7 +90,12 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 
 	marmoset.Render(w).JSON(http.StatusOK, marmoset.P{
 		"message": "ok",
-		"count":   len(events.Items),
+		"events": map[string]any{
+			"total":   len(events.Items),
+			"ignored": ignored,
+			"created": created,
+			"updated": len(events.Items) - (created + ignored),
+		},
 	})
 }
 
