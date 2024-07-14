@@ -15,6 +15,10 @@ import (
 	"google.golang.org/api/option"
 )
 
+const (
+	eventFetchDurationMonths = 4
+)
+
 func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	jsonstr := os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -28,12 +32,12 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	id := os.Getenv("GOOGLE_CALENDAR_ID")
 
-	t := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	events, err := service.Events.List(id).
 		ShowDeleted(false).
 		SingleEvents(true).
-		TimeMin(t).
-		MaxResults(20).
+		TimeMin(now.Format(time.RFC3339)).
+		TimeMax(now.AddDate(0, eventFetchDurationMonths, 0).Format(time.RFC3339)).
 		OrderBy("startTime").
 		Do()
 	if err != nil {
