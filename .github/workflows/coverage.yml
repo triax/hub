@@ -1,0 +1,36 @@
+name: Collect Coverage
+on:
+  push:
+    branches: [ main, develop ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.22
+    - name: Test
+      run: go test -coverprofile=coverage.go.txt ./...
+    - name: Upload Go coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ./coverage.go.txt
+        flags: go
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+    - name: Install dependencies
+      run: npm install
+    - name: Test
+      run: npm run test -- --coverage
+    - name: Upload Node.js coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ./coverage/lcov.info
+        flags: nodejs
+

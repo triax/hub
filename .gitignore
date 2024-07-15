@@ -15,5 +15,9 @@ triax-football-*.json
 # Development
 dev
 
+# Test and coverage
+coverage
+coverage.*.txt
+
 # Editors
 .vscode

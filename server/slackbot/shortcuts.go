@@ -101,8 +101,8 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 // Translate method translate original message to given language by OpenAI API,
 // and post it in a thread of the original message.
 func (bot Bot) Translate(ctx context.Context, payload slack.InteractionCallback, lang string) error {
-	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatCompletionRequestBody{
-		Messages: []openaigo.ChatMessage{
+	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
+		Messages: []openaigo.Message{
 			{Role: "system", Content: "You are a great translator!"},
 			{Role: "user", Content: fmt.Sprintf("I want to translate this message to `%s`:\n%s", lang, payload.Message.Text)},
 		},
