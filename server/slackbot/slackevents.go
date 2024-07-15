@@ -46,7 +46,7 @@ type SlackAPI interface {
 
 // This interface represents *openaigo.Client.
 type ChatGPT interface {
-	Chat(ctx context.Context, req openaigo.ChatCompletionRequestBody) (openaigo.ChatCompletionResponse, error)
+	Chat(ctx context.Context, req openaigo.ChatRequest) (openaigo.ChatCompletionResponse, error)
 }
 
 type Bot struct {
@@ -172,8 +172,8 @@ func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Paylo
 	}
 
 	ctx := context.Background()
-	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatCompletionRequestBody{
-		Messages: []openaigo.ChatMessage{
+	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
+		Messages: []openaigo.Message{
 			{Role: "system", Content: "You are a great translator!"},
 			{Role: "user", Content: fmt.Sprintf("I want to translate this message from `%s` to `%s`:\n%s", sourceLang, targetLang, event.Text)},
 		},
@@ -225,9 +225,9 @@ func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
 	var text string
 	if ok {
 		client := openaigo.NewClient(key)
-		res, err := client.Chat(context.Background(), openaigo.ChatCompletionRequestBody{
+		res, err := client.Chat(context.Background(), openaigo.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []openaigo.ChatMessage{
+			Messages: []openaigo.Message{
 				{Role: "system", Content: "あなたはAI言語モデルではありません。"},
 				{Role: "system", Content: "あなたは人工知能のプログラムでもありません。"},
 				{Role: "system", Content: "あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「" + BotAssistantName + "」さんです。"},

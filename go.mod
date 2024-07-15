@@ -36,7 +36,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
-	github.com/otiai10/openaigo v1.1.0
+	github.com/otiai10/openaigo v1.7.0
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
