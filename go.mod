@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/datastore v1.14.0
-	github.com/go-chi/chi/v5 v5.0.7
+	github.com/go-chi/chi/v5 v5.1.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/otiai10/appyaml v0.0.0-20210625032121-1fe2f3423963
 	github.com/otiai10/largo v0.0.0-20211018055848-29754d2f6231
