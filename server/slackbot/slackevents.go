@@ -96,7 +96,7 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (bot Bot) onURLVerification(req *http.Request, w http.ResponseWriter, payload Payload) {
+func (bot Bot) onURLVerification(_ *http.Request, w http.ResponseWriter, payload Payload) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(payload.Challenge))
@@ -127,7 +127,7 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 	}
 }
 
-func (bot Bot) onMessage(req *http.Request, w http.ResponseWriter, payload Payload) {
+func (bot Bot) onMessage(_ *http.Request, _ http.ResponseWriter, payload Payload) {
 
 	event := slackevents.MessageEvent{}
 	buf := bytes.NewBuffer(nil)
@@ -253,7 +253,7 @@ func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
 	log.Println("[echo]", a, b, err)
 }
 
-func (bot Bot) onMentionReadCheck(req *http.Request, w http.ResponseWriter, event slackevents.AppMentionEvent) {
+func (bot Bot) onMentionReadCheck(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
 	if event.ThreadTimeStamp == "" {
 		bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText("スレッドにおいて有効です", false))
 		return
@@ -301,7 +301,7 @@ func (bot Bot) onMentionReadCheck(req *http.Request, w http.ResponseWriter, even
 	bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText(buf.String(), false))
 }
 
-func (bot Bot) onMentionEquipCheck(req *http.Request, w http.ResponseWriter, event slackevents.AppMentionEvent) {
+func (bot Bot) onMentionEquipCheck(req *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
 	ctx := req.Context()
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
@@ -352,7 +352,7 @@ func (bot Bot) onMentionEquipCheck(req *http.Request, w http.ResponseWriter, eve
 	log.Printf("[equip] %+v %v", summary, err)
 }
 
-func (bot Bot) onMentionAmesh(req *http.Request, w http.ResponseWriter, event slackevents.AppMentionEvent) {
+func (bot Bot) onMentionAmesh(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
 	// U01G23SHBQB
 	opts := []slack.MsgOption{slack.MsgOptionText("<@U01G23SHBQB> 予報", false)}
 	if event.ThreadTimeStamp != "" {
@@ -363,7 +363,7 @@ func (bot Bot) onMentionAmesh(req *http.Request, w http.ResponseWriter, event sl
 
 }
 
-func (bot Bot) onEnvDump(req *http.Request, w http.ResponseWriter, event slackevents.AppMentionEvent) {
+func (bot Bot) onEnvDump(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
 	name := largo.Tokenize(event.Text)[1:][0]
 	_, _, err := bot.SlackAPI.PostMessage(event.Channel,
 		slack.MsgOptionText("`"+os.Getenv(name)+"`", false),
