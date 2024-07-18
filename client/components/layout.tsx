@@ -58,7 +58,7 @@ export default function Layout({ children, myself, isLoading }: LayoutProps) {
       <Disclosure as="nav" className="bg-gray-800">
         {({open}) => (
           <>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
 
                 {/* LEFT PART */}
@@ -222,7 +222,7 @@ export default function Layout({ children, myself, isLoading }: LayoutProps) {
       </Disclosure>
 
       <main>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           {children}
         </div>
       </main>

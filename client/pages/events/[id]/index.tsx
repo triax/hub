@@ -30,20 +30,24 @@ export default function EventView(props) {
   if (allMembers.length == 0) return <></>;
 
   // 集計
+  // List of positions of American Football
+  const positions = ["OL", "QB", "RB", "WR", "TE", "DL", "LB", "DB", "TRAINER", "STAFF", "OTHERS"];
   const sum: {
-    yes: Participation[],
-    no: Participation[],
+    _yes: Record<string, Participation[]>,
+    _no: Record<string, Participation[]>,
     unanswered: Member[],
   } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, Participation]) => {
-    if (['join', 'join_late', 'leave_early'].includes(entry.type)) ctx.yes.push({...entry, member: MemberCache.pick(id)});
-    else ctx.no.push({ ...entry, member: MemberCache.pick(id) });
+    const member = MemberCache.pick(id);
+    let posi = entry.title.split("/")[0].toUpperCase() || member?.slack?.profile?.title?.split("/")[0].toUpperCase();
+    if (!positions.includes(posi)) posi = "OTHERS";
+    if (['join', 'join_late', 'leave_early'].includes(entry.type)) {
+      ctx._yes[posi] = (ctx._yes[posi] || []).concat([{ ...entry, member }]);
+    } else {
+      ctx._no[posi] = (ctx._no[posi] || []).concat([{ ...entry, member }]);
+    }
     ctx.unanswered = ctx.unanswered.filter(m => m.slack.id !== id);
     return ctx;
-  }, { yes: [], no: [], unanswered: allMembers });
-
-  // Sort
-  sum.yes = sum.yes.sort(memberSortFunc);
-  sum.no = sum.no.sort(memberSortFunc);
+  }, { _yes: {}, yes: [], _no: {}, no: [], unanswered: allMembers });
 
   const onClickDeleteEvent = () => {
     if (!window.confirm(`イベント「${event.google.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
@@ -75,25 +79,27 @@ export default function EventView(props) {
           </div>
         </div>
 
-        <div className="py-4 space-y-6">
+        <div className="py-4 space-y-12">
 
+          {/* {{{ DEV */}
           <div>
             <div className="border-b">
               <span className="font-semibold">参加</span>
-              <span className="px-4">{sum.yes.length}人</span>
+              <span className="px-4">{Object.values(sum._yes).flat().length}人</span>
             </div>
-            <div className="divide-y">
-              {sum.yes.map(p => <ParticipationRow key={p.member?.slack.id} entry={p} />)}
+            <div>
+              {positions.map(pos => <PositionParticipationSection key={pos} join={true} title={pos} entries={sum._yes[pos] || []} />)}
             </div>
           </div>
+          {/* DEV }}} */}
 
           <div>
             <div className="border-b">
               <span className="font-semibold">不参加</span>
-              <span className="px-4">{sum.no.length}人</span>
+              <span className="px-4">{Object.values(sum._no).flat().length}人</span>
             </div>
             <div className="divide-y">
-              {sum.no.map(p => <ParticipationRow key={p.member?.slack.id} entry={p} />)}
+              {positions.map(pos => <PositionParticipationSection key={pos} join={false} title={pos} entries={sum._no[pos] || []} />)}
             </div>
           </div>
 
@@ -104,10 +110,10 @@ export default function EventView(props) {
                 <span className="px-4">{sum.unanswered.length}人</span>
               </Disclosure.Button>
               <Disclosure.Panel as="div" className="divide-y">
-                {sum.unanswered.map((m: any) => (
+                {sum.unanswered.sort((p, n) => p.slack?.profile.title < n.slack?.profile.title ? 1 : -1).map((m: Member) => (
                   <div key={m.slack.id} className="flex space-x-2 items-center">
                     <div className="flex-auto">{m.slack.real_name}</div>
-                    <div className="w-1/3 text-xs">ここにポジション表示</div>
+                    <div className="text-xs">{m.slack?.profile.title}</div>
                   </div>
                 ))}
               </Disclosure.Panel>
@@ -139,21 +145,33 @@ function getTimeLimitation(entry: Participation) {
   }
 }
 
-function ParticipationRow({ entry }: { entry: Participation }) {
+function PositionParticipationSection({ title, entries, join }: { title?: string, entries: Participation[], join: boolean }) {
+  const coloring = (join ? (entries.length > 0 ? "bg-rose-900 text-white" : "bg-rose-200 text-red-800") : "bg-zinc-600 text-stone-100");
+  if (entries.length == 0 && join == false) return <></>;
+  return (
+    <div key={title} className="mt-2 mb-4">
+      <div className={"text-sm px-1 flex drop-shadow-md " + coloring}>
+        <div className="flex-grow">{title == "OTHERS" ? "その他・不明な設定" : title}</div>
+        <div>{entries.length}</div>
+      </div>
+      <div className="divide-y">
+        {(entries.length == 0 && title) ?
+          <span className="text-red-600">参加者なし</span> :
+          entries.map((p, i) => <ParticipationRow key={i} entry={p} title={title == "OTHERS" ? "" : title} />)}
+      </div>
+    </div>
+  );
+}
+
+function ParticipationRow({ entry, title }: { entry: Participation, title?: string }) {
   if (! entry.member) { console.log("member取得失敗", entry); return <></>; }
   const { member } = entry;
   const name = member.slack?.profile?.display_name || member.slack?.profile?.real_name;
   return (
     <div key={member.slack?.id} className="flex space-x-2 items-center">
-      <div className="flex-auto">{name}{getTimeLimitation(entry)}</div>
-      <div className="w-1/3 text-xs">
-        {member.slack?.profile?.title ? member.slack?.profile?.title : <span>
-          Pos設定方法は
-          <a href={process.env.HELP_PAGE_URL} target="_blank" rel="noreferrer"
-            className="font-bold text-blue-500"
-          >ここ</a>
-        </span>}
-      </div>
+      <div className="flex-auto">{name}</div>
+      <div className="text-xs">{getTimeLimitation(entry)}</div>
+      {title ? <></> : <div className="text-xs">{member.slack?.profile?.title}</div>}
     </div>
   );
 }
