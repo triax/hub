@@ -10,16 +10,9 @@
   "scripts": {
     "test": "jest",
     "dev": "next dev ./client",
-    "db": "npm run db:kill && npm run db:start",
-    "db:start": "gcloud beta emulators datastore start --data-dir=./dev/data --project=triax-football",
-    "db:kill": "ps aux | grep datastore | grep -v \"grep datastore\" | awk '{print $2}' | xargs kill",
-    "db:env": "gcloud beta emulators datastore env-init --data-dir=./dev/data",
     "build": "next build ./client",
     "export": "NODE_ENV=production next build ./client && next export ./client -o ./client/dest",
-    "lint": "next lint ./client",
-    "deploy:prod": "npm run export && gcloud app deploy ./app.yaml    --project triax-football --quiet --no-cache",
-    "deploy:cron": "npm run export && gcloud app deploy ./cron.yaml   --project triax-football --quiet --no-cache",
-    "deploy:dev": "npm run export && gcloud app deploy ./app.dev.yaml --project triax-football --quiet --no-cache"
+    "lint": "next lint ./client"
   },
   "repository": {
     "type": "git",
