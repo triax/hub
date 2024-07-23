@@ -9,7 +9,7 @@ require (
 	github.com/otiai10/appyaml v0.0.0-20210625032121-1fe2f3423963
 	github.com/otiai10/largo v0.0.0-20211018055848-29754d2f6231
 	github.com/otiai10/marmoset v0.7.0
-	github.com/slack-go/slack v0.13.0
+	github.com/slack-go/slack v0.13.1
 	google.golang.org/api v0.188.0
 )
 
