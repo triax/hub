@@ -1,25 +1,23 @@
 # Usage:
-# - bie explain bie.local.yaml
-# - bie check bie.local.yaml
-# - bie run bie.local.yaml
+#   too run     too.local.yaml
+#   too explain too.local.yaml
+#   too check   too.local.yaml
 
 version: 0
-runtime:
-  runs_on: local
-  prerequisite:
-    command:
-      - gcloud
-      - go
-      - npm
-      - curl
-    num_cpu:
-      min: 2
-      # max: 4
-    memory_gb:
-      min: 4
-      # max: 8
-    validate:
-    - run: gcloud auth list
+# runtime:
+#   runs_on: local
+#   prerequisite:
+#     command:
+#       - gcloud
+#       - go
+#       - npm
+#       - curl
+#     num_cpu:
+#       min: 2
+#     memory_gb:
+#       min: 4
+#     validate:
+#     - run: gcloud auth list
 
 include:
   - secrets.local.yaml
@@ -60,7 +58,7 @@ prep:
         ./devdata \
         --project=${PROJECT_ID}
 
-execute:
+main:
   jobs:
   - name: Datastore エミュレータを起動
     label: datastore
