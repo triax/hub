@@ -48,7 +48,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 	}
 	ev := events[0]
 
-	if ev.ShouldSkipReminders() {
+	if ev.ShouldSkipReminders(models.RTFinalCall) {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "error": fmt.Errorf("should ignore: " + ev.Google.Title)})
 		return
 	}
@@ -120,7 +120,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 
 	recent := events[0]
 
-	if recent.ShouldSkipReminders() {
+	if recent.ShouldSkipReminders(models.RTRSVP) {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}

@@ -58,7 +58,7 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 	}
 	ev := events[0]
 
-	if ev.ShouldSkipReminders() {
+	if ev.ShouldSkipReminders(models.RTEquipment) {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
@@ -198,6 +198,11 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ev := events[0]
+
+	if ev.ShouldSkipReminders(models.RTEquipment) {
+		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
+		return
+	}
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
