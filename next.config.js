@@ -3,6 +3,8 @@ module.exports = (phase, { defaultConfig }) => {
    * @type {import('next').NextConfig}
    */
   const nextConfig = {
+    output: process.env.NODE_ENV == "production" ? "export" : undefined,
+    distDir: "dest",
     images: {
       loader: 'custom',
       domains: [
