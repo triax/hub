@@ -51,9 +51,11 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 			if err != nil {
 				panic(err)
 			}
+			defer f.Close()
 			myself := models.Myself{}
-			json.NewDecoder(f).Decode(&myself)
-			f.Close()
+			if err = json.NewDecoder(f).Decode(&myself); err != nil {
+				panic(err)
+			}
 			next.ServeHTTP(w, SetSessionUserContext(req, myself.OpenID.Sub))
 			return
 		}

@@ -40,6 +40,17 @@ const (
 	PTUnanswered ParticipationType = "unanswered"
 )
 
+type (
+	ReminderType string
+)
+
+const (
+	RTRSVP      ReminderType = "rsvp"
+	RTFinalCall ReminderType = "final_call"
+	RTCondition ReminderType = "condition"
+	RTEquipment ReminderType = "equipment"
+)
+
 func (pt ParticipationType) String() string {
 	switch pt {
 	case PTJoin:
@@ -71,8 +82,14 @@ func (e Event) IsGame() bool {
 	return regexp.MustCompile("[＃#]試合").MatchString(e.Google.Title)
 }
 
-func (e Event) ShouldSkipReminders() bool {
-	return regexp.MustCompile("(?i)[＃#]ignore$").MatchString(e.Google.Title)
+func (e Event) ShouldSkipReminders(rt ReminderType) bool {
+	if regexp.MustCompile("(?i)[＃#]ignore$").MatchString(e.Google.Title) {
+		return true
+	}
+	if regexp.MustCompile("(?i)[＃#]event$").MatchString(e.Google.Title) {
+		return rt != RTRSVP // RSVPだけは、skipしないでね
+	}
+	return false
 }
 
 func (t ParticipationType) JoinAnyhow() bool {

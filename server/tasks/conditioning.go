@@ -47,7 +47,7 @@ func ConditionFrom(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ev := events[0]
-	if ev.ShouldSkipReminders() {
+	if ev.ShouldSkipReminders(models.RTCondition) {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
 	}
