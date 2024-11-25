@@ -33,7 +33,7 @@
     "eslint": "8.11.0",
     "eslint-config-next": "14.2.5",
     "identity-obj-proxy": "^3.0.0",
-    "jest": "^27.2.4",
+    "jest": "^29.7.0",
     "jestil": "0.0.3",
     "next": "^14.1.1",
     "postcss": "^8.3.6",
