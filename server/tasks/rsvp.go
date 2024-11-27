@@ -173,7 +173,8 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "general"
 	}
-	link := "<" + server.HubBaseURL() + "|:football: :football: :football: " + server.HubBaseURL() + ">"
+	evURL := fmt.Sprintf("%s/events/%s", server.HubBaseURL(), recent.Google.ID)
+	link := fmt.Sprintf("<%s|:triax::football::spiral_calendar_pad: %s>", evURL, recent.Google.Title)
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		log.Println("[ERROR]", 4006, err.Error())
@@ -194,11 +195,13 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	reminder := buildRSVPReminderMessage(recent, x["unanswered"])
-	if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
-		log.Println("[ERROR]", 4008, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
+	if recent.Tag() != models.ETEvent { // #event は、RSVPリマインダーを送信しなくてよい
+		reminder := buildRSVPReminderMentionMessage(recent, x["unanswered"])
+		if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
+			log.Println("[ERROR]", 4008, err.Error())
+			render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+			return
+		}
 	}
 
 	render.JSON(http.StatusOK, marmoset.P{"event": recent, "summary": map[string]int{
@@ -208,7 +211,8 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}, "timestamp": ts})
 }
 
-func buildRSVPReminderMessage(ev models.Event, unanswers []models.Member) slack.MsgOption {
+// 回答催促のメンション
+func buildRSVPReminderMentionMessage(ev models.Event, unanswers []models.Member) slack.MsgOption {
 	mentions := []string{}
 	for _, m := range unanswers {
 		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
