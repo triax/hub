@@ -51,6 +51,27 @@ const (
 	RTEquipment ReminderType = "equipment"
 )
 
+type (
+	EventTag string
+)
+
+const (
+	ETPractice EventTag = "練習"
+	ETGame     EventTag = "試合"
+	ETIgnore   EventTag = "ignore"
+	ETMeeting  EventTag = "meeting"
+	ETEvent    EventTag = "event"
+	ETUnkonwn  EventTag = "UNKNOWN"
+)
+
+var (
+	EventExpressionPractice = regexp.MustCompile("[＃#]練習")
+	EventExpressionGame     = regexp.MustCompile("[＃#]試合")
+	EventExpressionIgnore   = regexp.MustCompile("[＃#]ignore")
+	EventExpressionEvent    = regexp.MustCompile("[＃#]event")
+	EventExpressionMeeting  = regexp.MustCompile("[＃#]meeting|mtg")
+)
+
 func (pt ParticipationType) String() string {
 	switch pt {
 	case PTJoin:
@@ -75,21 +96,43 @@ func (e Event) Participations() (Participations, error) {
 }
 
 func (e Event) IsPractice() bool {
-	return regexp.MustCompile("[＃#]練習").MatchString(e.Google.Title)
+	return e.Tag() == ETPractice
 }
 
 func (e Event) IsGame() bool {
-	return regexp.MustCompile("[＃#]試合").MatchString(e.Google.Title)
+	return e.Tag() == ETGame
 }
 
 func (e Event) ShouldSkipReminders(rt ReminderType) bool {
-	if regexp.MustCompile("(?i)[＃#]ignore$").MatchString(e.Google.Title) {
+	if e.Tag() == ETIgnore {
 		return true
 	}
-	if regexp.MustCompile("(?i)[＃#]event$").MatchString(e.Google.Title) {
-		return rt != RTRSVP // RSVPだけは、skipしないでね
+	if e.Tag() == ETMeeting {
+		return true
+	}
+	if e.Tag() == ETEvent && rt != RTRSVP {
+		return true // eventは、RSVP以外はskip
 	}
 	return false
+}
+
+func (e Event) Tag() EventTag {
+	if EventExpressionPractice.MatchString(e.Google.Title) {
+		return ETPractice
+	}
+	if EventExpressionGame.MatchString(e.Google.Title) {
+		return ETGame
+	}
+	if EventExpressionIgnore.MatchString(e.Google.Title) {
+		return ETIgnore
+	}
+	if EventExpressionMeeting.MatchString(e.Google.Title) {
+		return ETMeeting
+	}
+	if EventExpressionEvent.MatchString(e.Google.Title) {
+		return ETEvent
+	}
+	return ETUnkonwn
 }
 
 func (t ParticipationType) JoinAnyhow() bool {

@@ -173,7 +173,8 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	if channel == "" {
 		channel = "general"
 	}
-	link := "<" + server.HubBaseURL() + "|:football: :football: :football: " + server.HubBaseURL() + ">"
+	evURL := fmt.Sprintf("%s/events/%s", server.HubBaseURL(), recent.Google.ID)
+	link := fmt.Sprintf("<%s|:triax::football::spiral_calendar_pad: %s>", evURL, recent.Google.Title)
 	text := bytes.NewBuffer(nil)
 	if err := rsvp.Execute(text, x); err != nil {
 		log.Println("[ERROR]", 4006, err.Error())
@@ -194,11 +195,13 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	reminder := buildRSVPReminderMessage(recent.Google.Title, x["unanswered"])
-	if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
-		log.Println("[ERROR]", 4008, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
+	if recent.Tag() != models.ETEvent { // #event は、RSVPリマインダーを送信しなくてよい
+		reminder := buildRSVPReminderMentionMessage(recent, x["unanswered"])
+		if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
+			log.Println("[ERROR]", 4008, err.Error())
+			render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+			return
+		}
 	}
 
 	render.JSON(http.StatusOK, marmoset.P{"event": recent, "summary": map[string]int{
@@ -208,17 +211,19 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 	}, "timestamp": ts})
 }
 
-func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.MsgOption {
+// 回答催促のメンション
+func buildRSVPReminderMentionMessage(ev models.Event, unanswers []models.Member) slack.MsgOption {
 	mentions := []string{}
 	for _, m := range unanswers {
 		if !m.Slack.Deleted && !m.Slack.IsBot && !m.Slack.IsAppUser {
 			mentions = append(mentions, fmt.Sprintf("<@%s>", m.Slack.ID))
 		}
 	}
+	evURL := fmt.Sprintf("%s/events/%s", server.HubBaseURL(), ev.Google.ID)
 	return slack.MsgOptionBlocks(
 		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, "出欠未回答の皆さまへ", false, false)),
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+server.HubBaseURL()+"|【Triax Team Hub】>*", false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, "下記のリンクから練習や試合の出欠回答ができます。伝助より使いやすいと思うので、サクッと回答お願いします。\n*<"+evURL+"|【Triax Team Hub】>*", false, false),
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://avatars.slack-edge.com/2021-08-16/2369588425687_e490e60131c70bf52eee_192.png", "Triax Team Hub")),
 		),
 		slack.NewSectionBlock(
@@ -226,7 +231,7 @@ func buildRSVPReminderMessage(title string, unanswers []models.Member) slack.Msg
 			nil, slack.NewAccessory(slack.NewImageBlockElement("https://drive.google.com/uc?id=1OdopRR5hbOCoAftxfc4enVPbDHF37jcj", "How to use")),
 		),
 		slack.NewDividerBlock(),
-		slack.NewContextBlock("", slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("直近の「%s」へ出欠回答していない人", title), false, false)),
+		slack.NewContextBlock("", slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("直近の「%s」へ出欠回答していない人", ev.Google.Title), false, false)),
 		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join(mentions, " "), false, false), nil, nil),
 	)
 }
