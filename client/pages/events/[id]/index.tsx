@@ -8,19 +8,30 @@ import TeamEventRepo from "../../../repository/EventRepo";
 import { MemberCache } from "../../../repository/MemberRepo";
 import Member from "../../../models/Member";
 import TeamEvent, { Participation } from "../../../models/TriaxEvent";
+import EventRSVPButtonsRow from "../../../components/Events/RSVPButtons";
+import { RSVPModal } from "../../../components/Events/RSVPModal";
 
 export default function EventView(props) {
+  const {startLoading, stopLoading} = props;
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
   const id = useRouter().query.id as string;
   const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [modalevent, setModalEvent] = useState(null);
 
   useEffect(() => {
     if (!id) return;
     evrepo.get(id).then(setEvent);
     merepo.list({cached: true}).then(setAllMembers)
   }, [id, evrepo, merepo]);
+
+  const submit = async function(params) {
+    startLoading();
+    const updated = await evrepo.rsvp(params);
+    setEvent(updated);
+    stopLoading();
+  }
 
   if (!event || !event.google || !event.google.id) return <></>;
   if (allMembers.length == 0) return <></>;
@@ -75,6 +86,15 @@ export default function EventView(props) {
           </div>
         </div>
 
+        <div className="py-4">
+          {event.google.start_time < Date.now() ? null : <EventRSVPButtonsRow
+            event={event}
+            answer={/* answer*/ event.participations[props.myself.slack.id] || {}}
+            setModalEvent={setModalEvent}
+            submit={submit}
+          />}
+        </div>
+
         <div className="py-4 space-y-12">
 
           {/* {{{ DEV */}
@@ -126,6 +146,10 @@ export default function EventView(props) {
           </div>
         </div> : null}
       </div>
+
+      {/* RSVP (join_late, leav_early) Modal */}
+      <RSVPModal event={modalevent} isOpen={!!modalevent} closeModal={() => setModalEvent(null)} submit={submit} />
+
     </Layout>
   );
 }
