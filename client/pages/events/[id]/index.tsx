@@ -9,10 +9,6 @@ import { MemberCache } from "../../../repository/MemberRepo";
 import Member from "../../../models/Member";
 import TeamEvent, { Participation } from "../../../models/TriaxEvent";
 
-function memberSortFunc(prev: Participation, next: Participation): number {
-  return prev.member?.slack?.profile?.title.toUpperCase() < next.member?.slack?.profile?.title.toUpperCase() ? -1 : 1;
-}
-
 export default function EventView(props) {
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
