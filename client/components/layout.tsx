@@ -45,12 +45,12 @@ export default function Layout({ children, myself, isLoading }: LayoutProps) {
   const teamIcon: string = myself.team?.icon?.image_132 || defaultTeamIcon;
   const teamName: string = myself.team?.name || defaultTeamName;
   const myIcon: string = myself.slack.profile.image_512;
-
+  const title = `{process.env.NODE_ENV == "production" ? "" : "[DEV] "}{teamName} Team Hub`;
   return (
     <div id="root">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{process.env.NODE_ENV == "production" ? "" : "[DEV] "}{teamName} Team Hub</title>
+        <title>{title}</title>
         <link rel="apple-touch-icon" href={teamIcon} />
         <link rel="shortcut icon" href={teamIcon} />
       </Head>
