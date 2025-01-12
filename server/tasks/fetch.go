@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -33,7 +32,7 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	id := os.Getenv("GOOGLE_CALENDAR_ID")
 
 	now := time.Now()
-	events, err := service.Events.List(id).
+	all, err := service.Events.List(id).
 		ShowDeleted(false).
 		SingleEvents(true).
 		TimeMin(now.Format(time.RFC3339)).
@@ -47,8 +46,25 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// #ignore と、#mtg が含まれるイベントは、そもそもHubに入れない
+	targets := []calendar.Event{}
+	ignored := []calendar.Event{}
+	for _, item := range all.Items {
+		switch {
+		case models.EventExpressionIgnore.MatchString(item.Summary):
+			ignored = append(ignored, *item)
+		case models.EventExpressionMeeting.MatchString(item.Summary):
+			ignored = append(ignored, *item)
+		default:
+			targets = append(targets, *item)
+		}
+	}
+
 	if req.URL.Query().Get("dry") != "" {
-		marmoset.RenderJSON(w, 200, events)
+		marmoset.RenderJSON(w, 200, marmoset.P{
+			"targets": targets,
+			"ignored": ignored,
+		})
 		return
 	}
 
@@ -61,21 +77,18 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	var ignored, created int
-
+	var created, updated int
 	if _, err := client.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
-		for _, item := range events.Items {
-			if strings.Contains(item.Summary, "#ignore") {
-				ignored += 1
-				continue
-			}
+		for _, item := range targets {
 			ev := models.Event{}
 			key := datastore.NameKey(models.KindEvent, item.Id, nil)
 			if err := tx.Get(key, &ev); err != nil {
-				created += 1
 				fmt.Printf("[DEBUG] NEW EVENT: %+v\n", item)
+				created += 1
+			} else {
+				updated += 1
 			}
-			ev.Google = models.CreateEventFromCalendarAPI(item)
+			ev.Google = models.CreateEventFromCalendarAPI(&item)
 			if _, err := tx.Put(key, &ev); err != nil {
 				return err
 			}
@@ -91,10 +104,11 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 	marmoset.Render(w).JSON(http.StatusOK, marmoset.P{
 		"message": "ok",
 		"events": map[string]any{
-			"total":   len(events.Items),
-			"ignored": ignored,
-			"created": created,
-			"updated": len(events.Items) - (created + ignored),
+			"total":      len(all.Items),
+			"ignored":    len(ignored),
+			"created":    created,
+			"updated":    updated,
+			"validation": len(all.Items) == len(ignored)+created+updated,
 		},
 	})
 }
