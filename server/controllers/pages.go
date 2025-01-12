@@ -45,3 +45,8 @@ func EquipReport(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	render.HTML("equips/report", marmoset.P{})
 }
+
+func Uniforms(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	render.HTML("uniforms", marmoset.P{})
+}

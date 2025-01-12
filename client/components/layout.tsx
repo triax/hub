@@ -13,6 +13,7 @@ const navigation = [
   { label: 'Schedule', link: '/' },
   // { label: 'Calendar', link: '/events' },
   { label: 'Equips', link: '/equips' },
+  { label: 'Uniforms', link: '/uniforms' },
   { label: 'Team', link: '/members' },
 ];
 
@@ -45,7 +46,7 @@ export default function Layout({ children, myself, isLoading }: LayoutProps) {
   const teamIcon: string = myself.team?.icon?.image_132 || defaultTeamIcon;
   const teamName: string = myself.team?.name || defaultTeamName;
   const myIcon: string = myself.slack.profile.image_512;
-  const title = `{process.env.NODE_ENV == "production" ? "" : "[DEV] "}{teamName} Team Hub`;
+  const title = `${process.env.NODE_ENV == "production" ? "" : "[DEV] "}${teamName} Team Hub`;
   return (
     <div id="root">
       <Head>

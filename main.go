@@ -55,6 +55,9 @@ func main() {
 	v1.Post("/equips/{id}/update", api.UpdateEquip)
 	v1.Post("/equips", api.CreateEquipItem)
 	v1.Get("/equips", api.ListEquips)
+	v1.Post("/numbers/{num}/assign", api.AssignPlayerNumber)
+	v1.Post("/numbers/{num}/deprive", api.DeprivePlayerNumber)
+	v1.Get("/numbers", api.GetAllNumbers)
 	r.Mount("/api/1", v1)
 
 	// Unauthorized pages
@@ -86,6 +89,7 @@ func main() {
 	r.With(page.Handle).Get("/equips/create", controllers.EquipCreate)
 	r.With(page.Handle).Get("/equips/report", controllers.EquipReport)
 	r.With(page.Handle).Get("/equips/{id}", controllers.Equip)
+	r.With(page.Handle).Get("/uniforms", controllers.Uniforms)
 	r.With(page.Handle).Get("/redirect/conditioning-form", controllers.RedirectConditioningForm)
 
 	// Cloud Tasks
