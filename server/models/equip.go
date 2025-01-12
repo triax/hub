@@ -28,7 +28,7 @@ type (
 )
 
 var (
-	EquipmentExceptionExpression = regexp.MustCompile("!\\(([^)]+)\\)")
+	EquipmentExceptionExpression = regexp.MustCompile(`!\\(([^)]+)\\)`)
 )
 
 func (equip Equip) NeedsCharge() bool {

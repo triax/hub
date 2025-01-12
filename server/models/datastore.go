@@ -9,6 +9,7 @@ const (
 	KindEvent   = "Event"
 	KindEquip   = "Equip"
 	KindCustody = "Custody"
+	KindNumber  = "Number"
 )
 
 // IsFieldMismatch ...
@@ -17,8 +18,8 @@ const (
 // ErrFieldMismatchが起きるが、これはdataのマイグレーション上めんどくさいので、
 // このエラーだけは無視したいことが多々ある。
 // @See
-// 	- https://github.com/googleapis/google-cloud-go/issues/913
-//	- https://pkg.go.dev/cloud.google.com/go/datastore#ErrFieldMismatch
+//   - https://github.com/googleapis/google-cloud-go/issues/913
+//   - https://pkg.go.dev/cloud.google.com/go/datastore#ErrFieldMismatch
 func IsFiledMismatch(err error) bool {
 	_, ok := err.(*datastore.ErrFieldMismatch)
 	return ok

@@ -1,9 +1,9 @@
 module.exports = {
-  purge: [
+  content: [
     './client/pages/**/*.{js,ts,jsx,tsx}',
     './client/components/**/*.{js,ts,jsx,tsx}',
   ],
-  darkMode: false, // or 'media' or 'class'
+  darkMode: 'media',
   theme: {
     extend: {},
   },

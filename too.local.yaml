@@ -1,8 +1,3 @@
-# Usage:
-#   too run     too.local.yaml
-#   too explain too.local.yaml
-#   too check   too.local.yaml
-
 version: 0
 # runtime:
 #   runs_on: local
@@ -22,9 +17,6 @@ version: 0
 include:
   - secrets.local.yaml
   - too.local.extends.yaml
-# must_include:
-#   - xxx
-#   - yyy
 
 env:
   PROJECT_ID: triax-football
@@ -34,15 +26,18 @@ env:
   DATASTORE_EMULATOR_HOST_PATH: localhost:8081/datastore
   DATASTORE_HOST: http://localhost:8081
 
-variable:
+var:
   DATE:
     use: bash
-    # value: $(date '+%Y-%m%d-%H%M%S')
-    value: echo 2024-1113-183041
-    collect: stdout
+    # generate: date '+%Y-%m%d-%H%M%S'
+    # value: echo 2024-1113-183041
+    generate: echo 2024-1201-200205
+    # collect: stdout
 
 prep:
   steps:
+  - name: 確認
+    run: echo ${DATE}
   - name: devdataのディレクトリをつくっておく
     run: mkdir -p ./devdata
   # - name: Datastore から Google Cloud Storage に、実データをエクスポート
@@ -67,6 +62,7 @@ main:
   - name: しょうがないのでAPIで突っ込む
     label: import
     run: |
+      sleep 5 && \
       curl -X POST http://${DATASTORE_EMULATOR_HOST}/v1/projects/${PROJECT_ID}:import \
       -H 'Content-Type: application/json' \
       -d "{\"input_url\": \"${PWD}/devdata/${DATE}/${DATE}.overall_export_metadata\"}"
