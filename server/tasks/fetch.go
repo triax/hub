@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	eventFetchDurationMonths = 4
+	eventFetchDurationMonths = 6 // 半年までのイベントを取得する
 )
 
 func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
