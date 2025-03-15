@@ -179,9 +179,11 @@ func shouldNoticeRSVPChangeToSlack(event models.Event, prev, next models.Partici
 }
 
 func buildSlackMessageOfLastMinuteRSVPChange(m models.Member, e models.Event, p, n models.ParticipationType) (string, []slack.MsgOption) {
+	loc := time.FixedZone("Asia/Tokyo", 9*60*60)
+	start := e.Google.Start().In(loc)
 	return "practice", []slack.MsgOption{
 		slack.MsgOptionBlocks(
-			slack.NewContextBlock("", slack.NewTextBlockObject(slack.MarkdownType, e.Google.Start().Format("2006/01/02 ")+e.Google.Title, false, false)),
+			slack.NewContextBlock("", slack.NewTextBlockObject(slack.MarkdownType, start.Format("2006/01/02 ")+e.Google.Title, false, false)),
 			slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*%s ⇒ %s* %s", p, n, m.Name()), false, false), nil, nil),
 		),
 	}
