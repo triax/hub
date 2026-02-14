@@ -3,7 +3,7 @@ import Member from "../models/Member";
 
 export default class EquipRepo {
   constructor(
-    public baseURL = process.env.API_BASE_URL,
+    public baseURL = import.meta.env.VITE_API_BASE_URL || "",
   ) { }
   list(): Promise<Equip[]> {
     const endpoint = this.baseURL + `/api/1/equips`;
@@ -32,7 +32,7 @@ export default class EquipRepo {
 
 export class CustodyRepo {
   constructor(
-    public baseURL = process.env.API_BASE_URL,
+    public baseURL = import.meta.env.VITE_API_BASE_URL || "",
   ) { }
   report(equipIDs: number[], reporter: Member, comment: string): any {
     const endpoint = this.baseURL + `/api/1/equips/custody`;

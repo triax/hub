@@ -1,5 +1,4 @@
-import Image from "next/image";
-import { useRouter } from "next/router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout, { LayoutProps } from "../../components/layout";
 import Equip from "../../models/Equip";
@@ -7,34 +6,31 @@ import Member from "../../models/Member";
 import EquipRepo, { CustodyRepo } from "../../repository/EquipRepo";
 import MemberRepo from "../../repository/MemberRepo";
 import { XIcon } from "@heroicons/react/outline";
+import { useAppContext } from "../context";
 
-interface ReportProps extends LayoutProps {
-  startLoading: () => void,
-  stopLoading: () => void,
-}
-
-export default function Report(props: ReportProps) {
-  const { startLoading, stopLoading, myself } = props;
+export default function Report() {
+  const { myself, startLoading, stopLoading } = useAppContext();
   const [equips, setEquips] = useState<Equip[]>([]);
   const [ids, setIDs] = useState<number[]>([]);
   const [principal, setPrincipal] = useState<Member>(null);
   const toggle = (y) => y ? (id) => setIDs(ids.filter(i => i != id)) : (id) => setIDs(ids.concat([id]));
   const repo = useMemo(() => new EquipRepo(), []);
-  const router = useRouter();
+  const navigate = useNavigate();
+  const search: Record<string, string> = useSearch({ strict: false });
   equips.length ? stopLoading() : startLoading();
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
   return (
-    <Layout {...props}>
+    <Layout>
 
-      {(!router.query["proxy"] && myself?.slack?.profile?.title?.match(/staff/i)) ? <p
+      {(!search.proxy && myself?.slack?.profile?.title?.match(/staff/i)) ? <p
         className="text-right text-blue-500"
-        onClick={() => router.push("/equips/report?proxy=1")}
+        onClick={() => navigate({ to: "/equips/report", search: { proxy: "1" } })}
       >代理入力する（Staff専用）</p> : null}
 
-      <div className={router.query["proxy"] ? "border-b pb-4 border-black" : ""}>
-        {router.query["proxy"] && !principal ? <ProxySelect setPrincipal={setPrincipal} /> : null}
+      <div className={search.proxy ? "border-b pb-4 border-black" : ""}>
+        {search.proxy && !principal ? <ProxySelect setPrincipal={setPrincipal} /> : null}
         {principal ? <ProxyMemberCard member={principal} setPrincipal={setPrincipal} selected={true} /> : null}
         {principal ? <h2 className="text-xl font-bold">{getNames(principal)[0] + ' さんは、'}</h2> : null}
       </div>
@@ -55,7 +51,7 @@ export default function Report(props: ReportProps) {
             if (!window.confirm(`以下のアイテムでよかったですか?\n${li.join("\n")}` + (principal ? `\n\n${getNames(principal)[0]}の【代理入力】` : ""))) return;
             (new CustodyRepo()).report(ids, (principal || myself), "").then(() => {
               window.alert("Thank you!!");
-              router.push("/");
+              navigate({ to: "/" });
             });
           }}
           disabled={ids.length == 0}
@@ -119,14 +115,10 @@ function ProxyMemberCard(props: { member: Member, setPrincipal: (Member) => void
       onClick={() => selected ? null : setPrincipal(m)}
     >
       <div className="w-8 h-8 flex-none">
-        <Image
-          loader={({ src }) => src}
-          unoptimized={true}
+        <img
           src={m.slack.profile.image_512}
           alt={m.slack.profile.real_name}
           className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
-          width={120}
-          height={120}
         />
       </div>
       <div className="flex-1 divide-x flex flex-wrap items-center">

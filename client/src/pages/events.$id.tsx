@@ -1,21 +1,22 @@
-import { useRouter } from "next/router";
+import { useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../../components/layout";
+import Layout from "../../components/layout";
 import { LocationMarkerIcon } from "@heroicons/react/outline";
 import { Disclosure } from "@headlessui/react";
-import { EventDateTime } from "../../../components/Events";
-import TeamEventRepo from "../../../repository/EventRepo";
-import { MemberCache } from "../../../repository/MemberRepo";
-import Member from "../../../models/Member";
-import TeamEvent, { Participation } from "../../../models/TriaxEvent";
-import EventRSVPButtonsRow from "../../../components/Events/RSVPButtons";
-import { RSVPModal } from "../../../components/Events/RSVPModal";
+import { EventDateTime } from "../../components/Events";
+import TeamEventRepo from "../../repository/EventRepo";
+import { MemberCache } from "../../repository/MemberRepo";
+import Member from "../../models/Member";
+import TeamEvent, { Participation } from "../../models/TriaxEvent";
+import EventRSVPButtonsRow from "../../components/Events/RSVPButtons";
+import { RSVPModal } from "../../components/Events/RSVPModal";
+import { useAppContext } from "../context";
 
-export default function EventView(props) {
-  const {startLoading, stopLoading} = props;
+export default function EventView() {
+  const { myself, startLoading, stopLoading } = useAppContext();
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
-  const id = useRouter().query.id as string;
+  const { id } = useParams({ strict: false });
   const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [modalevent, setModalEvent] = useState(null);
@@ -37,7 +38,6 @@ export default function EventView(props) {
   if (allMembers.length == 0) return <></>;
 
   // 集計
-  // List of positions of American Football
   const positions = ["OL", "QB", "RB", "WR", "TE", "DL", "LB", "DB", "TRAINER", "STAFF", "OTHERS"];
   const sum: {
     _yes: Record<string, Participation[]>,
@@ -62,7 +62,7 @@ export default function EventView(props) {
   };
 
   return (
-    <Layout {...props}>
+    <Layout>
       <div>
         <div>
           <h1 className="text-xl text-gray-800 mb-4">{event.google.title}</h1>
@@ -89,7 +89,7 @@ export default function EventView(props) {
         <div className="py-4">
           {event.google.start_time < Date.now() ? null : <EventRSVPButtonsRow
             event={event}
-            answer={/* answer*/ event.participations[props.myself.slack.id] || {}}
+            answer={event.participations[myself.slack.id] || {}}
             setModalEvent={setModalEvent}
             submit={submit}
           />}
@@ -97,7 +97,6 @@ export default function EventView(props) {
 
         <div className="py-4 space-y-12">
 
-          {/* {{{ DEV */}
           <div>
             <div className="border-b">
               <span className="font-semibold">参加</span>
@@ -107,7 +106,6 @@ export default function EventView(props) {
               {positions.map(pos => <PositionParticipationSection key={pos} join={true} title={pos} entries={sum._yes[pos] || []} />)}
             </div>
           </div>
-          {/* DEV }}} */}
 
           <div>
             <div className="border-b">
@@ -137,7 +135,7 @@ export default function EventView(props) {
           </div>
         </div>
 
-        {props.myself.slack.is_admin ? <div className="py-8">
+        {myself.slack.is_admin ? <div className="py-8">
           <div>
             <button
               className="w-full bg-red-500 text-white p-4 rounded-md font-bold cursor-pointer"
@@ -147,7 +145,6 @@ export default function EventView(props) {
         </div> : null}
       </div>
 
-      {/* RSVP (join_late, leav_early) Modal */}
       <RSVPModal event={modalevent} isOpen={!!modalevent} closeModal={() => setModalEvent(null)} submit={submit} />
 
     </Layout>

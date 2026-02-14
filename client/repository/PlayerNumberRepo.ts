@@ -2,7 +2,7 @@ import { PlayerNumber } from "../models/PlayerNumber";
 
 export class PlayerNumberRepo {
     constructor(
-        public baseURL = process.env.API_BASE_URL,
+        public baseURL = import.meta.env.VITE_API_BASE_URL || "",
     ) { }
     all(): Promise<PlayerNumber[]> {
         return fetch(`${this.baseURL}/api/1/numbers`)

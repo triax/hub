@@ -6,47 +6,22 @@ import (
 	"github.com/otiai10/marmoset"
 )
 
-func Members(w http.ResponseWriter, req *http.Request) {
+// serveSPA は全ページルートで index.html (SPA) を配信する共通ハンドラ。
+// Vite SPA のクライアントサイドルーティングにより、ページの描画はフロント側で行われる。
+func serveSPA(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
-	render.HTML("members", marmoset.P{})
+	render.HTML("index", marmoset.P{})
 }
 
-func Member(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("members/[id]", marmoset.P{})
-}
-
-func Events(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("events", marmoset.P{})
-}
-
-func Event(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("events/[id]", marmoset.P{})
-}
-
-func Equips(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("equips", marmoset.P{})
-}
-
-func Equip(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("equips/[id]", marmoset.P{})
-}
-
-func EquipCreate(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("equips/create", marmoset.P{})
-}
-
-func EquipReport(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("equips/report", marmoset.P{})
-}
-
-func Uniforms(w http.ResponseWriter, req *http.Request) {
-	render := marmoset.Render(w)
-	render.HTML("uniforms", marmoset.P{})
-}
+var (
+	Members     = http.HandlerFunc(serveSPA)
+	Member      = http.HandlerFunc(serveSPA)
+	Events      = http.HandlerFunc(serveSPA)
+	Event       = http.HandlerFunc(serveSPA)
+	Equips      = http.HandlerFunc(serveSPA)
+	Equip       = http.HandlerFunc(serveSPA)
+	EquipCreate = http.HandlerFunc(serveSPA)
+	EquipReport = http.HandlerFunc(serveSPA)
+	EquipEdit   = http.HandlerFunc(serveSPA)
+	Uniforms    = http.HandlerFunc(serveSPA)
+)

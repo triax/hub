@@ -1,20 +1,22 @@
-import Layout from "../../../components/layout";
-import { useRouter } from 'next/router';
+import Layout from "../../components/layout";
+import { useParams } from '@tanstack/react-router';
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import StatusBadges from "../../../components/statusbadges";
-import MemberRepo from "../../../repository/MemberRepo";
-import Member from "../../../models/Member";
+import StatusBadges from "../../components/statusbadges";
+import MemberRepo from "../../repository/MemberRepo";
+import Member from "../../models/Member";
+import { useAppContext } from "../context";
 
-export default function MemberView(props) {
+export default function MemberView() {
+  const { myself } = useAppContext();
   const repo = useMemo(() => new MemberRepo(), []);
-  const id = useRouter().query.id as string;
+  const { id } = useParams({ strict: false });
   const [member, setMember] = useState<Member>(null);
   const [num, setNumberInput] = useState<number>(null);
   useEffect(() => { id ? repo.get(id).then(setMember) : null }, [id, repo]);
   if (!member) return <></>;
 
   return (
-    <Layout {...props}>
+    <Layout>
       <div className="flex space-x-4">
         <div className="fle w-44">
           <img
@@ -50,7 +52,7 @@ export default function MemberView(props) {
         <div className="flex space-x-2"><StatusBadges member={member} size="text-lg px-4 py-1" /></div>
       </div>
 
-      {props.myself.slack.is_admin ? <AdminMenu member={member} repo={repo} /> : null}
+      {myself.slack.is_admin ? <AdminMenu member={member} repo={repo} /> : null}
 
       <div className="p-12 flex justify-center items-center">
         <a href="/members" className="underline">一覧に戻る</a>

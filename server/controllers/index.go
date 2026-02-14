@@ -13,9 +13,10 @@ func Top(w http.ResponseWriter, req *http.Request) {
 	m.Render(w).HTML("index", nil)
 }
 
-// ログインシーケンスを始めるためのランディングページにすぎない
+// ログインシーケンスを始めるためのランディングページ
+// SPAなので index.html を返し、クライアント側でログイン画面を表示する
 func Login(w http.ResponseWriter, req *http.Request) {
-	m.Render(w).HTML("login", nil)
+	m.Render(w).HTML("index", nil)
 }
 
 func Logout(w http.ResponseWriter, req *http.Request) {
@@ -28,9 +29,10 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 }
 
 func NotFound(w http.ResponseWriter, req *http.Request) {
-	m.Render(w).HTML("404", nil)
+	// SPAにフォールバック: クライアント側ルーターで処理
+	m.Render(w).HTML("index", nil)
 }
 
 func ErrorsPage(w http.ResponseWriter, req *http.Request) {
-	m.Render(w).HTML("errors", nil)
+	m.Render(w).HTML("index", nil)
 }

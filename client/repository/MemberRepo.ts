@@ -2,7 +2,7 @@ import Member from "../models/Member";
 
 export default class MemberRepo {
   constructor(
-      public baseURL = process.env.API_BASE_URL,
+      public baseURL = import.meta.env.VITE_API_BASE_URL || "",
   ) {}
   myself(): Promise<Member> {
     const endpoint = this.baseURL + `/api/1/myself` + `?t=${Date.now()}`;
