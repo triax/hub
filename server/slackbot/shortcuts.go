@@ -1,6 +1,7 @@
 package slackbot
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -17,6 +17,16 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 )
+
+// postSlackJSON はSlackのresponse_urlに安全にJSONを送信する
+func postSlackJSON(responseURL, text string) {
+	body, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		log.Printf("failed to marshal slack response: %v", err)
+		return
+	}
+	http.Post(responseURL, "application/json", bytes.NewReader(body))
+}
 
 // TODO: 名前は正しくない
 func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
@@ -86,9 +96,7 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		http.Post(payload.ResponseURL, "application/json", strings.NewReader(
-			fmt.Sprintf(`{"text":":white_check_mark: %s ⇒ %s"}`, payload.Message.Text, member.Name()),
-		))
+		postSlackJSON(payload.ResponseURL, fmt.Sprintf(":white_check_mark: %s ⇒ %s", payload.Message.Text, member.Name()))
 
 		// TODO: 全回答フィードバック
 	}
@@ -112,9 +120,11 @@ func (bot Bot) Translate(ctx context.Context, payload slack.InteractionCallback,
 		return fmt.Errorf("chatgpt_translation: %v", err)
 	}
 	text := res.Choices[0].Message.Content
-	slackres, err := http.Post(payload.ResponseURL, "application/json", strings.NewReader(
-		fmt.Sprintf(`{"text": "%s"}`, text),
-	))
+	body, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		return fmt.Errorf("json_marshal: %v", err)
+	}
+	slackres, err := http.Post(payload.ResponseURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

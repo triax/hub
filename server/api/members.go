@@ -34,9 +34,9 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if w := req.URL.Query().Get("keyword"); w != "" {
-		exp, err := regexp.Compile("(?i)" + w)
+		exp, err := regexp.Compile("(?i)" + regexp.QuoteMeta(w))
 		if err != nil {
-			render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+			render.JSON(http.StatusBadRequest, marmoset.P{"error": "invalid keyword"})
 			return
 		}
 		filtered := []models.Member{}

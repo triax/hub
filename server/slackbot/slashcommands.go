@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -23,16 +24,11 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 		ids = append(ids, m[idx])
 	}
 	if len(ids) == 0 {
-		http.Post(req.Form.Get("response_url"), "application/json", strings.NewReader(`{
-			"text": "誰に対するありがとうか、メンションで指定してください。本人には匿名のDMで通知されます。"
-		}`))
+		postSlackJSON(req.Form.Get("response_url"), "誰に対するありがとうか、メンションで指定してください。本人には匿名のDMで通知されます。")
 		return
 	}
 
 	w.WriteHeader(http.StatusOK) // とりあえずここまででSlackにレスポンスを返す
-
-	fmt.Println(1000)
-	fmt.Println(ids)
 
 	senderID := req.Form.Get("user_id")
 	message := mentionExpEscaped.ReplaceAllString(text, "")
@@ -43,7 +39,7 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 			Users: []string{strings.Split(id, "|")[0]},
 		})
 		if err != nil {
-			fmt.Println("[ERROR]", 6004, err.Error())
+			log.Printf("open conversation error: %v", err)
 			continue
 		}
 		_, _, err = bot.SlackAPI.PostMessage(
@@ -51,7 +47,7 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 			slack.MsgOptionText(fmt.Sprintf("<@%s>さんからありがとう！が届きました。\n> %s", senderID, message), false),
 		)
 		if err != nil {
-			fmt.Println("[ERROR]", 6005, err.Error())
+			log.Printf("post message error: %v", err)
 			continue
 		}
 
@@ -60,6 +56,6 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	}
 	feedback += "に伝えました。\n" + message
 
-	http.Post(req.Form.Get("response_url"), "application/json", strings.NewReader(`{"text":"`+feedback+`"}`))
+	postSlackJSON(req.Form.Get("response_url"), feedback)
 	bot.SlackAPI.PostMessage("thankyou", slack.MsgOptionText(announce, false))
 }

@@ -1,6 +1,5 @@
-// import Member from "../models/Member";
-
 import TeamEvent from "../models/TriaxEvent";
+import { fetchJSON } from "./fetch";
 
 export default class TeamEventRepo {
   constructor(
@@ -8,23 +7,21 @@ export default class TeamEventRepo {
   ) { }
   get(id: string): Promise<TeamEvent> {
     const endpoint = this.baseURL + `/api/1/events/${id}`;
-    return fetch(endpoint).then(res => res.json()).then(TeamEvent.fromAPIResponse);
+    return fetchJSON(endpoint).then(TeamEvent.fromAPIResponse);
   }
   delete(id: string): Promise<{id: string, ok: boolean}> {
     const endpoint = this.baseURL + `/api/1/events/${id}/delete`;
-    return fetch(endpoint, { method: "POST" }).then(res => res.json());
+    return fetchJSON(endpoint, { method: "POST" });
   }
   list(): Promise<TeamEvent[]> {
-    return fetch(this.baseURL + "/api/1/events")
-      .then(res => res.json())
+    return fetchJSON<TeamEvent[]>(this.baseURL + "/api/1/events")
       .then(res => res.map(TeamEvent.fromAPIResponse));
   }
   async rsvp({event, answer, params}): Promise<TeamEvent> {
     const endpoint = this.baseURL + "/api/1/events/answer";
-    return fetch(endpoint, { method: "POST", body: JSON.stringify({
+    return fetchJSON(endpoint, { method: "POST", body: JSON.stringify({
       event: { id: event.google.id }, type: answer, params: params ? params : null,
     })})
-      .then(res => res.json())
       .then(TeamEvent.fromAPIResponse);
   }
 }

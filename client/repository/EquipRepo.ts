@@ -1,5 +1,6 @@
 import Equip, { EquipDraft } from "../models/Equip";
 import Member from "../models/Member";
+import { fetchJSON } from "./fetch";
 
 export default class EquipRepo {
   constructor(
@@ -7,26 +8,26 @@ export default class EquipRepo {
   ) { }
   list(): Promise<Equip[]> {
     const endpoint = this.baseURL + `/api/1/equips`;
-    return fetch(endpoint).then(res => res.json()).then(Equip.listFromAPIResponse);
+    return fetchJSON(endpoint).then(Equip.listFromAPIResponse);
   }
   get(id: string): Promise<Equip> {
     const endpoint = this.baseURL + `/api/1/equips/${id}`;
-    return fetch(endpoint).then(res => res.json()).then(Equip.fromAPIResponse);
+    return fetchJSON(endpoint).then(Equip.fromAPIResponse);
   }
   post(draft: EquipDraft): Promise<Equip> {
     const endpoint = this.baseURL + `/api/1/equips`;
-    return fetch(endpoint, {
+    return fetchJSON(endpoint, {
       method: "POST",
       body: JSON.stringify(draft),
-    }).then(res => res.json()).then(Equip.fromAPIResponse);
+    }).then(Equip.fromAPIResponse);
   }
   delete(id: number): any {
     const endpoint = this.baseURL + `/api/1/equips/${id}/delete`;
-    return fetch(endpoint, {method: "POST"}).then(res => res.json());
+    return fetchJSON(endpoint, {method: "POST"});
   }
   update(id: number|string, draft: EquipDraft): Promise<any> {
     const endpoint = this.baseURL + `/api/1/equips/${id}/update`;
-    return fetch(endpoint, { method: "POST", body: JSON.stringify(draft) }).then(res => res.json());
+    return fetchJSON(endpoint, { method: "POST", body: JSON.stringify(draft) });
   }
 }
 
@@ -36,10 +37,10 @@ export class CustodyRepo {
   ) { }
   report(equipIDs: number[], reporter: Member, comment: string): any {
     const endpoint = this.baseURL + `/api/1/equips/custody`;
-    return fetch(endpoint, {
+    return fetchJSON(endpoint, {
       method: "POST",
       body: JSON.stringify({ ids: equipIDs, member_id: reporter.slack.id, comment }),
-    }).then(res => res.json());
+    });
   }
 
 }
