@@ -27,7 +27,7 @@ export default class Equip {
   ) { }
 
   static fromAPIResponse({ id, key, name, for_practice, for_game, description, history }): Equip {
-    return new Equip(id, name, for_practice, for_game, description, history ??= []);
+    return new Equip(id, name, for_practice, for_game, description, history ?? []);
   }
   static listFromAPIResponse(res: { id, key, name, for_practice, for_game, description, history }[]): Equip[] {
     return res.map(Equip.fromAPIResponse);

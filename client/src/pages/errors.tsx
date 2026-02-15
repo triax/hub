@@ -1,10 +1,9 @@
-import Image from "next/image";
-import { useRouter } from "next/router"
+import { useSearch } from "@tanstack/react-router";
 
 export default function Errors() {
-  const router = useRouter();
-  const code: number = parseInt(router.query["code"] as string);
-  const error: string = router.query["error"] as string;
+  const search: Record<string, string> = useSearch({ strict: false });
+  const code: number = parseInt(search.code as string);
+  const error: string = search.error as string;
   return (
     <section className="h-screen w-screen flex flex-col items-center justify-center bg-gray-100">
       <h1 className="text-center font-bold text-xl py-2">エラー: {code}</h1>
@@ -57,8 +56,7 @@ function __ErrorSystemError__() {
 }
 
 function ErrorIcon() {
-  return <Image
-    loader={({ src }) => src}
+  return <img
     alt={"エラ〜"}
     src={"https://pbs.twimg.com/profile_images/1157223157008179201/W7TsC5mH_400x400.jpg"}
     width={400}

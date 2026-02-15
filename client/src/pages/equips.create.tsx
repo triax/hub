@@ -1,15 +1,15 @@
-import { useRouter } from "next/router";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import Layout from "../../components/layout";
 import Equip, { EquipDraft } from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
 
-export default function CreateItem(props) {
+export default function CreateItem() {
   const [draft, setDraft] = useState<EquipDraft>(Equip.draft());
   const repo = new EquipRepo();
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
-    <Layout {...props}>
+    <Layout>
       <h1 className="my-4 text-2xl font-bold">あたらしくアイテムを追加</h1>
 
       <div className="w-full">
@@ -43,8 +43,6 @@ export default function CreateItem(props) {
             </label>
           </div>
 
-
-
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
               詳細説明 (任意)
@@ -67,14 +65,14 @@ export default function CreateItem(props) {
 
           <div className="flex items-center justify-between">
             <button
-              onClick={() => repo.post(draft).then(() => router.push(`/equips`)).catch(err => console.log(err))}
+              onClick={() => repo.post(draft).then(() => navigate({ to: `/equips` })).catch(err => console.log(err))}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               type="button"
             >
               上記のとおり作成
             </button>
             <a className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
-              onClick={() => router.push("/equips")}>
+              onClick={() => navigate({ to: "/equips" })}>
               キャンセル
             </a>
           </div>

@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import { PlayerNumberRepo } from "../../repository/PlayerNumberRepo";
-import { useRouter } from "next/router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { PlayerNumber } from "../../models/PlayerNumber";
 import Member from "../../models/Member";
 import { Dialog } from "@headlessui/react";
 import { NumAssignModalContent } from "../../components/Uniforms/ModalContents";
+import { useAppContext } from "../context";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 async function listMembers(incdel: boolean): Promise<Member[]> {
-  const endpoint = process.env.API_BASE_URL + "/api/1/members";
+  const endpoint = API_BASE_URL + "/api/1/members";
   const res = await fetch(endpoint + (incdel ? "?include_deleted=1" : ""));
   return (await res.json()).map((m) => Member.fromAPIResponse(m));
 }
@@ -42,7 +45,7 @@ function PlayerNumberListView({ playernumbers, members, loading }: {
               previousassign={members[p.player_id]}
             />)}
           >
-            {p.player_id && members[p.player_id] ? <img src={members[p.player_id].slack.profile.image_512} 
+            {p.player_id && members[p.player_id] ? <img src={members[p.player_id].slack.profile.image_512}
               alt={members[p.player_id].slack.real_name}
             /> : "+"}
           </button>
@@ -56,7 +59,6 @@ function PlayerNumberListView({ playernumbers, members, loading }: {
       >
         <div className="min-h-screen px-4 text-center">
           <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-40" />
-          {/* This element is to trick the browser into centering the modal contents. */}
           <span className="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
           {modalContent}
         </div>
@@ -84,7 +86,8 @@ function UniformClothesListView({ uniforms, members }: {
   );
 }
 
-export default function Uniforms(props) {
+export default function Uniforms() {
+  const { startLoading, stopLoading } = useAppContext();
   const repo = useMemo(() => new PlayerNumberRepo(), []);
   const [playernumbers, setPlayernumbers] = useState<PlayerNumber[]>([]);
   const [members, setMembers] = useState<{[slack_id:string]:Member}>({})
@@ -94,27 +97,27 @@ export default function Uniforms(props) {
   }, [repo]);
   const active = `shadow-inner rounded-t-lg bg-blue-600 text-white`;
   const inactive = `shadow rounded-t-lg text-gray-600`;
-  const router = useRouter();
-  const hash = router.asPath.split("#")[1];
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hash = location.hash;
   return (
-    <Layout {...props}>
+    <Layout>
       <div className="flex space-x-2">
-        <div className={"flex-1 p-4 text-center cursor-pointer " + (hash !== "clothes" ? active : inactive)}
-          onClick={() => router.push("/uniforms#numbers")}
+        <div className={"flex-1 p-4 text-center cursor-pointer " + (hash !== "#clothes" ? active : inactive)}
+          onClick={() => navigate({ to: "/uniforms", hash: "numbers" })}
         >背番号</div>
-        <div className={"flex-1 p-4 text-center cursor-pointer " + (hash === "clothes" ? active : inactive)}
-          // onClick={() => props.router.push("/uniforms")}
-          onClick={() => router.push("/uniforms#clothes")}
+        <div className={"flex-1 p-4 text-center cursor-pointer " + (hash === "#clothes" ? active : inactive)}
+          onClick={() => navigate({ to: "/uniforms", hash: "clothes" })}
         >ユニフォーム</div>
       </div>
       <div>
-        {hash === "clothes" ? <UniformClothesListView
+        {hash === "#clothes" ? <UniformClothesListView
           uniforms={[]}
           members={members}
         /> : <PlayerNumberListView
           playernumbers={playernumbers}
           members={members}
-          loading={{ start: props.startLoading, stop: props.stopLoading }}
+          loading={{ start: startLoading, stop: stopLoading }}
         />}
       </div>
     </Layout>

@@ -1,6 +1,7 @@
 {
   "name": "hub",
   "version": "1.0.1",
+  "type": "module",
   "engines": {
     "node": "20",
     "pnpm": "9"
@@ -8,11 +9,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
-    "dev": "next dev ./client",
-    "build": "next build ./client",
-    "export": "NODE_ENV=production next build ./client",
-    "lint": "next lint ./client"
+    "test": "vitest run",
+    "dev": "vite",
+    "build": "vite build",
+    "export": "vite build",
+    "lint": "eslint client/src client/components client/repository client/models",
+    "preview": "vite preview"
   },
   "repository": {
     "type": "git",
@@ -25,29 +27,30 @@
   },
   "homepage": "https://github.com/triax/hub#readme",
   "devDependencies": {
-    "@testing-library/jest-dom": "^5.14.1",
-    "@testing-library/react": "^12.1.1",
-    "@types/react": "^17.0.18",
+    "@eslint/js": "^9.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^14.3.1",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.3.1",
-    "babel-jest": "^27.2.4",
-    "eslint": "8.11.0",
-    "eslint-config-next": "14.2.5",
-    "identity-obj-proxy": "^3.0.0",
-    "jest": "^27.2.4",
-    "jestil": "0.0.3",
-    "next": "^14.1.1",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "jsdom": "^28.0.0",
     "postcss": "^8.3.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-test-renderer": "^18.3.1",
-    "sass": "^1.38.0",
     "tailwindcss": "^3.0.15",
     "too": "^3.0.1",
-    "typescript": "^4.3.5"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.55.0",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@headlessui/react": "^1.4.0",
     "@heroicons/react": "^1.0.4",
-    "@tailwindcss/forms": "^0.5.0"
+    "@tailwindcss/forms": "^0.5.0",
+    "@tanstack/react-router": "^1.159.10"
   }
 }

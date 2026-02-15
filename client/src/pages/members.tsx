@@ -1,29 +1,33 @@
-import { useRouter } from "next/router";
+import { useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import Layout from "../../components/layout";
 import StatusBadges from "../../components/statusbadges";
-import Image from "next/image";
+import { useAppContext } from "../context";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 async function listMembers(incdel: boolean) {
-  const endpoint = process.env.API_BASE_URL + "/api/1/members";
+  const endpoint = API_BASE_URL + "/api/1/members";
   const res = await fetch(endpoint + (incdel ? "?include_deleted=1" : ""));
   return res.json();
 }
 
-export default function Members(props) {
-  const incdel = useRouter().query.include_deleted == "1";
+export default function Members() {
+  const { myself } = useAppContext();
+  const search: Record<string, string> = useSearch({ strict: false });
+  const incdel = search.include_deleted == "1";
   const [members, setMembers] = useState([]);
   useEffect(() => {
     listMembers(incdel).then(mems => setMembers(mems));
   }, [incdel]);
   return (
-    <Layout {...props}>
+    <Layout>
       <div className="divide-y divide-gray-100">
         <List>
           {members.map(member => <MemberItem
             key={member.slack.id}
             member={member}
-            admin={props.myself.slack.is_admin}
+            admin={myself.slack.is_admin}
           />)}
         </List>
       </div>
@@ -46,14 +50,10 @@ function MemberItem({ member, admin }) {
       onClick={() => location.href = `/members/${member.slack.id}`}
     >
       <div className="flex-none w-12 h-12">
-        <Image
-          loader={({ src }) => src}
-          unoptimized={true}
+        <img
           src={slack.profile.image_512}
           alt={slack.profile.real_name}
           className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
-          width={120}
-          height={120}
         />
       </div>
       <div className="min-w-0 relative flex-auto sm:pr-20 lg:pr-0 xl:pr-20 flex">
@@ -75,7 +75,7 @@ function MemberItem({ member, admin }) {
 }
 
 function PositionCols({ title }) {
-  const positions: string[] = (title || "").split(/[\/／,、・]/).filter(Boolean);
+  const positions: string[] = (title || "").split(/[/／,、・]/).filter(Boolean);
   if (!positions || positions.length == 0) return <span>POS未設定</span>;
   return <>{positions.reduce((ctx, pos, i) => {
     ctx.push(<span key={pos}>{pos}</span>);

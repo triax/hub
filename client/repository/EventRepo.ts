@@ -4,7 +4,7 @@ import TeamEvent from "../models/TriaxEvent";
 
 export default class TeamEventRepo {
   constructor(
-    public baseURL = process.env.API_BASE_URL,
+    public baseURL = import.meta.env.VITE_API_BASE_URL || "",
   ) { }
   get(id: string): Promise<TeamEvent> {
     const endpoint = this.baseURL + `/api/1/events/${id}`;

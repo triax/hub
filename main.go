@@ -78,7 +78,10 @@ func main() {
 	r.Post("/slack/shortcuts", bot.Shortcuts)
 	r.Post("/slack/slashcommands", bot.SlashCommands)
 
-	// Pages
+	// Vite SPA 静的アセット配信
+	r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("client/dest/assets"))))
+
+	// Pages (すべて index.html を返し、TanStack Router がクライアントサイドでルーティング)
 	page := &filters.Auth{API: false, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
 	r.With(page.Handle).Get("/", controllers.Top)
 	r.With(page.Handle).Get("/members", controllers.Members)
@@ -89,6 +92,7 @@ func main() {
 	r.With(page.Handle).Get("/equips/create", controllers.EquipCreate)
 	r.With(page.Handle).Get("/equips/report", controllers.EquipReport)
 	r.With(page.Handle).Get("/equips/{id}", controllers.Equip)
+	r.With(page.Handle).Get("/equips/{id}/edit", controllers.EquipEdit)
 	r.With(page.Handle).Get("/uniforms", controllers.Uniforms)
 	r.With(page.Handle).Get("/redirect/conditioning-form", controllers.RedirectConditioningForm)
 
