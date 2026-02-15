@@ -3,6 +3,7 @@ package filters
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -74,6 +75,10 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 
 		claims := new(models.SessionUserClaims)
 		if _, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (interface{}, error) {
+			// JWT署名アルゴリズムを検証してアルゴリズム混同攻撃を防ぐ
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
 			return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
 		}); err != nil {
 			if auth.API {
