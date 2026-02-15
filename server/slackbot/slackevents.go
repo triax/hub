@@ -120,8 +120,10 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 		bot.onMentionEquipCheck(req, w, event)
 	case "予報":
 		bot.onMentionAmesh(req, w, event)
-	case "HUB_WEBPAGE_BASE_URL", "HUB_CONDITIONING_CHECK_SHEET_URL":
-		bot.onEnvDump(req, w, event)
+	case "HUB_WEBPAGE_BASE_URL":
+		bot.onEnvDumpSafe(req, w, event, "HUB_WEBPAGE_BASE_URL")
+	case "HUB_CONDITIONING_CHECK_SHEET_URL":
+		bot.onEnvDumpSafe(req, w, event, "HUB_CONDITIONING_CHECK_SHEET_URL")
 	default:
 		bot.echo(tokens, event)
 	}
@@ -363,8 +365,8 @@ func (bot Bot) onMentionAmesh(_ *http.Request, _ http.ResponseWriter, event slac
 
 }
 
-func (bot Bot) onEnvDump(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
-	name := largo.Tokenize(event.Text)[1:][0]
+// onEnvDumpSafe は許可リストに基づいて安全に環境変数を返す
+func (bot Bot) onEnvDumpSafe(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent, name string) {
 	_, _, err := bot.SlackAPI.PostMessage(event.Channel,
 		slack.MsgOptionText("`"+os.Getenv(name)+"`", false),
 	)

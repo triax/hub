@@ -36,6 +36,10 @@ func main() {
 
 	r := chi.NewRouter()
 
+	// セキュリティヘッダーとリクエストボディサイズ制限
+	r.Use(filters.SecurityHeaders)
+	r.Use(filters.MaxBodySize(1 << 20)) // 1MB
+
 	// API
 	v1 := chi.NewRouter()
 	auth := &filters.Auth{API: true, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
@@ -96,8 +100,11 @@ func main() {
 	r.With(page.Handle).Get("/uniforms", controllers.Uniforms)
 	r.With(page.Handle).Get("/redirect/conditioning-form", controllers.RedirectConditioningForm)
 
-	// Cloud Tasks
+	// Cloud Tasks (GAE cronリクエストのみ許可)
 	cron := chi.NewRouter()
+	if os.Getenv("GAE_APPLICATION") != "" {
+		cron.Use(filters.RequireGAECron)
+	}
 	cron.Get("/fetch-slack-members", tasks.CronFetchSlackMembers)
 	cron.Get("/fetch-calendar-events", tasks.CronFetchGoogleEvents)
 	cron.Get("/check-rsvp", tasks.CronCheckRSVP)
