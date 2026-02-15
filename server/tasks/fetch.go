@@ -46,16 +46,13 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// #ignore と、#mtg が含まれるイベントは、そもそもHubに入れない
+	// #ignore が含まれるイベントは、そもそもHubに入れない
 	targets := []calendar.Event{}
 	ignored := []calendar.Event{}
 	for _, item := range all.Items {
-		switch {
-		case models.EventExpressionIgnore.MatchString(item.Summary):
+		if models.EventExpressionIgnore.MatchString(item.Summary) {
 			ignored = append(ignored, *item)
-		case models.EventExpressionMeeting.MatchString(item.Summary):
-			ignored = append(ignored, *item)
-		default:
+		} else {
 			targets = append(targets, *item)
 		}
 	}
