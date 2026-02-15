@@ -19,7 +19,7 @@ client/*
 node_modules
 vendor
 
-next.config.js
+vite.config.ts
 package.json
 package-lock.json
 

@@ -1,24 +1,23 @@
-import Head from "next/head";
-
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect } from "react";
 import { Disclosure, Menu, Transition } from "@headlessui/react";
 import { BellIcon, MenuIcon, RefreshIcon, XIcon } from "@heroicons/react/outline";
-import { useRouter } from "next/router";
-import Member from "../models/Member";
+import { useLocation } from "@tanstack/react-router";
+import { useAppContext } from "../src/context";
 
 const defaultTeamIcon = "https://s3-us-west-2.amazonaws.com/slack-files2/avatars/2022-02-11/3102891044193_8ede5969380a68bc44bf_132.png";
 const defaultTeamName = "Triax";
 
+const HELP_PAGE_URL = import.meta.env.VITE_HELP_PAGE_URL || "https://sites.google.com/view/how-to-use-triax-hub";
+
 const navigation = [
   { label: 'Schedule', link: '/' },
-  // { label: 'Calendar', link: '/events' },
   { label: 'Equips', link: '/equips' },
   { label: 'Uniforms', link: '/uniforms' },
   { label: 'Team', link: '/members' },
 ];
 
-if (process.env.HELP_PAGE_URL) {
-  navigation.push({ label: 'Help', link: process.env.HELP_PAGE_URL });
+if (HELP_PAGE_URL) {
+  navigation.push({ label: 'Help', link: HELP_PAGE_URL });
 }
 
 function classnames(...classes) {
@@ -36,25 +35,38 @@ function Loading({isLoading}) {
 }
 
 export interface LayoutProps {
-  children: React.ReactNode,
-  myself: Member,
-  isLoading: boolean,
+  children?: React.ReactNode,
 }
 
-export default function Layout({ children, myself, isLoading }: LayoutProps) {
-  const { pathname } = useRouter();
+export default function Layout({ children }: LayoutProps) {
+  const { myself, isLoading } = useAppContext();
+  const { pathname } = useLocation();
   const teamIcon: string = myself.team?.icon?.image_132 || defaultTeamIcon;
   const teamName: string = myself.team?.name || defaultTeamName;
   const myIcon: string = myself.slack.profile.image_512;
-  const title = `${process.env.NODE_ENV == "production" ? "" : "[DEV] "}${teamName} Team Hub`;
+  const title = `${import.meta.env.MODE === "production" ? "" : "[DEV] "}${teamName} Team Hub`;
+
+  useEffect(() => {
+    document.title = title;
+    // Update favicon
+    let link: HTMLLinkElement = document.querySelector("link[rel='shortcut icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'shortcut icon';
+      document.head.appendChild(link);
+    }
+    link.href = teamIcon;
+    let apple: HTMLLinkElement = document.querySelector("link[rel='apple-touch-icon']");
+    if (!apple) {
+      apple = document.createElement('link');
+      apple.rel = 'apple-touch-icon';
+      document.head.appendChild(apple);
+    }
+    apple.href = teamIcon;
+  }, [title, teamIcon]);
+
   return (
-    <div id="root">
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{title}</title>
-        <link rel="apple-touch-icon" href={teamIcon} />
-        <link rel="shortcut icon" href={teamIcon} />
-      </Head>
+    <div>
       <Loading isLoading={isLoading} />
       <Disclosure as="nav" className="bg-gray-800">
         {({open}) => (

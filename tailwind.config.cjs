@@ -1,6 +1,6 @@
 module.exports = {
   content: [
-    './client/pages/**/*.{js,ts,jsx,tsx}',
+    './client/src/**/*.{js,ts,jsx,tsx}',
     './client/components/**/*.{js,ts,jsx,tsx}',
   ],
   darkMode: 'media',

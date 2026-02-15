@@ -51,14 +51,14 @@ function EventParticipantsIcons({pats, onClick = () => {}}) {
   )
 }
 
-export function EventRow({ event, myself, submit, setModalEvent, router }) {
+export function EventRow({ event, myself, submit, setModalEvent, navigate }) {
   const pats = event.participations;
   const answer = pats[myself.slack.id] || {};
   const id = event.google.id.replace(/@google\.com$/, "");
   if (event.google?.title?.match(/#ignore$/)) return null;
   return (
     <div className={"px-0 py-4 " + (event.google.start_time < Date.now() ? "bg-slate-200" : "")}>
-      <div onClick={() => router.push(`/events/${id}`)}>
+      <div onClick={() => navigate({ to: `/events/${id}` })}>
         <EventDateTime timestamp={event.google.start_time} />
         <h3 className="text-gray-900 text-sm font-bold">{event.google.title}</h3>
         {event.google.start_time < Date.now() ? null : <>

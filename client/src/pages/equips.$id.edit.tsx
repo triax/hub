@@ -1,16 +1,17 @@
-import { useRouter } from "next/router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../../components/layout";
-import Equip, { EquipDraft } from "../../../models/Equip";
-import EquipRepo from "../../../repository/EquipRepo";
+import Layout from "../../components/layout";
+import Equip, { EquipDraft } from "../../models/Equip";
+import EquipRepo from "../../repository/EquipRepo";
+import { useAppContext } from "../context";
 
-export default function EquipEditView(props) {
-  const router = useRouter();
-  const id = router.query.id as string;
+export default function EquipEditView() {
+  const { startLoading, stopLoading } = useAppContext();
+  const navigate = useNavigate();
+  const { id } = useParams({ strict: false });
   const [equip, setEquip] = useState<Equip>(null);
   const [draft, setDraft] = useState<EquipDraft>(Equip.draft());
   const repo = useMemo(() => new EquipRepo(), []);
-  const { startLoading, stopLoading } = props;
   useEffect(() => {
     if (!id) return;
     repo.get(id).then(e => {
@@ -18,9 +19,9 @@ export default function EquipEditView(props) {
       setDraft(Equip.draft(e));
     });
   }, [id, repo]);
-  if (equip == null) return <Layout {...props}></Layout>
+  if (equip == null) return <Layout></Layout>
   return (
-    <Layout {...props}>
+    <Layout>
       <h1 className="my-4 text-2xl font-bold">「{equip.name}」の編集</h1>
 
       <div className="w-full">
@@ -57,8 +58,6 @@ export default function EquipEditView(props) {
             </label>
           </div>
 
-
-
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
               詳細説明 (任意)
@@ -86,7 +85,7 @@ export default function EquipEditView(props) {
                 startLoading();
                 await repo.update(id, draft)
                 stopLoading();
-                router.push(`/equips/${id}`);
+                navigate({ to: `/equips/${id}` });
               }}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               type="button"
@@ -94,7 +93,7 @@ export default function EquipEditView(props) {
               上記のとおり編集
             </button>
             <a className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
-              onClick={() => router.back()}
+              onClick={() => navigate({ to: -1 as any })}
             >
               キャンセル
             </a>

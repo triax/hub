@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hub is a team management platform for the Triax American football team (members, events, equipment, player numbers). Go backend + Next.js frontend monorepo deployed to Google App Engine. The project is Japanese — comments, UI text, commit messages, and cron descriptions are often in Japanese.
+Hub is a team management platform for the Triax American football team (members, events, equipment, player numbers). Go backend + Vite/React/TanStack Router frontend monorepo deployed to Google App Engine. The project is Japanese — comments, UI text, commit messages, and cron descriptions are often in Japanese.
 
 ## Commands
 
@@ -12,38 +12,38 @@ npm install
 go mod download
 
 # Dev
-npm run dev          # Next.js frontend dev server (port 3000)
+npm run dev          # Vite frontend dev server (port 3000, proxies API to :8080)
 go run main.go       # Go API server (port 8080)
-npx too              # Full local dev: Datastore emulator + Go + Next.js
 
 # Build
-npm run build        # Dev build (output: client/dest/)
-npm run export       # Production static export (NODE_ENV=production)
+npm run build        # Production build (output: client/dest/)
 go build -v ./...
 
 # Test
-npm run test         # Jest (frontend)
+npm run test         # Vitest (frontend)
 go test -v ./...     # Go (backend)
 
 # Lint
-npm run lint         # ESLint via next lint
+npm run lint         # ESLint
 ```
 
 ## Architecture — Key Decisions
 
-- **No Node.js server in production.** Next.js runs in static export mode. The Go server serves the exported HTML/JS and handles all routing and auth.
-- **IMPORTANT: Use native `<a>` tags, NOT Next.js `<Link>`.** This is intentional — every navigation must hit the Go server for authentication. The ESLint rule `no-html-link-for-pages` is disabled for this reason.
-- **Use native `<img>` tags, NOT Next.js `<Image>`.** The `no-img-element` rule is disabled.
-- All routes are defined in `main.go` — API under `/api/1/*` (JSON, JWT auth), pages under `/*` (HTML via marmoset templates), cron tasks under `/tasks/*` (GAE admin-only).
+- **No Node.js server in production.** Vite builds a static SPA. The Go server serves `index.html` for all page routes and handles auth + API.
+- **SPA with TanStack Router.** Client-side routing is handled by TanStack Router. Go auth middleware checks authentication on initial page load; subsequent navigation is client-side.
+- **Use native `<img>` tags, NOT framework image components.**
+- All routes are defined in `main.go` — API under `/api/1/*` (JSON, JWT auth), pages under `/*` (serve SPA index.html via marmoset), cron tasks under `/tasks/*` (GAE admin-only). Static assets under `/assets/*`.
+- Frontend routes are defined in `client/src/router.tsx` using TanStack Router.
 - Frontend API calls go through the repository pattern in `client/repository/`.
-- Go API handlers return JSON via `marmoset.Render().JSON()`. Controllers render HTML via marmoset templates.
+- Go API handlers return JSON via `marmoset.Render().JSON()`. Page controllers serve `index.html` via marmoset templates.
 - Database is Google Cloud Datastore (NoSQL). Models are in `server/models/`.
+- Environment variables: use `import.meta.env.VITE_*` for frontend (e.g., `VITE_API_BASE_URL`).
 
 ## Code Style
 
 - Frontend: 2-space indentation (ESLint enforced), Tailwind CSS for styling
 - Backend: standard `gofmt` formatting
-- Follow existing patterns — see `client/pages/` for page examples, `server/api/` for endpoint examples
+- Follow existing patterns — see `client/src/pages/` for page examples, `server/api/` for endpoint examples
 
 ## Git Workflow
 

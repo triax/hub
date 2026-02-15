@@ -1,18 +1,19 @@
-import { useRouter } from "next/router";
-import { useEffect, useMemo, useState } from "react";
-import { EventList, EventRow } from "../components/Events";
-import { RSVPModal } from "../components/Events/RSVPModal";
-import Layout from "../components/layout";
-import TeamEvent from "../models/TriaxEvent";
-import TeamEventRepo from "../repository/EventRepo";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { EventList, EventRow } from "../../components/Events";
+import { RSVPModal } from "../../components/Events/RSVPModal";
+import Layout from "../../components/layout";
+import TeamEvent from "../../models/TriaxEvent";
+import TeamEventRepo from "../../repository/EventRepo";
+import { useAppContext } from "../context";
 
 const repo = new TeamEventRepo();
 
-export default function Top(props) {
-  const { myself, startLoading, stopLoading } = props;
+export default function Events() {
+  const { myself, startLoading, stopLoading } = useAppContext();
   const [modalevent, setModalEvent] = useState(null);
   const [events, setEvents] = useState<TeamEvent[]>([]);
-  const router = useRouter();
+  const navigate = useNavigate();
   useEffect(() => {
     repo.list().then(setEvents);
   }, []);
@@ -24,7 +25,7 @@ export default function Top(props) {
     stopLoading();
   }
   return (
-    <Layout {...props} >
+    <Layout>
       <div className="px-0 py-4 leading-6 text-lg font-medium text-gray-900 rounded-lg">
         <h1 role="heading">近日中の予定</h1>
       </div>
@@ -33,7 +34,7 @@ export default function Top(props) {
           key={event.google.id} event={event} myself={myself}
           submit={submit}
           setModalEvent={setModalEvent}
-          router={router}
+          navigate={navigate}
         />)}
       </EventList>
       <RSVPModal event={modalevent} isOpen={!!modalevent} closeModal={() => setModalEvent(null)} submit={submit} />

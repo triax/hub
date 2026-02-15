@@ -1,23 +1,24 @@
-import Image from "next/image";
-import { NextRouter, useRouter } from "next/router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../../components/layout";
-import Equip, { Custody } from "../../../models/Equip";
-import EquipRepo from "../../../repository/EquipRepo";
-import { MemberCache } from "../../../repository/MemberRepo";
+import Layout from "../../components/layout";
+import Equip, { Custody } from "../../models/Equip";
+import EquipRepo from "../../repository/EquipRepo";
+import { MemberCache } from "../../repository/MemberRepo";
+import { useAppContext } from "../context";
 
-export default function Item(props) {
-  const id = useRouter().query.id as string;
+export default function Item() {
+  const { myself } = useAppContext();
+  const { id } = useParams({ strict: false });
   const repo = useMemo(() => new EquipRepo(), []);
-  const router = useRouter();
+  const navigate = useNavigate();
   const [equip, setEquip] = useState<Equip>(null);
   useEffect(() => {
     if (!id) return;
     repo.get(id).then(setEquip);
   }, [repo, id]);
-  if (!equip) return <Layout {...props}></Layout>;
+  if (!equip) return <Layout></Layout>;
   return (
-    <Layout {...props}>
+    <Layout>
 
       <div className="w-full">
         <div className="bg-white shadow-md rounded px-4 pt-6 pb-8 mb-4">
@@ -31,17 +32,17 @@ export default function Item(props) {
             {equip.description.split("\n").map((line, i) => <div key={i}>{line}</div>)}
           </div>
 
-          <CustodyFeed history={equip.history} router={router} />
+          <CustodyFeed history={equip.history} navigate={navigate} />
 
         </div>
       </div>
 
-      {props.myself.slack.is_admin ? <div className="flex space-x-2">
+      {myself.slack.is_admin ? <div className="flex space-x-2">
         <div className="flex-1">
           <div
             onClick={() => {
               if (window.confirm(`「${equip.name}」を削除しますか?\nこのアクションは取り消せません。`)) {
-                repo.delete(equip.id).then(() => router.push(`/equips`));
+                repo.delete(equip.id).then(() => navigate({ to: `/equips` }));
               }
             }}
             className="rounded-md bg-red-600 text-white flex justify-center p-2">
@@ -50,7 +51,7 @@ export default function Item(props) {
         </div>
         <div className="flex-1">
           <div
-            onClick={() => router.push(`/equips/${equip.id}/edit`)}
+            onClick={() => navigate({ to: `/equips/${equip.id}/edit` })}
             className="rounded-md bg-orange-400 text-white flex justify-center p-2">
             <span>このアイテムを編集</span>
           </div>
@@ -60,7 +61,7 @@ export default function Item(props) {
   )
 }
 
-function CustodyFeed({history, router}) {
+function CustodyFeed({history, navigate}) {
   const cache = useMemo(() => new MemberCache(), []);
   return (
     <div>
@@ -70,7 +71,7 @@ function CustodyFeed({history, router}) {
         memberID={custody.member_id}
         comment={custody.comment}
         cache={cache}
-        router={router}
+        navigate={navigate}
       />)}
     </div>
   );
@@ -90,8 +91,8 @@ function DateRow({timestamp}: {timestamp: number}) {
   )
 }
 
-function FeedEntry({ timestamp, memberID, comment, cache, router }: {
-  timestamp: number, memberID: string, comment: string, cache: MemberCache, router: NextRouter,
+function FeedEntry({ timestamp, memberID, comment, cache, navigate }: {
+  timestamp: number, memberID: string, comment: string, cache: MemberCache, navigate: any,
 }) {
   const [c, setCustody] = useState<Custody>(null);
   useEffect(() => {
@@ -104,15 +105,11 @@ function FeedEntry({ timestamp, memberID, comment, cache, router }: {
     <div className="flex">
       <div className="flex flex-col items-center">
         <div className="w-10 h-10 rounded-full overflow-hidden">
-          <Image
-            onClick={() => router.push(`/members/${c.member_id}`)}
-            loader={({ src }) => src}
-            unoptimized={true}
+          <img
+            onClick={() => navigate({ to: `/members/${c.member_id}` })}
             src={c.member?.slack?.profile?.image_512}
             alt={c.member?.slack?.profile?.real_name}
             className="flex-none w-12 h-12 rounded-md object-cover bg-gray-100"
-            width={120}
-            height={120}
           />
         </div>
         <div className="border-x w-0 h-4 my-2 flex-grow border-gray-400" />

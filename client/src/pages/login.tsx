@@ -1,11 +1,8 @@
+import { useSearch } from "@tanstack/react-router";
 
-// https://api.slack.com/authentication/sign-in-with-slack#assets
-
-import { useRouter } from "next/router"
-
-// TODO: ここ、CSRFあるから、POSTのほうがいいと思う
 export default function Login() {
-  const destination = useRouter().query["goto"] as string;
+  const search: Record<string, string> = useSearch({ strict: false });
+  const destination = search.goto || "";
   return (
     <section className="h-screen w-screen flex items-center justify-center bg-gray-100">
       <form method="GET" action={`/auth/start`}>

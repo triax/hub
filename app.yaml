@@ -12,8 +12,8 @@ handlers:
   script: auto
   login: admin
 
-- url: /_next
-  static_dir: client/dest/_next
+- url: /assets
+  static_dir: client/dest/assets
 
 - url: /.*
   script: auto

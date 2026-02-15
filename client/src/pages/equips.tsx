@@ -1,29 +1,29 @@
-import { useRouter } from "next/router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import Equip from "../../models/Equip";
 import EquipRepo from "../../repository/EquipRepo";
 import Member from "../../models/Member";
 import { MemberCache } from "../../repository/MemberRepo";
-import Image from "next/image";
+import { useAppContext } from "../context";
 
-export default function List(props) {
-  const { startLoading, stopLoading } = props;
+export default function List() {
+  const { myself, startLoading, stopLoading } = useAppContext();
   const [equips, setEquips] = useState<Equip[]>([]);
   const repo = useMemo(() => new EquipRepo(), []);
-  const router = useRouter();
-  equips.length ? stopLoading() : startLoading();
+  const navigate = useNavigate();
+  if (equips.length) { stopLoading(); } else { startLoading(); }
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
   return (
-    <Layout {...props}>
+    <Layout>
       <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-14">
         <table className="min-w-full divide-y divide-gray-200">
           <tbody>
             {equips.sort(Equip.sort).map((eq, i) => <EquipItem
               key={eq.id} equip={eq} border={i < equips.length - 1}
-              jump={() => router.push(`/equips/${eq.id}`)}
+              jump={() => navigate({ to: `/equips/${eq.id}` })}
             />)}
           </tbody>
         </table>
@@ -43,15 +43,15 @@ export default function List(props) {
             text-center bg-blue-700 text-white p-2 rounded-md
             shadow-md shadow-gray-500
           "
-          onClick={() => router.push("/equips/report")}
+          onClick={() => navigate({ to: "/equips/report" })}
         >回収報告</div>
-        {props.myself?.slack?.profile?.title?.match(/staff/i) ? <div
+        {myself?.slack?.profile?.title?.match(/staff/i) ? <div
           className="
             basis-2/3
             text-center bg-red-900 text-white p-2 rounded-md
             shadow-md shadow-gray-500
           "
-          onClick={() => router.push("/equips/create")}
+          onClick={() => navigate({ to: "/equips/create" })}
         >新規アイテム登録</div> : null}
       </div>
     </Layout>
@@ -76,14 +76,10 @@ function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolea
   }, [equip]);
   return (
     <tr key={equip.id} onClick={jump} className={border ? "border-b" : ""}>
-      <td className="pl-2">{m?.slack ? <div className="w-6 h-6 rounded-full overflow-hidden"><Image
-        loader={({ src }) => src}
-        unoptimized={true}
+      <td className="pl-2">{m?.slack ? <div className="w-6 h-6 rounded-full overflow-hidden"><img
         src={m?.slack?.profile?.image_512}
         alt={m?.slack?.profile?.real_name}
         className="flex-none w-12 h-12 rounded-md object-cover"
-        width={120}
-        height={120}
       /></div> : null}</td>
       <td className="p-2">{equip.name}</td>
       <td className="p-2 w-8">{equip.forPractice ? <Circle type="practice" /> : null}</td>
