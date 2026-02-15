@@ -8,6 +8,9 @@ export default defineConfig({
     outDir: 'dest',
     emptyOutDir: true,
   },
+  test: {
+    passWithNoTests: true,
+  },
   server: {
     port: 3000,
     proxy: {

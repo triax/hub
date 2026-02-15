@@ -12,7 +12,7 @@ export default function MemberView() {
   const { id } = useParams({ strict: false });
   const [member, setMember] = useState<Member>(null);
   const [num, setNumberInput] = useState<number>(null);
-  useEffect(() => { id ? repo.get(id).then(setMember) : null }, [id, repo]);
+  useEffect(() => { if (id) repo.get(id).then(setMember); }, [id, repo]);
   if (!member) return <></>;
 
   return (

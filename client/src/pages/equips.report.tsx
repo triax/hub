@@ -17,7 +17,7 @@ export default function Report() {
   const repo = useMemo(() => new EquipRepo(), []);
   const navigate = useNavigate();
   const search: Record<string, string> = useSearch({ strict: false });
-  equips.length ? stopLoading() : startLoading();
+  if (equips.length) { stopLoading(); } else { startLoading(); }
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);

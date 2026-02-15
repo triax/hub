@@ -12,7 +12,7 @@ export default function List() {
   const [equips, setEquips] = useState<Equip[]>([]);
   const repo = useMemo(() => new EquipRepo(), []);
   const navigate = useNavigate();
-  equips.length ? stopLoading() : startLoading();
+  if (equips.length) { stopLoading(); } else { startLoading(); }
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);

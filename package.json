@@ -1,6 +1,7 @@
 {
   "name": "hub",
   "version": "1.0.1",
+  "type": "module",
   "engines": {
     "node": "20",
     "pnpm": "9"

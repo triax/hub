@@ -75,7 +75,7 @@ function MemberItem({ member, admin }) {
 }
 
 function PositionCols({ title }) {
-  const positions: string[] = (title || "").split(/[\/／,、・]/).filter(Boolean);
+  const positions: string[] = (title || "").split(/[/／,、・]/).filter(Boolean);
   if (!positions || positions.length == 0) return <span>POS未設定</span>;
   return <>{positions.reduce((ctx, pos, i) => {
     ctx.push(<span key={pos}>{pos}</span>);
