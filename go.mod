@@ -1,6 +1,6 @@
 module github.com/triax/hub
 
-go 1.18
+go 1.24
 
 require (
 	cloud.google.com/go/datastore v1.17.1
