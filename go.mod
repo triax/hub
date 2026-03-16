@@ -1,6 +1,6 @@
 module github.com/triax/hub
 
-go 1.24
+go 1.25
 
 require (
 	cloud.google.com/go/datastore v1.17.1
@@ -9,7 +9,7 @@ require (
 	github.com/otiai10/appyaml v0.0.0-20210625032121-1fe2f3423963
 	github.com/otiai10/largo v0.0.0-20211018055848-29754d2f6231
 	github.com/otiai10/marmoset v0.7.0
-	github.com/slack-go/slack v0.15.0
+	github.com/slack-go/slack v0.19.0
 	google.golang.org/api v0.189.0
 )
 
@@ -42,7 +42,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.5 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/otiai10/openaigo v1.7.0
