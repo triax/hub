@@ -85,7 +85,12 @@ func CronFetchGoogleEvents(w http.ResponseWriter, req *http.Request) {
 			} else {
 				updated += 1
 			}
-			ev.Google = models.CreateEventFromCalendarAPI(&item)
+			google, err := models.CreateEventFromCalendarAPI(&item)
+			if err != nil {
+				fmt.Printf("[WARN] skipping event %q (%s): %v\n", item.Summary, item.Id, err)
+				continue
+			}
+			ev.Google = google
 			if _, err := tx.Put(key, &ev); err != nil {
 				return err
 			}
