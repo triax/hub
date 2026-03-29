@@ -26,3 +26,4 @@ coverage.*.txt
 # Agents
 .claude/settings.local.json
 .zygarde
+.playwright-mcp
