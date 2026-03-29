@@ -22,3 +22,7 @@ coverage.*.txt
 
 # Editors
 .vscode
+
+# Agents
+.claude/settings.local.json
+.zygarde
