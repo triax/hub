@@ -11,11 +11,6 @@ interface GoogleEvent {
 export interface Participation {
   params?: any;
   type: ParticipationType;
-  // {{{ FIXME: 要らない
-  name: string;
-  title: string;
-  picture: string;
-  // }}}
   member?: Member;
 }
 

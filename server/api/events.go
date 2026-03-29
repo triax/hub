@@ -141,11 +141,8 @@ func AnswerEvent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	parts[slackID] = models.Participation{
-		Type:    body.Type,
-		Params:  body.Params,
-		Name:    member.Slack.Profile.RealName,
-		Picture: member.Slack.Profile.Image512,
-		Title:   member.Slack.Profile.Title,
+		Type:   body.Type,
+		Params: body.Params,
 	}
 	b, err := json.Marshal(parts)
 	if err != nil {

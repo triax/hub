@@ -22,11 +22,8 @@ type (
 	Participations map[string]Participation
 
 	Participation struct {
-		Type    ParticipationType      `json:"type"`
-		Params  map[string]interface{} `json:"params"`
-		Name    string                 `json:"name"`
-		Picture string                 `json:"picture"`
-		Title   string                 `json:"title"`
+		Type   ParticipationType      `json:"type"`
+		Params map[string]interface{} `json:"params"`
 	}
 
 	ParticipationType string

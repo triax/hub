@@ -45,7 +45,7 @@ export default function EventView() {
     unanswered: Member[],
   } = Object.entries(event.participations).reduce((ctx, [id, entry]: [string, Participation]) => {
     const member = MemberCache.pick(id);
-    let posi = entry.title.split("/")[0].toUpperCase() || member?.slack?.profile?.title?.split("/")[0].toUpperCase();
+    let posi = member?.slack?.profile?.title?.split("/")[0].toUpperCase() || "";
     if (!positions.includes(posi)) posi = "OTHERS";
     if (['join', 'join_late', 'leave_early'].includes(entry.type)) {
       ctx._yes[posi] = (ctx._yes[posi] || []).concat([{ ...entry, member }]);

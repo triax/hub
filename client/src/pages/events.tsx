@@ -5,9 +5,11 @@ import { RSVPModal } from "../../components/Events/RSVPModal";
 import Layout from "../../components/layout";
 import TeamEvent from "../../models/TriaxEvent";
 import TeamEventRepo from "../../repository/EventRepo";
+import { MemberCache } from "../../repository/MemberRepo";
 import { useAppContext } from "../context";
 
 const repo = new TeamEventRepo();
+const merepo = new MemberCache();
 
 export default function Events() {
   const { myself, startLoading, stopLoading } = useAppContext();
@@ -15,7 +17,10 @@ export default function Events() {
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const navigate = useNavigate();
   useEffect(() => {
-    repo.list().then(setEvents);
+    Promise.all([
+      repo.list().then(setEvents),
+      merepo.list({ cached: true }),
+    ]);
   }, []);
   const submit = async function(params) {
     startLoading();

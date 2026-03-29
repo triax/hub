@@ -6,9 +6,11 @@ import Layout from "../../components/layout";
 import TeamEvent from "../../models/TriaxEvent";
 import type { EventTag } from "../../models/TriaxEvent";
 import TeamEventRepo from "../../repository/EventRepo";
+import { MemberCache } from "../../repository/MemberRepo";
 import { useAppContext } from "../context";
 
 const repo = new TeamEventRepo();
+const merepo = new MemberCache();
 
 type FilterKey = "練習" | "試合" | "イベント" | "その他";
 
@@ -36,7 +38,10 @@ export default function Top() {
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set(defaultFilters));
   const navigate = useNavigate();
   useEffect(() => {
-    repo.list().then(setEvents);
+    Promise.all([
+      repo.list().then(setEvents),
+      merepo.list({ cached: true }),
+    ]);
   }, []);
   const filteredEvents = useMemo(() => filterEvents(events, activeFilters), [events, activeFilters]);
   const toggleFilter = (key: FilterKey) => {
