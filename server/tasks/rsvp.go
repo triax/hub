@@ -58,7 +58,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	joins := map[string][]models.Participation{}
+	joins := map[string][]models.Member{}
 	unans := []models.Member{}
 
 	for id, member := range members {
@@ -74,7 +74,7 @@ func FinalCall(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		if pats[id].Type.JoinAnyhow() {
-			joins[role] = append(joins[role], pats[id])
+			joins[role] = append(joins[role], member)
 		} else if pats[id].Type.Unanswered() {
 			unans = append(unans, member)
 		}
@@ -240,7 +240,7 @@ func buildRSVPReminderMentionMessage(ev models.Event, unanswers []models.Member)
 	)
 }
 
-func buildFinalCallMessage(event models.Event, roles []string, joins map[string][]models.Participation, unans []models.Member) slack.MsgOption {
+func buildFinalCallMessage(event models.Event, roles []string, joins map[string][]models.Member, unans []models.Member) slack.MsgOption {
 	pos := strings.Join(roles, "/")
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
@@ -269,7 +269,7 @@ func buildFinalCallMessage(event models.Event, roles []string, joins map[string]
 		} else {
 			names := []string{}
 			for _, m := range joins[role] {
-				names = append(names, m.Name)
+				names = append(names, m.Name())
 			}
 			blocks = append(blocks,
 				slack.NewSectionBlock(

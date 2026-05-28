@@ -1,3 +1,4 @@
+import { MemberCache } from "../../repository/MemberRepo";
 import EventRSVPButtonsRow from "./RSVPButtons";
 
 const weekday = {
@@ -25,13 +26,17 @@ export function EventLocation({location}) {
 
 function EventParticipantsRow({ row }) {
   return <div className="flex -space-x-1 overflow-hidden">
-    {row.map(([id, p]: [string, any]) => (
-      <div
-        key={id}
-        className="inline-block h-4 w-4 rounded-full ring-1 ring-white"
-        style={{backgroundImage: `url(${p.picture})`, backgroundSize: 'cover'}}
-      />
-    ))}
+    {row.map(([id]: [string, any]) => {
+      const member = MemberCache.pick(id);
+      const picture = member?.slack?.profile?.image_512;
+      return (
+        <div
+          key={id}
+          className="inline-block h-4 w-4 rounded-full ring-1 ring-white bg-gray-300"
+          style={picture ? {backgroundImage: `url(${picture})`, backgroundSize: 'cover'} : {}}
+        />
+      );
+    })}
   </div>;
 }
 
