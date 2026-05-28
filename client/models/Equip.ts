@@ -1,10 +1,13 @@
 import Member from "./Member";
 
+export type StorageType = "warehouse" | "takehome" | "";
+
 export interface EquipDraft {
   name: string;
   for_practice: boolean;
   for_game: boolean;
   description: string;
+  storage_type: StorageType;
 }
 
 export class Custody {
@@ -24,20 +27,21 @@ export default class Equip {
     public forGame: boolean,
     public description: string = "",
     public history: Custody[] = [],
+    public storageType: StorageType = "",
   ) { }
 
-  static fromAPIResponse({ id, key, name, for_practice, for_game, description, history }): Equip {
-    return new Equip(id, name, for_practice, for_game, description, history ?? []);
+  static fromAPIResponse({ id, key, name, for_practice, for_game, description, history, storage_type }): Equip {
+    return new Equip(id, name, for_practice, for_game, description, history ?? [], (storage_type ?? "") as StorageType);
   }
-  static listFromAPIResponse(res: { id, key, name, for_practice, for_game, description, history }[]): Equip[] {
+  static listFromAPIResponse(res: { id, key, name, for_practice, for_game, description, history, storage_type }[]): Equip[] {
     return res.map(Equip.fromAPIResponse);
   }
 
   static draft(equip?: Equip): EquipDraft  {
     if (equip) {
-      return { name: equip.name, for_practice: equip.forPractice, for_game: equip.forGame, description: equip.description };
+      return { name: equip.name, for_practice: equip.forPractice, for_game: equip.forGame, description: equip.description, storage_type: equip.storageType ?? "" };
     }
-    return { name: "", for_practice: false, for_game: false, description: "" };
+    return { name: "", for_practice: false, for_game: false, description: "", storage_type: "" };
   }
 
   static sort(p: Equip, n: Equip): 1|-1 {
