@@ -1,0 +1,15 @@
+[     139ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:3000/@fs/Users/otiai10/proj/go/src/github.com/triax/hub/node_modules/.vite/deps/chunk-MGU26UHR.js?v=586e54b7:21606
+[     169ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/1/members/U9MD7M0NS:0
+[     193ms] Error: HTTP 500: Internal Server Error
+    at fetchJSON (http://localhost:3000/repository/fetch.ts:10:11)
+[     170ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/1/myself?t=1779967992188:0
+[     194ms] Error: HTTP 500: Internal Server Error
+    at fetchJSON (http://localhost:3000/repository/fetch.ts:10:11)
+[     177ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/favicon.ico:0
+[     178ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/1/members/U9MD7M0NS:0
+[     194ms] Error: HTTP 500: Internal Server Error
+    at fetchJSON (http://localhost:3000/repository/fetch.ts:10:11)
+[     178ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/1/myself?t=1779967992188:0
+[     195ms] Error: HTTP 500: Internal Server Error
+    at fetchJSON (http://localhost:3000/repository/fetch.ts:10:11)
+[   28776ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:3000/@fs/Users/otiai10/proj/go/src/github.com/triax/hub/node_modules/.vite/deps/chunk-MGU26UHR.js?v=586e54b7:21606

@@ -147,8 +147,6 @@ function HPProfileSection({ memberId }: { memberId: string }) {
     type: "formal" | "casual" | "additional",
     file: File
   ) => {
-    const err = validatePhotoFile(file);
-    if (err) { setMessage(err); return; }
     setMessage("アップロード中...");
     try {
       const { url } = await repo.uploadPhoto(memberId, type, file);
@@ -189,14 +187,14 @@ function HPProfileSection({ memberId }: { memberId: string }) {
                 <textarea
                   className="flex-grow form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
                   rows={2}
-                  value={(profile as Record<string, unknown>)[key] as string || ""}
+                  value={(profile[key as keyof HPProfile] as string) || ""}
                   onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}
                 />
               ) : (
                 <input
                   type={key === "height" || key === "weight" ? "number" : "text"}
                   className="flex-grow form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
-                  value={(profile as Record<string, unknown>)[key] as string | number || ""}
+                  value={(profile[key as keyof HPProfile] as string | number) || ""}
                   onChange={e => setProfile(p => ({
                     ...p,
                     [key]: key === "height" || key === "weight"

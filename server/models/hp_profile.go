@@ -105,6 +105,42 @@ func GetHPProfile(ctx context.Context, slackID string) (*MemberHPProfile, error)
 	return profile, nil
 }
 
+// GetMultiHPProfile は単一の Datastore クライアントで全メンバーのプロフィールを一括取得する。
+// 戻り値のスライスは members と同じ順序で対応する。取得失敗や未存在のエントリは nil になる。
+func GetMultiHPProfile(ctx context.Context, members []Member) ([]*MemberHPProfile, error) {
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		return nil, fmt.Errorf("datastore client: %w", err)
+	}
+	defer client.Close()
+
+	keys := make([]*datastore.Key, len(members))
+	for i, m := range members {
+		keys[i] = datastore.NameKey(KindHPProfile, m.Slack.ID, nil)
+	}
+
+	profiles := make([]*MemberHPProfile, len(members))
+	for i := range profiles {
+		profiles[i] = &MemberHPProfile{}
+	}
+
+	errs := client.GetMulti(ctx, keys, profiles)
+	if errs != nil {
+		if merr, ok := errs.(datastore.MultiError); ok {
+			for i, e := range merr {
+				if e == datastore.ErrNoSuchEntity || IsFiledMismatch(e) {
+					profiles[i] = &MemberHPProfile{}
+				} else if e != nil {
+					profiles[i] = nil
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("datastore GetMulti: %w", errs)
+		}
+	}
+	return profiles, nil
+}
+
 func PutHPProfile(ctx context.Context, slackID string, profile *MemberHPProfile) error {
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {

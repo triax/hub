@@ -30,6 +30,10 @@ const maxPhotoBytes = 10 << 20 // 10MB
 func GetHPProfile(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	id := chi.URLParam(req, "id")
+	if filters.GetSessionUserContext(req) != id {
+		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
+		return
+	}
 	profile, err := models.GetHPProfile(req.Context(), id)
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
@@ -66,9 +70,9 @@ func UpdateHPProfile(w http.ResponseWriter, req *http.Request) {
 	if input.PortraitCasualURL == "" {
 		input.PortraitCasualURL = existing.PortraitCasualURL
 	}
-	if input.AdditionalPhotoURLs == nil {
-		input.AdditionalPhotoURLs = existing.AdditionalPhotoURLs
-	}
+	// 追加写真の URL は専用の photo エンドポイント経由でのみ変更可能。
+	// PUT ボディに含まれる値（nil でも [] でも）は常に無視して既存値を保持する。
+	input.AdditionalPhotoURLs = existing.AdditionalPhotoURLs
 
 	if err := models.PutHPProfile(req.Context(), id, &input); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
@@ -95,34 +99,26 @@ func UploadHPPhoto(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Content-Type の検証
-	contentType := req.Header.Get("Content-Type")
-	// multipart の場合はファイルフィールドから取得
-	var fileData io.Reader
-	var detectedMIME string
-
-	if strings.HasPrefix(contentType, "multipart/form-data") {
-		if err := req.ParseMultipartForm(maxPhotoBytes); err != nil {
-			render.JSON(http.StatusBadRequest, marmoset.P{"error": "failed to parse multipart form"})
-			return
-		}
-		file, header, err := req.FormFile("photo")
-		if err != nil {
-			render.JSON(http.StatusBadRequest, marmoset.P{"error": "photo field required"})
-			return
-		}
-		defer file.Close()
-		if header.Size > maxPhotoBytes {
-			render.JSON(http.StatusBadRequest, marmoset.P{"error": "file too large (max 10MB)"})
-			return
-		}
-		detectedMIME = header.Header.Get("Content-Type")
-		fileData = file
-	} else {
-		// raw body upload
-		detectedMIME = contentType
-		fileData = req.Body
+	if !strings.HasPrefix(req.Header.Get("Content-Type"), "multipart/form-data") {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "multipart/form-data required"})
+		return
 	}
+	if err := req.ParseMultipartForm(maxPhotoBytes); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "failed to parse multipart form"})
+		return
+	}
+	file, header, err := req.FormFile("photo")
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "photo field required"})
+		return
+	}
+	defer file.Close()
+	if header.Size > maxPhotoBytes {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": "file too large (max 10MB)"})
+		return
+	}
+	detectedMIME := header.Header.Get("Content-Type")
+	var fileData io.Reader = file
 
 	ext, ok := allowedMIMETypes[detectedMIME]
 	if !ok {
@@ -174,8 +170,8 @@ func uploadToGCS(ctx context.Context, objectName, mimeType string, r io.Reader) 
 	obj := client.Bucket(bucketName).Object(objectName)
 	wc := obj.NewWriter(ctx)
 	wc.ContentType = mimeType
-	// アップロード後に公開アクセス可能にする
-	wc.PredefinedACL = "publicRead"
+	// 公開アクセスはバケットレベルの IAM (roles/storage.objectViewer → allUsers) で設定すること。
+	// PredefinedACL = "publicRead" は Uniform bucket-level access が有効な場合に失敗するため使用しない。
 
 	if _, err := io.Copy(wc, r); err != nil {
 		return "", fmt.Errorf("io.Copy to GCS: %w", err)
@@ -206,13 +202,16 @@ func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 		HPProfile models.MemberHPProfile `json:"hp_profile"`
 	}
 
+	profiles, err := models.GetMultiHPProfile(ctx, members)
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
 	result := make([]publicEntry, 0, len(members))
-	for _, m := range members {
-		profile, err := models.GetHPProfile(ctx, m.Slack.ID)
-		if err != nil {
-			continue
-		}
-		if profile.HideFromHP {
+	for i, m := range members {
+		profile := profiles[i]
+		if profile == nil || profile.HideFromHP {
 			continue
 		}
 		result = append(result, publicEntry{

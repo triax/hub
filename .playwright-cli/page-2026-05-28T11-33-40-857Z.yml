@@ -1,0 +1,108 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img "Triax" [ref=e9]
+        - generic [ref=e11]:
+          - link "Schedule" [ref=e12] [cursor=pointer]:
+            - /url: /
+          - link "Equips" [ref=e13] [cursor=pointer]:
+            - /url: /equips
+          - link "Uniforms" [ref=e14] [cursor=pointer]:
+            - /url: /uniforms
+          - link "Team" [ref=e15] [cursor=pointer]:
+            - /url: /members
+          - link "Help" [ref=e16] [cursor=pointer]:
+            - /url: https://sites.google.com/view/how-to-use-triax-hub
+      - generic [ref=e18]:
+        - button "View notifications" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: View notifications
+          - img [ref=e21]
+        - button "Open user menu Hiromu Ochiai" [ref=e25] [cursor=pointer]:
+          - generic [ref=e26]: Open user menu
+          - img "Hiromu Ochiai" [ref=e27]
+  - main [ref=e28]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - img "otiai10"
+        - generic [ref=e33]:
+          - heading "Hiromu Ochiai" [level=1] [ref=e34]
+          - generic [ref=e35]: QB/WR
+          - generic [ref=e36]: Slackで編集可
+      - generic [ref=e38]:
+        - generic [ref=e39]: "背番号:"
+        - spinbutton [ref=e40]: "12"
+        - button "設定" [ref=e41] [cursor=pointer]
+      - generic [ref=e43]:
+        - heading "HPプロフィール編集" [level=2] [ref=e44]
+        - generic [ref=e45]:
+          - checkbox "HPに表示しない（すべての情報を非公開にする）" [ref=e46]
+          - generic [ref=e47]: HPに表示しない（すべての情報を非公開にする）
+        - generic [ref=e48]:
+          - generic [ref=e49]:
+            - generic [ref=e50]:
+              - generic [ref=e51]: 身長 (cm)
+              - spinbutton [ref=e52]
+              - generic [ref=e53]:
+                - checkbox "非公開" [ref=e54]
+                - generic [ref=e55]: 非公開
+            - generic [ref=e56]:
+              - generic [ref=e57]: 体重 (kg)
+              - spinbutton [ref=e58]
+              - generic [ref=e59]:
+                - checkbox "非公開" [ref=e60]
+                - generic [ref=e61]: 非公開
+            - generic [ref=e62]:
+              - generic [ref=e63]: ポジション
+              - textbox [ref=e64]
+              - generic [ref=e65]:
+                - checkbox "非公開" [ref=e66]
+                - generic [ref=e67]: 非公開
+            - generic [ref=e68]:
+              - generic [ref=e69]: 出身地
+              - textbox [ref=e70]
+              - generic [ref=e71]:
+                - checkbox "非公開" [ref=e72]
+                - generic [ref=e73]: 非公開
+            - generic [ref=e74]:
+              - generic [ref=e75]: 出身校
+              - textbox [ref=e76]
+              - generic [ref=e77]:
+                - checkbox "非公開" [ref=e78]
+                - generic [ref=e79]: 非公開
+            - generic [ref=e80]:
+              - generic [ref=e81]: 学部・学科
+              - textbox [ref=e82]
+              - generic [ref=e83]:
+                - checkbox "非公開" [ref=e84]
+                - generic [ref=e85]: 非公開
+            - generic [ref=e86]:
+              - generic [ref=e87]: ひとこと
+              - textbox [ref=e88]
+              - generic [ref=e89]:
+                - checkbox "非公開" [ref=e90]
+                - generic [ref=e91]: 非公開
+          - generic [ref=e92]:
+            - heading "プロフィール写真" [level=3] [ref=e93]
+            - generic [ref=e94]:
+              - generic [ref=e95]: 公式バストアップ *
+              - button "アップロード" [ref=e96] [cursor=pointer]
+              - generic [ref=e97]:
+                - checkbox "非公開" [ref=e98]
+                - generic [ref=e99]: 非公開
+            - generic [ref=e100]:
+              - generic [ref=e101]: カジュアルバストアップ *
+              - button "アップロード" [ref=e102] [cursor=pointer]
+              - generic [ref=e103]:
+                - checkbox "非公開" [ref=e104]
+                - generic [ref=e105]: 非公開
+            - generic [ref=e106]:
+              - generic [ref=e107]: 追加写真
+              - button "追加" [ref=e109] [cursor=pointer]
+              - generic [ref=e110]:
+                - checkbox "非公開" [ref=e111]
+                - generic [ref=e112]: 非公開
+          - button "保存" [ref=e113] [cursor=pointer]
+      - link "一覧に戻る" [ref=e115] [cursor=pointer]:
+        - /url: /members
