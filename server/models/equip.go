@@ -8,6 +8,13 @@ import (
 	"cloud.google.com/go/datastore"
 )
 
+type StorageType string
+
+const (
+	StorageTypeWarehouse StorageType = "warehouse"
+	StorageTypeTakeHome  StorageType = "takehome"
+)
+
 type (
 	Equip struct {
 		ID          int64          `json:"id" datastore:"-"`
@@ -17,9 +24,7 @@ type (
 		ForGame     bool           `json:"for_game"`
 		Description string         `json:"description"`
 		History     []Custody      `json:"history" datastore:"-"`
-		// StorageType 備品の管理方式。"warehouse"=倉庫管理、"takehome"=持ち帰り管理。
-		// 空文字（未設定）は後方互換のため "takehome" 扱い。
-		StorageType string `json:"storage_type"`
+		StorageType StorageType    `json:"storage_type"`
 	}
 
 	Custody struct {

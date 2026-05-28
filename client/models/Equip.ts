@@ -1,11 +1,13 @@
 import Member from "./Member";
 
+export type StorageType = "warehouse" | "takehome" | "";
+
 export interface EquipDraft {
   name: string;
   for_practice: boolean;
   for_game: boolean;
   description: string;
-  storage_type: string; // "warehouse" | "takehome" | ""
+  storage_type: StorageType;
 }
 
 export class Custody {
@@ -25,11 +27,11 @@ export default class Equip {
     public forGame: boolean,
     public description: string = "",
     public history: Custody[] = [],
-    public storageType: string = "",
+    public storageType: StorageType = "",
   ) { }
 
   static fromAPIResponse({ id, key, name, for_practice, for_game, description, history, storage_type }): Equip {
-    return new Equip(id, name, for_practice, for_game, description, history ?? [], storage_type ?? "");
+    return new Equip(id, name, for_practice, for_game, description, history ?? [], (storage_type ?? "") as StorageType);
   }
   static listFromAPIResponse(res: { id, key, name, for_practice, for_game, description, history, storage_type }[]): Equip[] {
     return res.map(Equip.fromAPIResponse);

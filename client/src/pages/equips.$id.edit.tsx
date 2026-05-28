@@ -64,7 +64,7 @@ export default function EquipEditView() {
             </label>
             <select
               value={draft.storage_type || "takehome"}
-              onChange={ev => setDraft({ ...draft, storage_type: ev.target.value })}
+              onChange={ev => setDraft({ ...draft, storage_type: ev.target.value as import("../../models/Equip").StorageType })}
               className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
             >
               <option value="takehome">持ち帰り管理（bring reminder あり）</option>

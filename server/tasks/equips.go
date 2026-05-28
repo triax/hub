@@ -80,7 +80,7 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 	// 4) 必要なequipの場合は所有者を取得する
 	targets := []models.Equip{}
 	for i, eq := range equips {
-		if eq.StorageType == "warehouse" {
+		if eq.StorageType == models.StorageTypeWarehouse {
 			continue
 		}
 		if !eq.ShouldBringFor(ev) {
