@@ -59,6 +59,20 @@ export default function EquipEditView() {
           </div>
 
           <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              管理方式
+            </label>
+            <select
+              value={draft.storage_type || "takehome"}
+              onChange={ev => setDraft({ ...draft, storage_type: ev.target.value })}
+              className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            >
+              <option value="takehome">持ち帰り管理（bring reminder あり）</option>
+              <option value="warehouse">倉庫管理（bring reminder なし）</option>
+            </select>
+          </div>
+
+          <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
               詳細説明 (任意)
             </label>
