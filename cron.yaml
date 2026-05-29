@@ -37,10 +37,10 @@ cron:
 # }}}
 
 # {{{ Equips
-# - description: 前日備品連絡
-#   url: /tasks/equips/remind/bring
-#   schedule: everyday 17:00
-#   timezone: Asia/Tokyo
+- description: 前日備品連絡（持ち帰り管理備品のホルダーに個別DM）
+  url: /tasks/equips/remind/bring
+  schedule: everyday 17:00
+  timezone: Asia/Tokyo
 
 - description: Equip Report Remind (AM) 当日の 02:00-14:00 の間に開始した練習ないし試合に対して、持ち帰り報告のリマインドを投げる
   url: /tasks/equips/remind/report?from=02:00&to=14:00&channel=general
@@ -52,8 +52,8 @@ cron:
   schedule: everyday 21:10
   timezone: Asia/Tokyo
 
-- description: 一定時間以上前の直近のイベントから現在にいたるまでに備品報告の更新が無いものをアラート
-  url: /tasks/equips/scan-unreported?oh=48&channel=staff
+- description: 一定時間以上前の直近のイベントから現在にいたるまでに備品報告の更新が無いものをアラート（#2/#3 投稿へのスレッド返信）
+  url: /tasks/equips/scan-unreported?oh=48&channel=general
   schedule: every tuesday 12:00
   timezone: Asia/Tokyo
 # }}}
