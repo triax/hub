@@ -12,17 +12,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
-	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
-)
-
-type (
-	EquipAlloc struct {
-		Event       models.Event
-		OK          map[string][]models.Equip
-		NG          map[string][]models.Equip
-		Unnecessary []models.Equip
-	}
 )
 
 func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
@@ -51,7 +41,6 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Eventが無ければ終了
 	if len(events) == 0 {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
@@ -63,7 +52,7 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 3) 全Equipsを取得する
+	// 2) 全Equipsを取得する
 	equips := []models.Equip{}
 	query = datastore.NewQuery(models.KindEquip)
 	if ev.IsGame() {
@@ -77,8 +66,8 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 4) 必要なequipの場合は所有者を取得する
-	targets := []models.Equip{}
+	// 3) 持ち帰り管理かつ対象イベント向け備品のホルダーをグルーピング
+	byHolder := map[string][]models.Equip{}
 	for i, eq := range equips {
 		if eq.StorageType == models.StorageTypeWarehouse {
 			continue
@@ -87,91 +76,53 @@ func EquipsRemindBring(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		equips[i].ID = eq.Key.ID
-		// 最新のHistoryだけ収集する
 		query := datastore.NewQuery(models.KindCustody).Ancestor(eq.Key).Order("-Timestamp").Limit(1)
 		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
-		targets = append(targets, equips[i])
-	}
-
-	// 5) 該当するEquipsの所持者に対してSlackにメンションを送る
-	pats, err := ev.Participations()
-	if err != nil {
-		log.Println("[ERROR]", 8004, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-	}
-	alloc := summarizeEquipAllocForTheEvent(ev, targets, pats)
-
-	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
-	msg := buildEquipsReminderMsg(alloc)
-	if _, _, err := api.PostMessageContext(ctx, "general", msg); err != nil {
-		log.Println("[ERROR]", 8005, err.Error())
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-	}
-
-	render.JSON(http.StatusOK, alloc)
-}
-
-func summarizeEquipAllocForTheEvent(event models.Event, equips []models.Equip, pats models.Participations) EquipAlloc {
-	alloc := EquipAlloc{
-		Event:       event,
-		OK:          map[string][]models.Equip{},
-		NG:          map[string][]models.Equip{},
-		Unnecessary: []models.Equip{},
-	}
-	for _, e := range equips {
-		if event.IsPractice() && !e.ForPractice {
-			continue // 練習イベントだが、練習用装備ではないため、スルー
-		}
-		if event.IsGame() && !e.ForGame {
-			continue // 試合イベントだが、試合用装備ではないため、スルー
-		}
-		if len(e.History) == 0 {
-			log.Printf("[ERROR] 誰も管理していない: %s", e.Name)
+		if len(equips[i].History) == 0 {
+			log.Printf("[WARN] 誰も管理していない: %s", eq.Name)
 			continue
 		}
-		p, ok := pats[e.History[0].MemberID]
-		switch {
-		case !ok: // 未回答
-			fallthrough
-		case p.Type == models.PTAbsent: // 欠席
-			alloc.NG[e.History[0].MemberID] = append(alloc.NG[e.History[0].MemberID], e)
-		default:
-			alloc.OK[e.History[0].MemberID] = append(alloc.OK[e.History[0].MemberID], e)
-		}
+		uid := equips[i].History[0].MemberID
+		byHolder[uid] = append(byHolder[uid], equips[i])
 	}
-	return alloc
-}
 
-func buildEquipsReminderMsg(alloc EquipAlloc) slack.MsgOption {
-	blocks := []slack.Block{
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(
-				slack.MarkdownType,
-				fmt.Sprintf(
-					"【前日確認】備品を持って帰ってくれている皆さまへ `%s` にて以下の備品を持ってきていただけるようお願いします :bow:",
-					alloc.Event.Google.Title,
-				),
-				false, false,
-			), nil, nil,
-		),
+	if len(byHolder) == 0 {
+		render.JSON(http.StatusOK, marmoset.P{"message": "no targets"})
+		return
 	}
-	for uid, equips := range alloc.OK {
-		names := []string{}
-		for _, e := range equips {
-			if e.NeedsCharge() {
-				names = append(names, ":electric_plug::zap: _"+e.Name+"_")
+
+	// 4) ホルダーごとに個別DM送信
+	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+	dmed := []string{}
+	for uid, eqs := range byHolder {
+		ch, _, _, err := api.OpenConversation(&slack.OpenConversationParameters{
+			Users: []string{uid},
+		})
+		if err != nil {
+			log.Printf("[ERROR] 8004 OpenConversation %s: %v", uid, err)
+			continue
+		}
+		names := make([]string, 0, len(eqs))
+		for _, eq := range eqs {
+			if eq.NeedsCharge() {
+				names = append(names, ":electric_plug::zap: _"+eq.Name+"_")
 			} else {
-				names = append(names, "_"+e.Name+"_")
+				names = append(names, "・"+eq.Name)
 			}
 		}
-		blocks = append(blocks,
-			slack.NewSectionBlock(nil, []*slack.TextBlockObject{
-				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("<@%s>", uid), false, false),
-				slack.NewTextBlockObject(slack.MarkdownType, strings.Join(names, "\n"), false, false),
-			}, nil),
+		msg := fmt.Sprintf(
+			"明日の *%s* にて以下の備品をお持ちください :bow:\n%s\n※ご欠席の場合は参加者への引き渡しをお願いします。",
+			ev.Google.Title,
+			strings.Join(names, "\n"),
 		)
+		if _, _, err := api.PostMessage(ch.ID, slack.MsgOptionText(msg, false)); err != nil {
+			log.Printf("[ERROR] 8005 PostMessage DM to %s: %v", uid, err)
+			continue
+		}
+		dmed = append(dmed, uid)
 	}
-	return slack.MsgOptionBlocks(blocks...)
+
+	render.JSON(http.StatusOK, marmoset.P{"event": ev.Google.Title, "dmed": dmed})
 }
 
 func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
@@ -179,7 +130,6 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	render := marmoset.Render(w, true)
 
-	// 本日の、指定時間に開始されているイベントを取得
 	from, to, err := defineTimeRangeByRequest(time.Now(), req)
 	if err != nil {
 		log.Println("[ERROR]", 9001, err.Error())
@@ -194,7 +144,6 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 該当イベント無し
 	if len(events) == 0 {
 		render.JSON(http.StatusOK, marmoset.P{"events": events, "message": "not found"})
 		return
@@ -214,7 +163,6 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	// 全件取得
 	all := []models.Equip{}
 	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
@@ -223,17 +171,39 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 
 	targets := []models.Equip{}
 	for _, equip := range all {
+		if equip.StorageType == models.StorageTypeWarehouse {
+			continue
+		}
 		if equip.ShouldBringFor(ev) {
 			targets = append(targets, equip)
 		}
 	}
 
+	if len(targets) == 0 {
+		render.JSON(http.StatusOK, map[string]any{"event": ev.Google, "message": "no targets"})
+		return
+	}
+
+	// 全備品を1投稿にまとめる（スレッド不使用）
+	headerText := fmt.Sprintf(
+		"<!channel> お疲れさまでした！ *%s*\n備品を持ち帰った方は、以下から保管者を登録してください :bow:",
+		ev.Google.Title,
+	)
 	blocks := []slack.Block{
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, strings.Join([]string{
-			fmt.Sprintf("@channel お疲れさまでした！ *%s*", ev.Google.Title),
-			"備品を持って帰って頂いた方は、以下のフォームにご回答いただくようお願いいたします！",
-			fmt.Sprintf("複数の備品回収を一括で報告する場合は、<%s/equips/report|こちらのリンク>から登録ください！ ", server.HubBaseURL()),
-		}, "\n"), false, false), nil, nil),
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, headerText, false, false),
+			nil, nil,
+		),
+	}
+	for _, equip := range targets {
+		blocks = append(blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, equip.Name, false, false),
+			nil,
+			slack.NewAccessory(slack.NewOptionsSelectBlockElement(
+				"users_select", nil,
+				fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, ev.Google.Title),
+			)),
+		))
 	}
 
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
@@ -242,23 +212,15 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 		channel = "general"
 	}
 
-	_, ts, err := api.PostMessage(channel, slack.MsgOptionBlocks(blocks...))
+	// text フィールドにマーカーを設定（EquipsScanUnreported が ts 検索に使用）
+	_, _, err = api.PostMessage(
+		channel,
+		slack.MsgOptionText("equip-report-reminder", false),
+		slack.MsgOptionBlocks(blocks...),
+	)
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
-	}
-
-	for _, equip := range targets {
-		text := equip.Name
-		block := slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil,
-			slack.NewAccessory(slack.NewOptionsSelectBlockElement("users_select", nil, fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, ev.Google.Title))),
-		)
-		_, _, err = api.PostMessage(channel, slack.MsgOptionBlocks(block), slack.MsgOptionTS(ts))
-		if err != nil {
-			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
-			return
-		}
 	}
 
 	render.JSON(http.StatusOK, map[string]any{
@@ -266,7 +228,6 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 		"targets": targets,
 		"channel": channel,
 	})
-
 }
 
 func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
@@ -278,7 +239,6 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 	ctx := req.Context()
 
-	// 最大10件のイベントをすべて取得
 	events, err := models.FindEventsBetween(ctx, time.Time{}, time.Now())
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
@@ -307,16 +267,18 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	// 全件取得
 	all := []models.Equip{}
 	if _, err = client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &all); err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
 	}
 
-	// 未報告をスキャン
+	// 未報告をスキャン（倉庫管理はスキップ）
 	unreported := []models.Equip{}
 	for _, equip := range all {
+		if equip.StorageType == models.StorageTypeWarehouse {
+			continue
+		}
 		if !equip.ShouldBringFor(latest) {
 			continue
 		}
@@ -341,39 +303,60 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	blocks := []slack.Block{
-		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(
-			"以下の備品は<%s/events/%s|「%s: %s」>から現時点までで備品報告の無いものです。現在の備品の所在を登録してください。",
-			server.HubBaseURL(), latest.Google.ID,
-			latest.Google.Start().Format("2006/01/02"),
-			latest.Google.Title,
-		), false, false), nil, nil),
-	}
-
 	api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 	channel := req.URL.Query().Get("channel")
-	_, ts, err := api.PostMessage(channel, slack.MsgOptionBlocks(blocks...))
+	if channel == "" {
+		channel = "general"
+	}
+
+	// 直近の EquipsRemindReportAfterEvent 投稿の ts を検索
+	reportTS, err := findRecentReportPostTS(api, channel)
 	if err != nil {
-		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		log.Printf("[WARN] 9003 history search failed: %v", err)
+	}
+	if reportTS == "" {
+		// 直近の報告投稿が見つからない場合はスキップ
+		render.JSON(http.StatusOK, map[string]any{
+			"message": "no recent report post found, skipping",
+		})
 		return
 	}
 
+	// 未報告備品を1メッセージにまとめてスレッド返信
+	blocks := []slack.Block{
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType,
+				"以下の備品の保管者がまだ未登録です :mag: 心当たりのある方は登録をお願いします。",
+				false, false,
+			),
+			nil, nil,
+		),
+	}
 	for _, equip := range unreported {
-		text := equip.Name
+		mention := ""
 		if len(equip.History) > 0 {
-			if m, err := models.GetMemberInfoByCache(ctx, equip.History[0].MemberID); err == nil {
-				text += fmt.Sprintf("\n(前回: <%s/equips/%d|%s>)", server.HubBaseURL(), equip.Key.ID, m.Name())
-			}
+			mention = fmt.Sprintf("<@%s> ", equip.History[0].MemberID)
 		}
-		block := slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, text, false, false), nil,
-			slack.NewAccessory(slack.NewOptionsSelectBlockElement("users_select", nil, fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, latest.Google.Title))),
-		)
-		_, _, err = api.PostMessage(channel, slack.MsgOptionBlocks(block), slack.MsgOptionTS(ts))
-		if err != nil {
-			render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
-			return
-		}
+		blocks = append(blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType,
+				fmt.Sprintf("%s%s", mention, equip.Name),
+				false, false,
+			),
+			nil,
+			slack.NewAccessory(slack.NewOptionsSelectBlockElement(
+				"users_select", nil,
+				fmt.Sprintf("equip_unreported/?eid=%d&ev=%s", equip.Key.ID, latest.Google.Title),
+			)),
+		))
+	}
+
+	if _, _, err = api.PostMessage(
+		channel,
+		slack.MsgOptionTS(reportTS),
+		slack.MsgOptionBlocks(blocks...),
+	); err != nil {
+		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
+		return
 	}
 
 	render.JSON(http.StatusOK, map[string]any{
@@ -381,6 +364,25 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 		"offset_hours": offsetHours,
 		"latest_event": latest.Google,
 		"unreported":   unreported,
+		"thread_ts":    reportTS,
 	})
+}
 
+// findRecentReportPostTS は channel の直近100件のメッセージから
+// EquipsRemindReportAfterEvent が投稿したルートメッセージの ts を返す。
+// 見つからない場合は空文字を返す。
+func findRecentReportPostTS(api *slack.Client, channel string) (string, error) {
+	hist, err := api.GetConversationHistory(&slack.GetConversationHistoryParameters{
+		ChannelID: channel,
+		Limit:     100,
+	})
+	if err != nil {
+		return "", fmt.Errorf("GetConversationHistory: %w", err)
+	}
+	for _, msg := range hist.Messages {
+		if msg.Text == "equip-report-reminder" {
+			return msg.Timestamp, nil
+		}
+	}
+	return "", nil
 }
