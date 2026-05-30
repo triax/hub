@@ -15,14 +15,14 @@ export default class TapingRepo {
       .then(TapeItem.listFromAPIResponse);
   }
 
-  tapeItemCreate(draft: { name: string; sort_order: number; disabled: boolean }): Promise<TapeItem> {
+  tapeItemCreate(draft: { name: string; stock_count: number; sort_order: number; disabled: boolean }): Promise<TapeItem> {
     return fetchJSON(this.baseURL + "/api/1/tape-items", {
       method: "POST",
       body: JSON.stringify(draft),
     }).then(TapeItem.fromAPIResponse);
   }
 
-  tapeItemUpdate(id: number, draft: { name: string; sort_order: number; disabled: boolean }): Promise<TapeItem> {
+  tapeItemUpdate(id: number, draft: { name: string; stock_count: number; sort_order: number; disabled: boolean }): Promise<TapeItem> {
     return fetchJSON(this.baseURL + `/api/1/tape-items/${id}/update`, {
       method: "POST",
       body: JSON.stringify(draft),
@@ -70,8 +70,11 @@ export default class TapingRepo {
       .then(Taping.listFromAPIResponse);
   }
 
-  listRequests(eventID?: string): Promise<Taping[]> {
-    const q = eventID ? `?event_id=${encodeURIComponent(eventID)}` : "";
+  listRequests(eventID?: string, year?: number): Promise<Taping[]> {
+    const params = new URLSearchParams();
+    if (eventID) params.set("event_id", eventID);
+    if (year) params.set("year", String(year));
+    const q = params.toString() ? `?${params}` : "";
     return fetchJSON(this.baseURL + `/api/1/taping/requests${q}`)
       .then(Taping.listFromAPIResponse);
   }

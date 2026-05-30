@@ -4,11 +4,12 @@ import "cloud.google.com/go/datastore"
 
 // TapeItem はテープ素材のマスタ（ホワイト、キネシオ等）。
 type TapeItem struct {
-	ID        int64          `json:"id" datastore:"-"`
-	Key       *datastore.Key `datastore:"__key__"`
-	Name      string         `json:"name"`
-	SortOrder int            `json:"sort_order"`
-	Disabled  bool           `json:"disabled"`
+	ID         int64          `json:"id" datastore:"-"`
+	Key        *datastore.Key `datastore:"__key__"`
+	Name       string         `json:"name"`
+	StockCount float64        `json:"stock_count"` // 基本ストック本数（目標在庫）
+	SortOrder  int            `json:"sort_order"`
+	Disabled   bool           `json:"disabled"`
 }
 
 // TapeUsage は施術1件で使用するテープの種類と量。

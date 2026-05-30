@@ -438,6 +438,14 @@ func ListTapingRequests(w http.ResponseWriter, req *http.Request) {
 	if eventID := req.URL.Query().Get("event_id"); eventID != "" {
 		query = query.Filter("EventID =", eventID)
 	}
+	if yearStr := req.URL.Query().Get("year"); yearStr != "" {
+		if y, err := strconv.Atoi(yearStr); err == nil {
+			loc := time.FixedZone("Asia/Tokyo", 9*60*60)
+			from := time.Date(y, 1, 1, 0, 0, 0, 0, loc).UnixMilli()
+			to := time.Date(y+1, 1, 1, 0, 0, 0, 0, loc).UnixMilli()
+			query = query.Filter("RequestedAt >=", from).Filter("RequestedAt <", to)
+		}
+	}
 	tapings := []models.Taping{}
 	if _, err := client.GetAll(ctx, query, &tapings); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})

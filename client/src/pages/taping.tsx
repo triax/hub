@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import Taping from "../../models/Taping";
+import TapeItem from "../../models/TapeItem";
+import Member from "../../models/Member";
 import TeamEvent from "../../models/TriaxEvent";
 import TapingRepo from "../../repository/TapingRepo";
+import { MemberCache } from "../../repository/MemberRepo";
 import { useAppContext } from "../context";
 
 function isTapingManager(myself: any): boolean {
-  if (!myself?.slack) return false;
+  if (!myself?.slack?.id || myself.slack.id === "xxx") return false;
   if (myself.slack.is_admin) return true;
   return !!(myself.slack.profile?.title?.match(/trainer/i));
 }
@@ -16,105 +19,132 @@ export default function TapingOverview() {
   const { myself } = useAppContext();
   const navigate = useNavigate();
   const repo = useMemo(() => new TapingRepo(), []);
-  const [events, setEvents] = useState<TeamEvent[]>([]);
-  const [selectedEventID, setSelectedEventID] = useState<string>("");
-  const [tapings, setTapings] = useState<Taping[]>([]);
+  const year = new Date().getFullYear();
 
-  // 権限チェック: placeholder(id="xxx") のうちは待つ
+  const [yearTapings, setYearTapings] = useState<Taping[]>([]);
+  const [tapeItems, setTapeItems] = useState<TapeItem[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<TeamEvent[]>([]);
+  const [upcomingTapings, setUpcomingTapings] = useState<Taping[]>([]);
+
   useEffect(() => {
     if (!myself?.slack?.id || myself.slack.id === "xxx") return;
-    if (!isTapingManager(myself)) {
-      navigate({ to: "/" });
-    }
-  }, [myself, navigate]);
+    if (!isTapingManager(myself)) { navigate({ to: "/" }); return; }
 
-  useEffect(() => {
+    repo.listRequests(undefined, year).then(setYearTapings);
+    repo.tapeItemList().then(setTapeItems);
     repo.listEvents().then(evs => {
-      setEvents(evs);
-      if (evs.length > 0) setSelectedEventID(evs[0].google.id);
+      const upcoming = evs.filter(ev => ev.google.start_time > Date.now());
+      setUpcomingEvents(upcoming);
+      // 今後のイベントのリクエストを全取得
+      Promise.all(upcoming.map(ev => repo.listRequests(ev.google.id)))
+        .then(results => setUpcomingTapings(results.flat()));
     });
-  }, [repo]);
+  }, [myself, navigate, repo, year]);
 
-  useEffect(() => {
-    if (!selectedEventID) return;
-    repo.listRequests(selectedEventID).then(setTapings);
-  }, [selectedEventID, repo]);
+  if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
 
-  // MemberID 別に集計
-  const byMember = tapings.reduce<Record<string, Taping[]>>((acc, t) => {
-    (acc[t.memberID] ||= []).push(t);
+  // --- 費用集計（年度累計） ---
+  const costByMember = yearTapings.reduce<Record<string, { price: number; count: number }>>((acc, t) => {
+    if (!acc[t.memberID]) acc[t.memberID] = { price: 0, count: 0 };
+    acc[t.memberID].price += t.price;
+    acc[t.memberID].count += 1;
+    return acc;
+  }, {});
+  const totalYearCost = yearTapings.reduce((s, t) => s + t.price, 0);
+
+  // --- テープ在庫状況（今後のイベント） ---
+  const upcomingByTape = upcomingTapings.reduce<Record<string, number>>((acc, t) => {
+    for (const u of t.tapeUsages ?? []) {
+      acc[u.tape_item_name] = (acc[u.tape_item_name] ?? 0) + u.quantity;
+    }
     return acc;
   }, {});
 
-  const totalPrice = tapings.reduce((s, t) => s + t.price, 0);
-  const totalRolls = tapings.reduce((s, t) => s + t.estimatedRolls, 0);
-
-  if (myself?.slack && !isTapingManager(myself)) return null;
-
   return (
     <Layout>
-      <div className="px-4 py-6 max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold mb-4">テーピングリクエスト一覧</h1>
-
-        {/* イベントセレクト */}
-        <div className="mb-4">
-          <select
-            className="w-full border border-gray-300 rounded-md p-2 text-sm"
-            value={selectedEventID}
-            onChange={e => setSelectedEventID(e.target.value)}
-          >
-            {events.map(ev => (
-              <option key={ev.google.id} value={ev.google.id}>
-                {new Date(ev.google.start_time).toLocaleDateString("ja-JP")} {ev.google.title}
-              </option>
-            ))}
-          </select>
+      <div>
+        {/* 費用集計 */}
+        <div className="mb-8">
+          <div className="border-b mb-2 pb-1 flex justify-between items-baseline">
+            <span className="font-semibold text-sm">費用集計（{year}年度）</span>
+            <span className="text-sm text-gray-500">合計 ¥{totalYearCost.toLocaleString()}</span>
+          </div>
+          {Object.keys(costByMember).length === 0 ? (
+            <div className="text-sm text-gray-400 py-4 text-center">データがありません</div>
+          ) : (
+            <div className="divide-y">
+              {Object.entries(costByMember)
+                .sort((a, b) => b[1].price - a[1].price)
+                .map(([memberID, { price, count }]) => (
+                  <MemberCostRow key={memberID} memberID={memberID} price={price} count={count} />
+                ))}
+            </div>
+          )}
         </div>
 
-        {/* サマリ */}
-        {tapings.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-blue-700">{Object.keys(byMember).length}</div>
-              <div className="text-xs text-gray-500 mt-1">申請人数</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-green-700">¥{totalPrice.toLocaleString()}</div>
-              <div className="text-xs text-gray-500 mt-1">合計金額</div>
-            </div>
-            <div className="bg-orange-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-orange-700">{totalRolls.toFixed(1)}</div>
-              <div className="text-xs text-gray-500 mt-1">推定テープ（本）</div>
-            </div>
+        {/* テープ在庫状況 */}
+        <div>
+          <div className="border-b mb-2 pb-1 flex justify-between items-baseline">
+            <span className="font-semibold text-sm">テープ在庫状況</span>
+            <span className="text-xs text-gray-400">今後 {upcomingEvents.length} イベントの申請より</span>
           </div>
-        )}
-
-        {/* メンバー別リスト */}
-        {Object.entries(byMember).length === 0 ? (
-          <div className="text-center text-gray-400 py-8">リクエストはありません</div>
-        ) : (
-          <div className="space-y-3">
-            {Object.entries(byMember).map(([memberID, items]) => (
-              <div key={memberID} className="border border-gray-200 rounded-lg p-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs text-gray-500 font-mono">{memberID}</span>
-                  <span className="text-sm font-medium">
-                    ¥{items.reduce((s, t) => s + t.price, 0).toLocaleString()}
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {items.map((t, i) => (
-                    <li key={i} className="flex justify-between text-sm">
-                      <span>{t.menuItemName}</span>
-                      <span className="text-gray-500">¥{t.price}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+          {tapeItems.filter(t => !t.disabled).length === 0 ? (
+            <div className="text-sm text-gray-400 py-4 text-center">テープ素材が未登録です</div>
+          ) : (
+            <div className="divide-y">
+              {tapeItems.filter(t => !t.disabled).map(item => {
+                const needed = upcomingByTape[item.name] ?? 0;
+                const stock = item.stockCount;
+                const shortage = stock > 0 && needed > stock;
+                return (
+                  <div key={item.id} className="flex items-center py-2 text-sm">
+                    <div className="flex-1">{item.name}</div>
+                    <div className="text-right space-x-3">
+                      <span className="text-gray-500">必要 {needed.toFixed(1)}本</span>
+                      {stock > 0 ? (
+                        <>
+                          <span className="text-gray-400">/ ストック {stock}本</span>
+                          {shortage
+                            ? <span className="text-red-500 font-medium">⚠ 不足</span>
+                            : <span className="text-green-600">✓</span>
+                          }
+                        </>
+                      ) : (
+                        <span className="text-gray-300">ストック未設定</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {tapeItems.some(t => !t.disabled && t.stockCount === 0) && (
+            <div className="mt-2 text-xs text-gray-400">
+              ストック本数は
+              <button className="underline mx-1" onClick={() => navigate({ to: "/taping/master" })}>テープ素材マスタ</button>
+              で設定できます。
+            </div>
+          )}
+        </div>
       </div>
     </Layout>
+  );
+}
+
+function MemberCostRow({ memberID, price, count }: { memberID: string; price: number; count: number }) {
+  const [member, setMember] = useState<Member>(null);
+  useEffect(() => { new MemberCache().get(memberID).then(setMember); }, [memberID]);
+  const name = member?.slack?.profile?.display_name || member?.slack?.profile?.real_name || memberID;
+  return (
+    <div className="flex items-center py-2 text-sm">
+      {member?.slack?.profile?.image_512 ? (
+        <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mr-2">
+          <img src={member.slack.profile.image_512} alt={name} className="w-full h-full object-cover" />
+        </div>
+      ) : <div className="w-6 mr-2" />}
+      <div className="flex-1">{name}</div>
+      <div className="text-gray-400 text-xs mr-3">{count}件</div>
+      <div className="font-medium">¥{price.toLocaleString()}</div>
+    </div>
   );
 }

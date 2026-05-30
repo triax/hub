@@ -27,7 +27,7 @@ export default function TapingMaster() {
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<"menu" | "tape">("menu");
   const [editingTape, setEditingTape] = useState<TapeItem | null>(null);
-  const [tapeDraft, setTapeDraft] = useState({ name: "", sort_order: 0, disabled: false });
+  const [tapeDraft, setTapeDraft] = useState({ name: "", stock_count: 0, sort_order: 0, disabled: false });
   const [showTapeForm, setShowTapeForm] = useState(false);
 
   useEffect(() => {
@@ -65,8 +65,8 @@ export default function TapingMaster() {
     draft.tape_usages.find(u => u.tape_item_id === tapeItemID)?.quantity ?? 0;
 
   // --- テープ素材操作 ---
-  const openTapeCreate = () => { setEditingTape(null); setTapeDraft({ name: "", sort_order: 0, disabled: false }); setShowTapeForm(true); };
-  const openTapeEdit = (t: TapeItem) => { setEditingTape(t); setTapeDraft({ name: t.name, sort_order: t.sortOrder, disabled: t.disabled }); setShowTapeForm(true); };
+  const openTapeCreate = () => { setEditingTape(null); setTapeDraft({ name: "", stock_count: 0, sort_order: 0, disabled: false }); setShowTapeForm(true); };
+  const openTapeEdit = (t: TapeItem) => { setEditingTape(t); setTapeDraft({ name: t.name, stock_count: t.stockCount, sort_order: t.sortOrder, disabled: t.disabled }); setShowTapeForm(true); };
   const saveTape = async () => {
     if (editingTape) { await repo.tapeItemUpdate(editingTape.id, tapeDraft); }
     else { await repo.tapeItemCreate(tapeDraft); }
@@ -149,6 +149,7 @@ export default function TapingMaster() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">基本ストック</th>
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">状態</th>
                     <th className="px-3 py-2"></th>
                   </tr>
@@ -157,6 +158,7 @@ export default function TapingMaster() {
                   {tapeItems.map(t => (
                     <tr key={t.id} className={t.disabled ? "opacity-40" : ""}>
                       <td className="px-3 py-2 font-medium">{t.name}</td>
+                      <td className="px-3 py-2 text-right text-sm">{t.stockCount > 0 ? `${t.stockCount}本` : "—"}</td>
                       <td className="px-3 py-2 text-center text-xs">
                         {t.disabled ? <span className="text-gray-400">無効</span> : <span className="text-green-600">有効</span>}
                       </td>
@@ -167,7 +169,7 @@ export default function TapingMaster() {
                     </tr>
                   ))}
                   {tapeItems.length === 0 && (
-                    <tr><td colSpan={3} className="px-3 py-4 text-center text-gray-400">テープ素材がありません</td></tr>
+                    <tr><td colSpan={4} className="px-3 py-4 text-center text-gray-400">テープ素材がありません</td></tr>
                   )}
                 </tbody>
               </table>
@@ -248,10 +250,17 @@ export default function TapingMaster() {
                   <input type="text" className="w-full border border-gray-300 rounded-md p-2 text-sm"
                     value={tapeDraft.name} onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">表示順</label>
-                  <input type="number" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                    value={tapeDraft.sort_order} onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">基本ストック（本）</label>
+                    <input type="number" step="0.5" min="0" className="w-full border border-gray-300 rounded-md p-2 text-sm"
+                      value={tapeDraft.stock_count} onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">表示順</label>
+                    <input type="number" className="w-full border border-gray-300 rounded-md p-2 text-sm"
+                      value={tapeDraft.sort_order} onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
+                  </div>
                 </div>
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input type="checkbox" checked={tapeDraft.disabled}
