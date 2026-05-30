@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# env-contract 準拠の env_provisioner
+# スタック: Go + Node.js + Datastore Emulator (Docker Compose なし)
+# 生成元: /bootstrap
+set -euo pipefail
+
+VERB="${1:-}"
+ID="${2:-}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ID="${PROJECT_ID:-triax-football}"
+
+if [[ -z "$VERB" ]]; then
+  echo "Usage: $0 <verb> [<id>]" >&2
+  echo "  verbs: provision, doctor, teardown, status" >&2
+  exit 1
+fi
+
+# ID から 0-99 のオフセットを算出（並列 env 間のポート衝突を回避）
+_port_offset() {
+  printf '%s' "${1}" | cksum | awk '{print $1 % 100}'
+}
+
+# PID / ログの作業ディレクトリ
+_workdir() {
+  echo "/tmp/hub-env-${1}"
+}
+
+# ------------------------------------------------------------------ doctor ---
+_doctor() {
+  local ok=true
+  local issues=()
+
+  _check() {
+    local name="$1" cmd="$2" detail_ok="$3" detail_fail="$4" fix="$5"
+    if eval "$cmd" >/dev/null 2>&1; then
+      issues+=("{\"check\":\"${name}\",\"status\":\"pass\",\"detail\":\"${detail_ok}\"}")
+    else
+      ok=false
+      issues+=("{\"check\":\"${name}\",\"status\":\"fail\",\"detail\":\"${detail_fail}\",\"remediation\":\"${fix}\"}")
+    fi
+  }
+
+  _check "gcloud"          "command -v gcloud"      "gcloud CLI found" "gcloud CLI not found"          "Install Google Cloud SDK"
+  _check "datastore-comp"  "gcloud components list --format='value(id)' 2>/dev/null | grep -q cloud-datastore-emulator" \
+                                                    "cloud-datastore-emulator installed" "cloud-datastore-emulator not installed" \
+                                                    "gcloud components install cloud-datastore-emulator"
+  _check "go"              "command -v go"          "go found"          "go not found"                  "Install Go"
+  _check "npm"             "command -v npm"          "npm found"         "npm not found"                 "Install Node.js"
+  _check "secrets"         "test -f '${REPO_ROOT}/secrets.local.yaml'" \
+                                                    "secrets.local.yaml found" "secrets.local.yaml not found" \
+                                                    "cp secrets.example.yaml secrets.local.yaml && fill in values"
+
+  local checks_json
+  local joined
+  joined=$(printf '%s,' "${issues[@]}")
+  checks_json="[${joined%,}]"
+  printf '{"ok":%s,"checks":%s}\n' "$ok" "$checks_json"
+}
+
+# --------------------------------------------------------------- provision ---
+_provision() {
+  local id="$1"
+  local offset
+  offset=$(_port_offset "$id")
+
+  # cross-ref 不可侵性: id ごとに独立したポートとデータディレクトリを使う
+  local ds_port=$((9100 + offset * 2))      # Datastore Emulator ポート
+  local api_port=$((9101 + offset * 2))     # Go API ポート
+  local workdir
+  workdir=$(_workdir "$id")
+  local datadir="${REPO_ROOT}/devdata/env-${id}"
+
+  mkdir -p "$workdir" "$datadir"
+
+  # --- Datastore Emulator 起動 ---
+  gcloud beta emulators datastore start \
+    --data-dir="$datadir" \
+    --project="${PROJECT_ID}" \
+    --host-port="localhost:${ds_port}" \
+    > "${workdir}/datastore.log" 2>&1 &
+  echo $! > "${workdir}/datastore.pid"
+
+  # エミュレータの起動を待つ（最大 30 秒）
+  local retries=30
+  while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
+    retries=$((retries - 1))
+    if [[ $retries -le 0 ]]; then
+      printf '{"ready":false,"id":"%s","diagnostics":["Datastore emulator timed out on port %s. See %s/datastore.log"]}\n' \
+        "$id" "$ds_port" "$workdir"
+      exit 1
+    fi
+    sleep 1
+  done
+
+  # --- Go API サーバ起動 ---
+  # secrets.local.yaml は Go の init() 内で appyaml.Load() により自動ロードされる。
+  # ここでは Datastore 接続先とポートだけ上書きする。
+  PORT="${api_port}" \
+  DATASTORE_EMULATOR_HOST="localhost:${ds_port}" \
+  DATASTORE_PROJECT_ID="${PROJECT_ID}" \
+  DATASTORE_DATASET="${PROJECT_ID}" \
+  DATASTORE_EMULATOR_HOST_PATH="localhost:${ds_port}/datastore" \
+  DATASTORE_HOST="http://localhost:${ds_port}" \
+    go run "${REPO_ROOT}/main.go" \
+    > "${workdir}/api.log" 2>&1 &
+  echo $! > "${workdir}/api.pid"
+
+  # API サーバの起動を待つ（最大 30 秒）
+  retries=30
+  while ! nc -z localhost "${api_port}" 2>/dev/null; do
+    retries=$((retries - 1))
+    if [[ $retries -le 0 ]]; then
+      printf '{"ready":false,"id":"%s","diagnostics":["Go API server timed out on port %s. See %s/api.log"]}\n' \
+        "$id" "$api_port" "$workdir"
+      exit 1
+    fi
+    sleep 1
+  done
+
+  # TODO: /uat がブラウザ UI テストを行う場合は npm run build で SPA をビルドし、
+  #       Go に静的ファイルを配信させること（go run main.go は client/dest/ を参照する）。
+  #       現状、Go が client/dest/index.html を見つけられない場合は API のみのテストとなる。
+  #       必要なら下記のコメントを外す:
+  # (cd "${REPO_ROOT}" && npm run build) 2>&1 | tee "${workdir}/build.log"
+
+  printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"diagnostics":[]}\n' \
+    "$id" "$api_port" "$api_port" "$ds_port"
+}
+
+# --------------------------------------------------------------- teardown ---
+_teardown() {
+  local id="$1"
+  local workdir
+  workdir=$(_workdir "$id")
+
+  # PID ファイルにあるプロセスを全て停止
+  for pidfile in "${workdir}"/*.pid; do
+    [[ -f "$pidfile" ]] || continue
+    local pid
+    pid=$(cat "$pidfile")
+    # 子プロセスごとグループを停止
+    kill -- -"$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')" 2>/dev/null || kill "$pid" 2>/dev/null || true
+    rm -f "$pidfile"
+  done
+
+  # emulator データと作業ディレクトリを削除
+  rm -rf "${REPO_ROOT}/devdata/env-${id}"
+  rm -rf "$workdir"
+}
+
+# ----------------------------------------------------------------- status ---
+_status() {
+  local id="$1"
+  local workdir
+  workdir=$(_workdir "$id")
+  local running=0
+
+  for pidfile in "${workdir}"/*.pid; do
+    [[ -f "$pidfile" ]] || continue
+    local pid
+    pid=$(cat "$pidfile")
+    if kill -0 "$pid" 2>/dev/null; then
+      running=$((running + 1))
+    fi
+  done
+
+  printf '{"id":"%s","running_processes":%s}\n' "$id" "$running"
+}
+
+# ---------------------------------------------------------------- dispatch ---
+case "$VERB" in
+  provision)  _provision "$ID" ;;
+  doctor)     _doctor ;;
+  teardown)   _teardown "$ID" ;;
+  status)     _status "$ID" ;;
+  *)
+    echo "Unknown verb: $VERB" >&2
+    exit 1
+    ;;
+esac
