@@ -12,7 +12,7 @@ import { useAppContext } from "../context";
 function isTapingManager(myself: any): boolean {
   if (!myself?.slack?.id || myself.slack.id === "xxx") return false;
   if (myself.slack.is_admin) return true;
-  return !!(myself.slack.profile?.title?.match(/trainer/i));
+  return !!(myself.slack.profile?.title?.match(/trainer|staff/i));
 }
 
 export default function TapingOverview() {
@@ -126,6 +126,13 @@ export default function TapingOverview() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="px-4 py-4 fixed left-0 bottom-0 w-full">
+        <div
+          className="text-center border border-blue-600 text-blue-600 p-2 rounded-md shadow-md shadow-gray-300 bg-white text-sm font-medium cursor-pointer"
+          onClick={() => navigate({ to: "/taping/master" })}
+        >マスタ管理</div>
       </div>
     </Layout>
   );
