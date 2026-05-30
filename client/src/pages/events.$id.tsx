@@ -65,8 +65,12 @@ export default function EventView() {
   return (
     <Layout>
       <div>
-        <div>
-          <h1 className="text-xl text-gray-800 mb-4">{event.google.title}</h1>
+        <div className="flex items-baseline justify-between mb-4">
+          <h1 className="text-xl text-gray-800">{event.google.title}</h1>
+          <button
+            className="text-xs text-blue-600 border border-blue-300 rounded px-2 py-1 ml-3 whitespace-nowrap"
+            onClick={() => navigate({ to: `/events/${id}/taping` })}
+          >テーピング確認</button>
         </div>
         <div className="flex flex-col">
           <div className="flex space-x-2">
@@ -134,13 +138,6 @@ export default function EventView() {
               </Disclosure.Panel>
             </Disclosure>
           </div>
-        </div>
-
-        <div className="py-4">
-          <button
-            className="w-full border border-blue-600 text-blue-600 p-3 rounded-md font-medium"
-            onClick={() => navigate({ to: `/events/${id}/taping` })}
-          >テーピングリクエストを確認する</button>
         </div>
 
         {myself.slack.is_admin ? <div className="py-8">
