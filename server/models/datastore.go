@@ -5,11 +5,13 @@ import (
 )
 
 const (
-	KindMember  = "Member"
-	KindEvent   = "Event"
-	KindEquip   = "Equip"
-	KindCustody = "Custody"
-	KindNumber  = "Number"
+	KindMember         = "Member"
+	KindEvent          = "Event"
+	KindEquip          = "Equip"
+	KindCustody        = "Custody"
+	KindNumber         = "Number"
+	KindTapingMenuItem = "TapingMenuItem"
+	KindTaping         = "Taping"
 )
 
 // IsFieldMismatch ...
