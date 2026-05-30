@@ -25,6 +25,38 @@ _workdir() {
   echo "/tmp/hub-env-${1}"
 }
 
+# git worktree 内で実行中なら main リポジトリのルートを返す。
+# main リポジトリ自身なら $REPO_ROOT をそのまま返す。
+_main_repo_root() {
+  local common
+  common=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null)
+  if [[ "$common" = ".git" ]]; then
+    echo "$REPO_ROOT"
+  else
+    # worktree: common は /path/to/main/.git (絶対パス)
+    echo "${common%/.git}"
+  fi
+}
+
+# worktree 内で gitignore 対象ファイルをメインリポジトリからシンボリックリンクで補完する。
+# 冪等（既にリンク or ファイルが存在すればスキップ）。
+_setup_worktree_symlinks() {
+  local main_root
+  main_root=$(_main_repo_root)
+  [[ "$main_root" == "$REPO_ROOT" ]] && return 0  # main リポジトリ自身なら何もしない
+
+  # node_modules
+  [[ -e "${REPO_ROOT}/node_modules" ]] || \
+    ln -s "${main_root}/node_modules" "${REPO_ROOT}/node_modules"
+
+  # secrets.local.yaml
+  [[ -e "${REPO_ROOT}/secrets.local.yaml" ]] || \
+    ln -s "${main_root}/secrets.local.yaml" "${REPO_ROOT}/secrets.local.yaml"
+
+  # client/dest（marmoset.LoadViews が init で要求する。Vite が配信するので中身は不要）
+  mkdir -p "${REPO_ROOT}/client/dest"
+}
+
 # ------------------------------------------------------------------ doctor ---
 _doctor() {
   local ok=true
@@ -71,6 +103,9 @@ _provision() {
   local datadir="${REPO_ROOT}/devdata/env-${id}"
 
   mkdir -p "$workdir" "$datadir"
+
+  # --- worktree 補完（node_modules・secrets・client/dest のシンボリックリンク）---
+  _setup_worktree_symlinks
 
   # --- Datastore Emulator 起動 ---
   gcloud beta emulators datastore start \
