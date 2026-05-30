@@ -36,7 +36,7 @@ type SlackAPI interface {
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
 	GetUsers(options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUserInfo(user string) (*slack.User, error)
-	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) ([]slack.ItemReaction, error)
+	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) (slack.ReactedItem, error)
 	GetConversationHistory(params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
 	GetConversations(params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
 	GetConversationInfo(input *slack.GetConversationInfoInput) (*slack.Channel, error)
@@ -284,7 +284,7 @@ func (bot Bot) onMentionReadCheck(_ *http.Request, _ http.ResponseWriter, event 
 		return
 	}
 	expected := users
-	for _, r := range reactions {
+	for _, r := range reactions.Reactions {
 		for _, ru := range r.Users {
 			for i, u := range users {
 				if strings.Contains(u, ru) {

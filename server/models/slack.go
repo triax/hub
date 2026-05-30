@@ -130,7 +130,7 @@ func ConvertSlackAPIUserToInternalUser(user slack.User) SlackUser {
 		IsStranger:        user.IsStranger,
 		IsAppUser:         user.IsAppUser,
 		IsInvitedUser:     user.IsInvitedUser,
-		Has2FA:            user.Has2FA,
+		Has2FA:            user.Has2FA != nil && *user.Has2FA,
 		HasFiles:          user.HasFiles,
 		Presence:          user.Presence,
 		Locale:            user.Locale,
