@@ -26,7 +26,7 @@ func isTapingManager(ctx context.Context, slackID string, client *datastore.Clie
 	if member.Slack.IsAdmin {
 		return true, nil
 	}
-	yes, _, err := member.IsMemberOf("trainer")
+	yes, _, err := member.IsMemberOf("trainer", "staff")
 	return yes, err
 }
 

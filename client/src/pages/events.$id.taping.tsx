@@ -33,9 +33,8 @@ export default function EventTaping() {
   }, {});
 
   const totalPrice = tapings.reduce((s, t) => s + t.price, 0);
-  const totalRolls  = tapings.reduce((s, t) => s + t.estimatedRolls, 0);
-
-  if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
+  const totalRolls = tapings.reduce((s, t) =>
+    s + (t.tapeUsages ?? []).reduce((ts, u) => ts + u.quantity, 0), 0);
 
   return (
     <Layout>
