@@ -36,38 +36,50 @@ func main() {
 
 	r := chi.NewRouter()
 
-	// セキュリティヘッダーとリクエストボディサイズ制限
+	// セキュリティヘッダー
 	r.Use(filters.SecurityHeaders)
-	r.Use(filters.MaxBodySize(1 << 20)) // 1MB
 
 	// API
 	v1 := chi.NewRouter()
 	auth := &filters.Auth{API: true, LocalDev: os.Getenv("GAE_APPLICATION") == ""}
 	v1.Use(auth.Handle)
-	v1.Get("/members/{id}", api.GetMember)
-	v1.Post("/members/{id}/props", api.UpdateMemberProps)
-	v1.Get("/members", api.ListMembers)
-	v1.Get("/myself", api.GetCurrentUser)
-	v1.Get("/events/{id}", api.GetEvent)
-	v1.Post("/events/{id}/delete", api.DeleteEvent)
-	v1.Post("/events/answer", api.AnswerEvent)
-	v1.Get("/events", api.ListEvents)
-	// Equips
-	v1.Post("/equips/custody", api.EquipCustodyReport)
-	v1.Get("/equips/{id}", api.GetEquip)
-	v1.Post("/equips/{id}/delete", api.DeleteEquip)
-	v1.Post("/equips/{id}/update", api.UpdateEquip)
-	v1.Post("/equips", api.CreateEquipItem)
-	v1.Get("/equips", api.ListEquips)
-	v1.Post("/numbers/{num}/assign", api.AssignPlayerNumber)
-	v1.Post("/numbers/{num}/deprive", api.DeprivePlayerNumber)
-	v1.Get("/numbers", api.GetAllNumbers)
+
+	// 写真アップロードは 10MB まで許容（他の全エンドポイントは下の Group で 1MB）
+	v1.With(filters.MaxBodySize(10 << 20)).Post("/members/{id}/hp-profile/photo", api.UploadHPPhoto)
+
+	v1.Group(func(r chi.Router) {
+		r.Use(filters.MaxBodySize(1 << 20)) // 1MB
+		r.Get("/members/{id}", api.GetMember)
+		r.Post("/members/{id}/props", api.UpdateMemberProps)
+		r.Get("/members/{id}/hp-profile", api.GetHPProfile)
+		r.Put("/members/{id}/hp-profile", api.UpdateHPProfile)
+		r.Get("/members", api.ListMembers)
+		r.Get("/myself", api.GetCurrentUser)
+		r.Get("/events/{id}", api.GetEvent)
+		r.Post("/events/{id}/delete", api.DeleteEvent)
+		r.Post("/events/answer", api.AnswerEvent)
+		r.Get("/events", api.ListEvents)
+		// Equips
+		r.Post("/equips/custody", api.EquipCustodyReport)
+		r.Get("/equips/{id}", api.GetEquip)
+		r.Post("/equips/{id}/delete", api.DeleteEquip)
+		r.Post("/equips/{id}/update", api.UpdateEquip)
+		r.Post("/equips", api.CreateEquipItem)
+		r.Get("/equips", api.ListEquips)
+		r.Post("/numbers/{num}/assign", api.AssignPlayerNumber)
+		r.Post("/numbers/{num}/deprive", api.DeprivePlayerNumber)
+		r.Get("/numbers", api.GetAllNumbers)
+	})
 	r.Mount("/api/1", v1)
 
+	// 認証不要の公開 API（外部 HP サイト向け）
+	r.With(filters.MaxBodySize(1<<20)).Get("/api/1/public/members", api.ListPublicMembers)
+
 	// Unauthorized pages
+	smallBody := filters.MaxBodySize(1 << 20) // 1MB
+	r.With(smallBody).Post("/login", controllers.Login)
 	r.Get("/login", controllers.Login)
-	r.Post("/login", controllers.Login)
-	r.Post("/logout", controllers.Logout)
+	r.With(smallBody).Post("/logout", controllers.Logout)
 	r.Get("/auth/start", controllers.AuthStart)
 	r.Get("/auth/callback", controllers.AuthCallback)
 	r.Get("/errors", controllers.ErrorsPage)
@@ -78,9 +90,9 @@ func main() {
 		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
 		ChatGPT:           openaigo.NewClient(os.Getenv("OPENAI_API_KEY")),
 	}
-	r.Post("/slack/events", bot.Webhook)
-	r.Post("/slack/shortcuts", bot.Shortcuts)
-	r.Post("/slack/slashcommands", bot.SlashCommands)
+	r.With(smallBody).Post("/slack/events", bot.Webhook)
+	r.With(smallBody).Post("/slack/shortcuts", bot.Shortcuts)
+	r.With(smallBody).Post("/slack/slashcommands", bot.SlashCommands)
 
 	// Vite SPA 静的アセット配信
 	r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("client/dest/assets"))))

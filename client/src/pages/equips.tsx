@@ -16,46 +16,48 @@ export default function List() {
   useEffect(() => {
     repo.list().then(setEquips);
   }, [repo]);
+
+  const takeHome = equips.filter(e => e.storageType !== "warehouse").sort(Equip.sort);
+  const warehouse = equips.filter(e => e.storageType === "warehouse").sort(Equip.sort);
+
   return (
     <Layout>
-      <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-14">
-        <table className="min-w-full divide-y divide-gray-200">
-          <tbody>
-            {equips.sort(Equip.sort).map((eq, i) => <EquipItem
-              key={eq.id} equip={eq} border={i < equips.length - 1}
-              jump={() => navigate({ to: `/equips/${eq.id}` })}
-            />)}
-          </tbody>
-        </table>
-      </div>
-      <div
-        className="
-        px-4 sm:px-6 lg:px-8
-        py-4
+      <EquipSection title="持ち帰り管理" equips={takeHome} navigate={navigate} />
+      <EquipSection title="倉庫管理"     equips={warehouse} navigate={navigate} />
+      <div className="
+        px-4 sm:px-6 lg:px-8 py-4
         fixed left-0 bottom-0
         w-full flex flex-row-reverse
         space-x-4 space-x-reverse
-        "
-      >
+      ">
         <div
-          className="
-            basis-1/3
-            text-center bg-blue-700 text-white p-2 rounded-md
-            shadow-md shadow-gray-500
-          "
+          className="basis-1/3 text-center bg-blue-700 text-white p-2 rounded-md shadow-md shadow-gray-500"
           onClick={() => navigate({ to: "/equips/report" })}
         >回収報告</div>
         {myself?.slack?.profile?.title?.match(/staff/i) ? <div
-          className="
-            basis-2/3
-            text-center bg-red-900 text-white p-2 rounded-md
-            shadow-md shadow-gray-500
-          "
+          className="basis-2/3 text-center bg-red-900 text-white p-2 rounded-md shadow-md shadow-gray-500"
           onClick={() => navigate({ to: "/equips/create" })}
         >新規アイテム登録</div> : null}
       </div>
     </Layout>
   )
+}
+
+function EquipSection({ title, equips, navigate }: { title: string, equips: Equip[], navigate: any }) {
+  if (equips.length === 0) return null;
+  return (
+    <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg mb-4">
+      <div className="px-4 py-2 bg-gray-50 text-sm font-medium text-gray-500 border-b border-gray-200">{title}</div>
+      <table className="min-w-full divide-y divide-gray-200">
+        <tbody>
+          {equips.map((eq, i) => <EquipItem
+            key={eq.id} equip={eq} border={i < equips.length - 1}
+            jump={() => navigate({ to: `/equips/${eq.id}` })}
+          />)}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function Circle({ type }: { type: "practice" | "game" }) {
@@ -68,7 +70,7 @@ function Circle({ type }: { type: "practice" | "game" }) {
   }
 }
 
-function EquipItem({ equip, jump, border }: { equip: Equip, jump, border: boolean }) {
+function EquipItem({ equip, jump, border }: { equip: Equip, jump: () => void, border: boolean }) {
   const [m, setMember] = useState<Member>(null)
   useEffect(() => {
     if (equip.history.length == 0) return;

@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const apiBase = `http://localhost:${process.env.VITE_API_PORT ?? '8080'}`
+
 export default defineConfig({
   plugins: [react()],
   root: 'client',
@@ -12,12 +14,12 @@ export default defineConfig({
     passWithNoTests: true,
   },
   server: {
-    port: 3000,
+    port: parseInt(process.env.VITE_PORT ?? '3000'),
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/auth': 'http://localhost:8080',
-      '/login': 'http://localhost:8080',
-      '/logout': 'http://localhost:8080',
+      '/api':    apiBase,
+      '/auth':   apiBase,
+      '/login':  apiBase,
+      '/logout': apiBase,
     },
   },
 })

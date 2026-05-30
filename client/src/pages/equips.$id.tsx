@@ -26,6 +26,10 @@ export default function Item() {
             <h1 className="text-2xl font-bold">{equip.name}</h1>
             {equip.forPractice ? <span className="rounded-md bg-teal-600   mr-2 text-white px-2">練習で必要</span> : null}
             {equip.forGame ?     <span className="rounded-md bg-orange-600 mr-2 text-white px-2">試合で必要</span> : null}
+            {equip.storageType === "warehouse"
+              ? <span className="rounded-md bg-gray-500 mr-2 text-white px-2">倉庫管理</span>
+              : <span className="rounded-md bg-blue-500 mr-2 text-white px-2">持ち帰り管理</span>
+            }
           </div>
 
           <div className="mb-4 text-gray-400 text-sm">
