@@ -33,7 +33,7 @@ export default function TapingRequest() {
   const toggle = (id: number) => {
     setSelectedIDs(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   };
