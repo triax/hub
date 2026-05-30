@@ -427,18 +427,12 @@ func GetMyTapingRequest(w http.ResponseWriter, req *http.Request) {
 func ListTapingRequests(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
-	slackID := filters.GetSessionUserContext(req)
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 	defer client.Close()
-
-	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
-		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
-		return
-	}
 
 	query := datastore.NewQuery(models.KindTaping)
 	if eventID := req.URL.Query().Get("event_id"); eventID != "" {

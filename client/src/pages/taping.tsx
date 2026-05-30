@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
-import { isTapingManager } from "../utils/tapingAuth";
+import { isTapingManager } from "../utils/tapingAuth"; // マスタ管理ボタンの表示判定にのみ使用
 import Taping from "../../models/Taping";
 import TapeItem from "../../models/TapeItem";
 import Member from "../../models/Member";
@@ -24,8 +24,6 @@ export default function TapingOverview() {
 
   useEffect(() => {
     if (!myself?.slack?.id || myself.slack.id === "xxx") return;
-    if (!isTapingManager(myself)) { navigate({ to: "/" }); return; }
-
     repo.listRequests(undefined, year).then(setYearTapings);
     repo.tapeItemList().then(setTapeItems);
     repo.listEvents().then(evs => {
@@ -38,8 +36,6 @@ export default function TapingOverview() {
   }, [myself, navigate, repo, year]);
 
   const activeTapeItems = useMemo(() => tapeItems.filter(t => !t.disabled), [tapeItems]);
-
-  if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
 
   // --- 費用集計（年度累計） ---
   const costByMember = yearTapings.reduce<Record<string, { price: number; count: number }>>((acc, t) => {
