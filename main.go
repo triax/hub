@@ -123,6 +123,7 @@ func main() {
 	r.With(page.Handle).Get("/taping/request", controllers.TapingRequest)
 	r.With(page.Handle).Get("/taping/master", controllers.TapingMaster)
 	r.With(page.Handle).Get("/taping", controllers.TapingOverview)
+	r.With(page.Handle).Get("/events/{id}/taping", controllers.EventTaping)
 
 	// Cloud Tasks (GAE cronリクエストのみ許可)
 	cron := chi.NewRouter()

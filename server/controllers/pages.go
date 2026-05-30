@@ -27,4 +27,5 @@ var (
 	TapingRequest   = http.HandlerFunc(serveSPA)
 	TapingMaster    = http.HandlerFunc(serveSPA)
 	TapingOverview  = http.HandlerFunc(serveSPA)
+	EventTaping     = http.HandlerFunc(serveSPA)
 )

@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import { LocationMarkerIcon } from "@heroicons/react/outline";
@@ -17,6 +17,7 @@ export default function EventView() {
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
   const { id } = useParams({ strict: false });
+  const navigate = useNavigate();
   const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [modalevent, setModalEvent] = useState(null);
@@ -133,6 +134,13 @@ export default function EventView() {
               </Disclosure.Panel>
             </Disclosure>
           </div>
+        </div>
+
+        <div className="py-4">
+          <button
+            className="w-full border border-blue-600 text-blue-600 p-3 rounded-md font-medium"
+            onClick={() => navigate({ to: `/events/${id}/taping` })}
+          >テーピングリクエストを確認する</button>
         </div>
 
         {myself.slack.is_admin ? <div className="py-8">
