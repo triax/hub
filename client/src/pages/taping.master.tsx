@@ -162,9 +162,9 @@ export default function TapingMaster() {
       {/* 施術メニュー フォーム — モーダル */}
       {showForm && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowForm(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]">
+          <div className="fixed inset-0 z-40 bg-black/40" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowForm(false)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 flex-shrink-0 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editing ? "メニュー編集" : "メニュー追加"}</h2>
                 <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowForm(false)}>✕</button>
@@ -251,9 +251,9 @@ export default function TapingMaster() {
       {/* テープ素材 フォーム — モーダル */}
       {showTapeForm && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowTapeForm(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+          <div className="fixed inset-0 z-40 bg-black/40" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowTapeForm(false)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
                 <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowTapeForm(false)}>✕</button>
