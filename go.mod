@@ -10,7 +10,7 @@ require (
 	github.com/otiai10/appyaml v0.0.0-20210625032121-1fe2f3423963
 	github.com/otiai10/largo v0.0.0-20211018055848-29754d2f6231
 	github.com/otiai10/marmoset v0.7.0
-	github.com/slack-go/slack v0.15.0
+	github.com/slack-go/slack v0.24.0
 	google.golang.org/api v0.280.0
 )
 
@@ -58,7 +58,7 @@ require (
 	github.com/fatih/color v1.12.0 // indirect
 	github.com/goccy/go-yaml v1.8.9 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/otiai10/openaigo v1.7.0
