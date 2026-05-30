@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon } from "@heroicons/react/outline";
 import Layout from "../../components/layout";
@@ -17,6 +17,31 @@ const emptyDraft = (): TapingMenuItemDraft => ({
   name: "", price: 0, notes: "", tape_usages: [], sort_order: 0, disabled: false,
 });
 
+const ANIM_MS = 180;
+
+// mounted/visible の2状態でフェード＋スケールアニメーションを管理するフック
+function useModal() {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const open = () => {
+    clearTimeout(timer.current);
+    setMounted(true);
+    // 次フレームで visible=true にすることで CSS transition を発火させる
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  };
+
+  const close = () => {
+    setVisible(false);
+    timer.current = setTimeout(() => setMounted(false), ANIM_MS);
+  };
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return { mounted, visible, open, close };
+}
+
 export default function TapingMaster() {
   const { myself } = useAppContext();
   const navigate = useNavigate();
@@ -25,11 +50,13 @@ export default function TapingMaster() {
   const [tapeItems, setTapeItems] = useState<TapeItem[]>([]);
   const [editing, setEditing] = useState<TapingMenuItem | null>(null);
   const [draft, setDraft] = useState<TapingMenuItemDraft>(emptyDraft());
-  const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<"menu" | "tape">("menu");
   const [editingTape, setEditingTape] = useState<TapeItem | null>(null);
   const [tapeDraft, setTapeDraft] = useState({ name: "", stock_count: 0, sort_order: 0, disabled: false });
-  const [showTapeForm, setShowTapeForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const menuModal = useModal();
+  const tapeModal = useModal();
 
   useEffect(() => {
     if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) {
@@ -45,20 +72,23 @@ export default function TapingMaster() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      setShowForm(false);
-      setShowTapeForm(false);
+      menuModal.close();
+      tapeModal.close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [menuModal, tapeModal]);
 
   // --- メニュー操作 ---
-  const openCreate = () => { setEditing(null); setDraft(emptyDraft()); setShowForm(true); };
-  const openEdit = (item: TapingMenuItem) => { setEditing(item); setDraft(TapingMenuItem.draft(item)); setShowForm(true); };
+  const openCreate = () => { setEditing(null); setDraft(emptyDraft()); menuModal.open(); };
+  const openEdit = (item: TapingMenuItem) => { setEditing(item); setDraft(TapingMenuItem.draft(item)); menuModal.open(); };
   const saveMenu = async () => {
-    if (editing) { await repo.menuUpdate(editing.id, draft); }
-    else { await repo.menuCreate(draft); }
-    setShowForm(false);
+    setSaving(true);
+    try {
+      if (editing) { await repo.menuUpdate(editing.id, draft); }
+      else { await repo.menuCreate(draft); }
+    } finally { setSaving(false); }
+    menuModal.close();
     repo.menuList().then(setItems);
   };
 
@@ -71,16 +101,26 @@ export default function TapingMaster() {
     draft.tape_usages.find(u => u.tape_item_id === tapeItemID)?.quantity ?? 0;
 
   // --- テープ素材操作 ---
-  const openTapeCreate = () => { setEditingTape(null); setTapeDraft({ name: "", stock_count: 0, sort_order: 0, disabled: false }); setShowTapeForm(true); };
-  const openTapeEdit = (t: TapeItem) => { setEditingTape(t); setTapeDraft({ name: t.name, stock_count: t.stockCount, sort_order: t.sortOrder, disabled: t.disabled }); setShowTapeForm(true); };
+  const openTapeCreate = () => { setEditingTape(null); setTapeDraft({ name: "", stock_count: 0, sort_order: 0, disabled: false }); tapeModal.open(); };
+  const openTapeEdit = (t: TapeItem) => { setEditingTape(t); setTapeDraft({ name: t.name, stock_count: t.stockCount, sort_order: t.sortOrder, disabled: t.disabled }); tapeModal.open(); };
   const saveTape = async () => {
-    if (editingTape) { await repo.tapeItemUpdate(editingTape.id, tapeDraft); }
-    else { await repo.tapeItemCreate(tapeDraft); }
-    setShowTapeForm(false);
+    setSaving(true);
+    try {
+      if (editingTape) { await repo.tapeItemUpdate(editingTape.id, tapeDraft); }
+      else { await repo.tapeItemCreate(tapeDraft); }
+    } finally { setSaving(false); }
+    tapeModal.close();
     repo.tapeItemList().then(setTapeItems);
   };
 
   if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
+
+  const modalBg = (visible: boolean) =>
+    `fixed inset-0 z-40 bg-black/40 transition-opacity duration-[${ANIM_MS}ms] ${visible ? "opacity-100" : "opacity-0"}`;
+  const modalWrap = (visible: boolean) =>
+    `fixed inset-0 z-50 flex items-center justify-center px-4 transition-opacity duration-[${ANIM_MS}ms] ${visible ? "opacity-100" : "opacity-0"}`;
+  const modalCard = (visible: boolean) =>
+    `transform transition-all duration-[${ANIM_MS}ms] ease-out bg-white rounded-2xl shadow-xl ${visible ? "opacity-100 scale-100" : "opacity-0 scale-95"}`;
 
   return (
     <Layout>
@@ -90,7 +130,7 @@ export default function TapingMaster() {
           {(["menu", "tape"] as const).map(tab => (
             <button
               key={tab}
-              className={`flex-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`flex-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors duration-150 ${
                 activeTab === tab ? "border-blue-700 text-blue-700" : "border-transparent text-gray-400"
               }`}
               onClick={() => setActiveTab(tab)}
@@ -104,7 +144,7 @@ export default function TapingMaster() {
             {items.map(item => (
               <button
                 key={item.id}
-                className={`w-full flex items-center px-4 py-4 text-left active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
+                className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
                 onClick={() => openEdit(item)}
               >
                 <div className="flex-1 min-w-0 pr-2">
@@ -117,7 +157,7 @@ export default function TapingMaster() {
                     {item.notes && <span className="ml-2 text-gray-300">{item.notes}</span>}
                   </div>
                 </div>
-                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-100 group-active:translate-x-0.5" />
               </button>
             ))}
             {items.length === 0 && (
@@ -132,7 +172,7 @@ export default function TapingMaster() {
             {tapeItems.map(t => (
               <button
                 key={t.id}
-                className={`w-full flex items-center px-4 py-4 text-left active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
+                className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
                 onClick={() => openTapeEdit(t)}
               >
                 <div className="flex-1 min-w-0 pr-2">
@@ -154,26 +194,26 @@ export default function TapingMaster() {
       {/* 固定下部: 追加ボタン */}
       <div className="fixed left-0 bottom-0 w-full px-4 py-4 bg-white border-t border-gray-100">
         <button
-          className="w-full bg-blue-700 text-white py-3 rounded-xl text-sm font-medium"
+          className="w-full bg-blue-700 text-white py-3 rounded-xl text-sm font-medium transition-transform duration-100 active:scale-[0.98]"
           onClick={activeTab === "menu" ? openCreate : openTapeCreate}
         >+ {activeTab === "menu" ? "施術メニューを追加" : "テープ素材を追加"}</button>
       </div>
 
       {/* 施術メニュー フォーム — モーダル */}
-      {showForm && (
+      {menuModal.mounted && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowForm(false)}>
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
+          <div className={modalBg(menuModal.visible)} onClick={menuModal.close} />
+          <div className={modalWrap(menuModal.visible)} onClick={menuModal.close}>
+            <div className={`${modalCard(menuModal.visible)} w-full max-w-md flex flex-col max-h-[88vh]`} onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 flex-shrink-0 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editing ? "メニュー編集" : "メニュー追加"}</h2>
-                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowForm(false)}>✕</button>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1 transition-colors duration-100" onClick={menuModal.close}>✕</button>
               </div>
               <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
                   <input type="text"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                     value={draft.name}
                     onChange={e => setDraft({ ...draft, name: e.target.value })} />
                 </div>
@@ -181,14 +221,14 @@ export default function TapingMaster() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">単価目安（円）</label>
                     <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                       value={draft.price}
                       onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">表示順</label>
                     <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                       value={draft.sort_order}
                       onChange={e => setDraft({ ...draft, sort_order: Number(e.target.value) })} />
                   </div>
@@ -198,7 +238,7 @@ export default function TapingMaster() {
                     <label className="block text-xs text-gray-500 mb-2">テープ使用量（本）</label>
                     <div className="space-y-2">
                       {tapeItems.filter(t => !t.disabled).map(t => (
-                        <div key={t.id} className="flex items-center border border-gray-200 rounded-xl px-3 py-2.5">
+                        <div key={t.id} className="flex items-center border border-gray-200 rounded-xl px-3 py-2.5 transition-colors duration-100 focus-within:border-blue-400">
                           <span className="text-sm flex-1">{t.name}</span>
                           <input
                             type="number" step="0.5" min="0"
@@ -215,7 +255,7 @@ export default function TapingMaster() {
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">備考</label>
                   <input type="text"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                     value={draft.notes}
                     onChange={e => setDraft({ ...draft, notes: e.target.value })} />
                 </div>
@@ -227,18 +267,21 @@ export default function TapingMaster() {
               </div>
               <div className="px-5 pb-5 pt-3 flex-shrink-0 space-y-2 border-t border-gray-100">
                 <button
-                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40"
+                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2"
                   onClick={saveMenu}
-                  disabled={!draft.name}
-                >保存する</button>
+                  disabled={!draft.name || saving}
+                >
+                  {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  保存する
+                </button>
                 {editing && (
                   <button
-                    className="w-full py-2.5 text-sm text-red-500"
+                    className="w-full py-2.5 text-sm text-red-500 transition-colors duration-100 hover:text-red-700"
                     onClick={() => {
                       if (!confirm(`「${editing.name}」を削除しますか？`)) return;
                       repo.menuDelete(editing.id)
                         .then(() => repo.menuList().then(setItems))
-                        .then(() => setShowForm(false));
+                        .then(() => menuModal.close());
                     }}
                   >削除する</button>
                 )}
@@ -249,20 +292,20 @@ export default function TapingMaster() {
       )}
 
       {/* テープ素材 フォーム — モーダル */}
-      {showTapeForm && (
+      {tapeModal.mounted && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowTapeForm(false)}>
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className={modalBg(tapeModal.visible)} onClick={tapeModal.close} />
+          <div className={modalWrap(tapeModal.visible)} onClick={tapeModal.close}>
+            <div className={`${modalCard(tapeModal.visible)} w-full max-w-sm`} onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
-                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowTapeForm(false)}>✕</button>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1 transition-colors duration-100" onClick={tapeModal.close}>✕</button>
               </div>
               <div className="px-5 py-4 space-y-4">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
                   <input type="text"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                     value={tapeDraft.name}
                     onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
                 </div>
@@ -270,14 +313,14 @@ export default function TapingMaster() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">基本ストック（本）</label>
                     <input type="number" step="0.5" min="0"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                       value={tapeDraft.stock_count}
                       onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">表示順</label>
                     <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
                       value={tapeDraft.sort_order}
                       onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
                   </div>
@@ -290,18 +333,21 @@ export default function TapingMaster() {
               </div>
               <div className="px-5 pb-5 pt-3 space-y-2 border-t border-gray-100">
                 <button
-                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40"
+                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2"
                   onClick={saveTape}
-                  disabled={!tapeDraft.name}
-                >保存する</button>
+                  disabled={!tapeDraft.name || saving}
+                >
+                  {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  保存する
+                </button>
                 {editingTape && (
                   <button
-                    className="w-full py-2.5 text-sm text-red-500"
+                    className="w-full py-2.5 text-sm text-red-500 transition-colors duration-100 hover:text-red-700"
                     onClick={() => {
                       if (!confirm(`「${editingTape.name}」を削除しますか？`)) return;
                       repo.tapeItemDelete(editingTape.id)
                         .then(() => repo.tapeItemList().then(setTapeItems))
-                        .then(() => setShowTapeForm(false));
+                        .then(() => tapeModal.close());
                     }}
                   >削除する</button>
                 )}
