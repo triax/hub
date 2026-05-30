@@ -1,4 +1,4 @@
-runtime: go125
+runtime: go126
 env: standard
 
 service: dev
