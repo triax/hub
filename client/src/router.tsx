@@ -14,6 +14,10 @@ import EquipView from './pages/equips.$id';
 import EquipEdit from './pages/equips.$id.edit';
 import Uniforms from './pages/uniforms';
 import Errors from './pages/errors';
+import TapingRequestPage from './pages/taping.request';
+import TapingMasterPage from './pages/taping.master';
+import TapingOverviewPage from './pages/taping';
+import EventTapingPage from './pages/events.$id.taping';
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -101,6 +105,30 @@ const errorsRoute = createRoute({
   component: Errors,
 });
 
+const tapingRequestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/taping/request',
+  component: TapingRequestPage,
+});
+
+const tapingMasterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/taping/master',
+  component: TapingMasterPage,
+});
+
+const tapingOverviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/taping',
+  component: TapingOverviewPage,
+});
+
+const eventTapingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/events/$id/taping',
+  component: EventTapingPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -115,6 +143,10 @@ const routeTree = rootRoute.addChildren([
   equipEditRoute,
   uniformsRoute,
   errorsRoute,
+  tapingRequestRoute,
+  tapingMasterRoute,
+  tapingOverviewRoute,
+  eventTapingRoute,
 ]);
 
 export const router = createRouter({ routeTree });

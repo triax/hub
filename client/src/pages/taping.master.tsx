@@ -1,0 +1,364 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronRightIcon } from "@heroicons/react/outline";
+import { isTapingManager } from "../utils/tapingAuth";
+import Layout from "../../components/layout";
+import TapeItem from "../../models/TapeItem";
+import TapingMenuItem, { TapingMenuItemDraft } from "../../models/TapingMenuItem";
+import TapingRepo from "../../repository/TapingRepo";
+import { useAppContext } from "../context";
+
+
+const emptyDraft = (): TapingMenuItemDraft => ({
+  name: "", price: 0, notes: "", tape_usages: [], sort_order: 0, disabled: false,
+});
+
+const ANIM_MS = 180;
+
+// mounted/visible の2状態でフェード＋スケールアニメーションを管理するフック
+function useModal() {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const open = () => {
+    clearTimeout(timer.current);
+    setMounted(true);
+    // 次フレームで visible=true にすることで CSS transition を発火させる
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  };
+
+  const close = () => {
+    setVisible(false);
+    timer.current = setTimeout(() => setMounted(false), ANIM_MS);
+  };
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return { mounted, visible, open, close };
+}
+
+export default function TapingMaster() {
+  const { myself } = useAppContext();
+  const navigate = useNavigate();
+  const repo = useMemo(() => new TapingRepo(), []);
+  const [items, setItems] = useState<TapingMenuItem[]>([]);
+  const [tapeItems, setTapeItems] = useState<TapeItem[]>([]);
+  const [editing, setEditing] = useState<TapingMenuItem | null>(null);
+  const [draft, setDraft] = useState<TapingMenuItemDraft>(emptyDraft());
+  const [activeTab, setActiveTab] = useState<"menu" | "tape">("menu");
+  const [editingTape, setEditingTape] = useState<TapeItem | null>(null);
+  const [tapeDraft, setTapeDraft] = useState({ name: "", stock_count: 0, sort_order: 0, disabled: false });
+  const [saving, setSaving] = useState(false);
+  const [tabVisible, setTabVisible] = useState(true);
+
+  const menuModal = useModal();
+  const tapeModal = useModal();
+
+  useEffect(() => {
+    if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) {
+      navigate({ to: "/" });
+    }
+  }, [myself, navigate]);
+
+  useEffect(() => {
+    repo.menuList().then(setItems);
+    repo.tapeItemList().then(setTapeItems);
+  }, [repo]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      menuModal.close();
+      tapeModal.close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuModal, tapeModal]);
+
+  // --- メニュー操作 ---
+  const openCreate = () => { setEditing(null); setDraft(emptyDraft()); menuModal.open(); };
+  const openEdit = (item: TapingMenuItem) => { setEditing(item); setDraft(TapingMenuItem.draft(item)); menuModal.open(); };
+  const saveMenu = async () => {
+    setSaving(true);
+    try {
+      if (editing) { await repo.menuUpdate(editing.id, draft); }
+      else { await repo.menuCreate(draft); }
+    } finally { setSaving(false); }
+    menuModal.close();
+    repo.menuList().then(setItems);
+  };
+
+  const setUsageQty = (tapeItemID: number, tapeItemName: string, qty: number) => {
+    const usages = draft.tape_usages.filter(u => u.tape_item_id !== tapeItemID);
+    if (qty > 0) usages.push({ tape_item_id: tapeItemID, tape_item_name: tapeItemName, quantity: qty });
+    setDraft({ ...draft, tape_usages: usages });
+  };
+  const getUsageQty = (tapeItemID: number) =>
+    draft.tape_usages.find(u => u.tape_item_id === tapeItemID)?.quantity ?? 0;
+
+  // --- テープ素材操作 ---
+  const openTapeCreate = () => { setEditingTape(null); setTapeDraft({ name: "", stock_count: 0, sort_order: 0, disabled: false }); tapeModal.open(); };
+  const openTapeEdit = (t: TapeItem) => { setEditingTape(t); setTapeDraft({ name: t.name, stock_count: t.stockCount, sort_order: t.sortOrder, disabled: t.disabled }); tapeModal.open(); };
+  const saveTape = async () => {
+    setSaving(true);
+    try {
+      if (editingTape) { await repo.tapeItemUpdate(editingTape.id, tapeDraft); }
+      else { await repo.tapeItemCreate(tapeDraft); }
+    } finally { setSaving(false); }
+    tapeModal.close();
+    repo.tapeItemList().then(setTapeItems);
+  };
+
+  if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
+
+  const modalBg = (visible: boolean) =>
+    `fixed inset-0 z-40 bg-black/40 transition-opacity duration-[${ANIM_MS}ms] ${visible ? "opacity-100" : "opacity-0"}`;
+  const modalWrap = (visible: boolean) =>
+    `fixed inset-0 z-50 flex items-center justify-center px-4 transition-opacity duration-[${ANIM_MS}ms] ${visible ? "opacity-100" : "opacity-0"}`;
+  const modalCard = (visible: boolean) =>
+    `transform transition-all duration-[${ANIM_MS}ms] ease-out bg-white rounded-2xl shadow-xl ${visible ? "opacity-100 scale-100" : "opacity-0 scale-95"}`;
+
+  return (
+    <Layout>
+      <div className="pb-24">
+        {/* タブ */}
+        <div className="flex border-b">
+          {(["menu", "tape"] as const).map(tab => (
+            <button
+              key={tab}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors duration-150 ${
+                activeTab === tab ? "border-blue-700 text-blue-700" : "border-transparent text-gray-400"
+              }`}
+              onClick={() => {
+                if (tab === activeTab) return;
+                setTabVisible(false);
+                setTimeout(() => { setActiveTab(tab); setTabVisible(true); }, 120);
+              }}
+            >{tab === "menu" ? "施術メニュー" : "テープ素材"}</button>
+          ))}
+        </div>
+
+        <div className={`transition-opacity duration-[120ms] ${tabVisible ? "opacity-100" : "opacity-0"}`}>
+          {/* 施術メニューリスト */}
+          {activeTab === "menu" && (
+            <div className="divide-y divide-gray-100">
+              {items.map(item => (
+                <button
+                  key={item.id}
+                  className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
+                  onClick={() => openEdit(item)}
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-sm font-medium">{item.name}</div>
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
+                    ¥{item.price}
+                      {item.tapeUsages?.length > 0 && (
+                        <span className="ml-2">{item.tapeUsages.map(u => `${u.tape_item_name}×${u.quantity}`).join(" · ")}</span>
+                      )}
+                      {item.notes && <span className="ml-2 text-gray-300">{item.notes}</span>}
+                    </div>
+                  </div>
+                  <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-100 group-active:translate-x-0.5" />
+                </button>
+              ))}
+              {items.length === 0 && (
+                <div className="py-16 text-center text-sm text-gray-400">メニューがありません</div>
+              )}
+            </div>
+          )}
+
+          {/* テープ素材リスト */}
+          {activeTab === "tape" && (
+            <div className="divide-y divide-gray-100">
+              {tapeItems.map(t => (
+                <button
+                  key={t.id}
+                  className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
+                  onClick={() => openTapeEdit(t)}
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-sm font-medium">{t.name}</div>
+                    {t.stockCount > 0 && (
+                      <div className="text-xs text-gray-400 mt-0.5">基本ストック {t.stockCount}本</div>
+                    )}
+                  </div>
+                  <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+              {tapeItems.length === 0 && (
+                <div className="py-16 text-center text-sm text-gray-400">テープ素材がありません</div>
+              )}
+            </div>
+          )}
+        </div>{/* /タブコンテンツ */}
+      </div>
+
+      {/* 固定下部: 追加ボタン */}
+      <div className="fixed left-0 bottom-0 w-full px-4 py-4 bg-white border-t border-gray-100">
+        <button
+          className="w-full bg-blue-700 text-white py-3 rounded-xl text-sm font-medium transition-transform duration-100 active:scale-[0.98]"
+          onClick={activeTab === "menu" ? openCreate : openTapeCreate}
+        >+ {activeTab === "menu" ? "施術メニューを追加" : "テープ素材を追加"}</button>
+      </div>
+
+      {/* 施術メニュー フォーム — モーダル */}
+      {menuModal.mounted && (
+        <>
+          <div className={modalBg(menuModal.visible)} onClick={menuModal.close} />
+          <div className={modalWrap(menuModal.visible)} onClick={menuModal.close}>
+            <div className={`${modalCard(menuModal.visible)} w-full max-w-md flex flex-col max-h-[88vh]`} onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 flex-shrink-0 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="text-base font-semibold">{editing ? "メニュー編集" : "メニュー追加"}</h2>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1 transition-colors duration-100" onClick={menuModal.close}>✕</button>
+              </div>
+              <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
+                  <input type="text"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                    value={draft.name}
+                    onChange={e => setDraft({ ...draft, name: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">単価目安（円）</label>
+                    <input type="number"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                      value={draft.price}
+                      onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">表示順</label>
+                    <input type="number"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                      value={draft.sort_order}
+                      onChange={e => setDraft({ ...draft, sort_order: Number(e.target.value) })} />
+                  </div>
+                </div>
+                {tapeItems.filter(t => !t.disabled).length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-2">テープ使用量（本）</label>
+                    <div className="space-y-2">
+                      {tapeItems.filter(t => !t.disabled).map(t => (
+                        <div key={t.id} className="flex items-center border border-gray-200 rounded-xl px-3 py-2.5 transition-colors duration-100 focus-within:border-blue-400">
+                          <span className="text-sm flex-1">{t.name}</span>
+                          <input
+                            type="number" step="0.5" min="0"
+                            className="w-14 text-sm text-right bg-transparent border-0 outline-none"
+                            value={getUsageQty(t.id)}
+                            onChange={e => setUsageQty(t.id, t.name, Number(e.target.value))}
+                          />
+                          <span className="text-xs text-gray-400 ml-1">本</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">備考</label>
+                  <input type="text"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                    value={draft.notes}
+                    onChange={e => setDraft({ ...draft, notes: e.target.value })} />
+                </div>
+                <label className="flex items-center space-x-3 py-1 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded" checked={draft.disabled}
+                    onChange={e => setDraft({ ...draft, disabled: e.target.checked })} />
+                  <span className="text-sm text-gray-600">無効にする</span>
+                </label>
+              </div>
+              <div className="px-5 pb-5 pt-3 flex-shrink-0 space-y-2 border-t border-gray-100">
+                <button
+                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2"
+                  onClick={saveMenu}
+                  disabled={!draft.name || saving}
+                >
+                  {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  保存する
+                </button>
+                {editing && (
+                  <button
+                    className="w-full py-2.5 text-sm text-red-500 transition-colors duration-100 hover:text-red-700"
+                    onClick={() => {
+                      if (!confirm(`「${editing.name}」を削除しますか？`)) return;
+                      repo.menuDelete(editing.id)
+                        .then(() => repo.menuList().then(setItems))
+                        .then(() => menuModal.close());
+                    }}
+                  >削除する</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* テープ素材 フォーム — モーダル */}
+      {tapeModal.mounted && (
+        <>
+          <div className={modalBg(tapeModal.visible)} onClick={tapeModal.close} />
+          <div className={modalWrap(tapeModal.visible)} onClick={tapeModal.close}>
+            <div className={`${modalCard(tapeModal.visible)} w-full max-w-sm`} onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="text-base font-semibold">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1 transition-colors duration-100" onClick={tapeModal.close}>✕</button>
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
+                  <input type="text"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                    value={tapeDraft.name}
+                    onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">基本ストック（本）</label>
+                    <input type="number" step="0.5" min="0"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                      value={tapeDraft.stock_count}
+                      onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">表示順</label>
+                    <input type="number"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                      value={tapeDraft.sort_order}
+                      onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <label className="flex items-center space-x-3 py-1 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded" checked={tapeDraft.disabled}
+                    onChange={e => setTapeDraft({ ...tapeDraft, disabled: e.target.checked })} />
+                  <span className="text-sm text-gray-600">無効にする</span>
+                </label>
+              </div>
+              <div className="px-5 pb-5 pt-3 space-y-2 border-t border-gray-100">
+                <button
+                  className="w-full py-3 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2"
+                  onClick={saveTape}
+                  disabled={!tapeDraft.name || saving}
+                >
+                  {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  保存する
+                </button>
+                {editingTape && (
+                  <button
+                    className="w-full py-2.5 text-sm text-red-500 transition-colors duration-100 hover:text-red-700"
+                    onClick={() => {
+                      if (!confirm(`「${editingTape.name}」を削除しますか？`)) return;
+                      repo.tapeItemDelete(editingTape.id)
+                        .then(() => repo.tapeItemList().then(setTapeItems))
+                        .then(() => tapeModal.close());
+                    }}
+                  >削除する</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Layout>
+  );
+}
