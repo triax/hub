@@ -42,6 +42,16 @@ export default function TapingMaster() {
     repo.tapeItemList().then(setTapeItems);
   }, [repo]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setShowForm(false);
+      setShowTapeForm(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // --- メニュー操作 ---
   const openCreate = () => { setEditing(null); setDraft(emptyDraft()); setShowForm(true); };
   const openEdit = (item: TapingMenuItem) => { setEditing(item); setDraft(TapingMenuItem.draft(item)); setShowForm(true); };
@@ -155,8 +165,9 @@ export default function TapingMaster() {
           <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowForm(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]">
-              <div className="px-5 py-4 flex-shrink-0 border-b border-gray-100">
+              <div className="px-5 py-4 flex-shrink-0 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editing ? "メニュー編集" : "メニュー追加"}</h2>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowForm(false)}>✕</button>
               </div>
               <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
                 <div>
@@ -243,8 +254,9 @@ export default function TapingMaster() {
           <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowTapeForm(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
+                <button className="text-gray-400 hover:text-gray-600 p-1 -mr-1" onClick={() => setShowTapeForm(false)}>✕</button>
               </div>
               <div className="px-5 py-4 space-y-4">
                 <div>
