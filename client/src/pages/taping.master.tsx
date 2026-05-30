@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { ChevronRightIcon } from "@heroicons/react/outline";
 import Layout from "../../components/layout";
 import TapeItem from "../../models/TapeItem";
-import TapingMenuItem, { TapingMenuItemDraft, TapeUsage } from "../../models/TapingMenuItem";
+import TapingMenuItem, { TapingMenuItemDraft } from "../../models/TapingMenuItem";
 import TapingRepo from "../../repository/TapingRepo";
 import { useAppContext } from "../context";
 
@@ -50,11 +51,6 @@ export default function TapingMaster() {
     setShowForm(false);
     repo.menuList().then(setItems);
   };
-  const removeMenu = async (item: TapingMenuItem) => {
-    if (!confirm(`「${item.name}」を削除しますか？`)) return;
-    await repo.menuDelete(item.id);
-    repo.menuList().then(setItems);
-  };
 
   const setUsageQty = (tapeItemID: number, tapeItemName: string, qty: number) => {
     const usages = draft.tape_usages.filter(u => u.tape_item_id !== tapeItemID);
@@ -73,210 +69,237 @@ export default function TapingMaster() {
     setShowTapeForm(false);
     repo.tapeItemList().then(setTapeItems);
   };
-  const removeTape = async (t: TapeItem) => {
-    if (!confirm(`「${t.name}」を削除しますか？`)) return;
-    await repo.tapeItemDelete(t.id);
-    repo.tapeItemList().then(setTapeItems);
-  };
 
   if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
 
   return (
     <Layout>
-      <div className="px-4 py-6 max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold mb-4">テーピング管理</h1>
-
+      <div className="pb-24">
         {/* タブ */}
-        <div className="flex border-b mb-4">
+        <div className="flex border-b">
           {(["menu", "tape"] as const).map(tab => (
             <button
               key={tab}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeTab === tab ? "border-blue-700 text-blue-700" : "border-transparent text-gray-500"}`}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === tab ? "border-blue-700 text-blue-700" : "border-transparent text-gray-400"
+              }`}
               onClick={() => setActiveTab(tab)}
             >{tab === "menu" ? "施術メニュー" : "テープ素材"}</button>
           ))}
         </div>
 
-        {/* 施術メニュータブ */}
+        {/* 施術メニューリスト */}
         {activeTab === "menu" && (
-          <>
-            <div className="flex justify-end mb-3">
-              <button className="bg-blue-700 text-white px-4 py-2 rounded-md text-sm" onClick={openCreate}>+ 追加</button>
-            </div>
-            <div className="shadow overflow-hidden border border-gray-200 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">単価</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">テープ</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">備考</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {items.map(item => (
-                    <tr key={item.id} className={item.disabled ? "opacity-40" : ""}>
-                      <td className="px-3 py-2 font-medium">{item.name}</td>
-                      <td className="px-3 py-2 text-right">¥{item.price}</td>
-                      <td className="px-3 py-2 text-gray-500 text-xs">
-                        {item.tapeUsages?.map(u => `${u.tape_item_name}×${u.quantity}`).join(" / ") || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-500">{item.notes}</td>
-                      <td className="px-3 py-2 text-right space-x-2">
-                        <button className="text-blue-600 hover:underline" onClick={() => openEdit(item)}>編集</button>
-                        <button className="text-red-600 hover:underline" onClick={() => removeMenu(item)}>削除</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {items.length === 0 && (
-                    <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">メニューがありません</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {/* テープ素材タブ */}
-        {activeTab === "tape" && (
-          <>
-            <div className="flex justify-end mb-3">
-              <button className="bg-blue-700 text-white px-4 py-2 rounded-md text-sm" onClick={openTapeCreate}>+ 追加</button>
-            </div>
-            <div className="shadow overflow-hidden border border-gray-200 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">基本ストック</th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">状態</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {tapeItems.map(t => (
-                    <tr key={t.id} className={t.disabled ? "opacity-40" : ""}>
-                      <td className="px-3 py-2 font-medium">{t.name}</td>
-                      <td className="px-3 py-2 text-right text-sm">{t.stockCount > 0 ? `${t.stockCount}本` : "—"}</td>
-                      <td className="px-3 py-2 text-center text-xs">
-                        {t.disabled ? <span className="text-gray-400">無効</span> : <span className="text-green-600">有効</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right space-x-2">
-                        <button className="text-blue-600 hover:underline" onClick={() => openTapeEdit(t)}>編集</button>
-                        <button className="text-red-600 hover:underline" onClick={() => removeTape(t)}>削除</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {tapeItems.length === 0 && (
-                    <tr><td colSpan={4} className="px-3 py-4 text-center text-gray-400">テープ素材がありません</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {/* 施術メニュー フォーム */}
-        {showForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-lg font-bold mb-4">{editing ? "メニュー編集" : "メニュー追加"}</h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">名称 <span className="text-red-500">*</span></label>
-                  <input type="text" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                    value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">単価目安（円）</label>
-                    <input type="number" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                      value={draft.price} onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">表示順</label>
-                    <input type="number" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                      value={draft.sort_order} onChange={e => setDraft({ ...draft, sort_order: Number(e.target.value) })} />
+          <div className="divide-y divide-gray-100">
+            {items.map(item => (
+              <button
+                key={item.id}
+                className={`w-full flex items-center px-4 py-4 text-left active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
+                onClick={() => openEdit(item)}
+              >
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="text-sm font-medium">{item.name}</div>
+                  <div className="text-xs text-gray-400 mt-0.5 truncate">
+                    ¥{item.price}
+                    {item.tapeUsages?.length > 0 && (
+                      <span className="ml-2">{item.tapeUsages.map(u => `${u.tape_item_name}×${u.quantity}`).join(" · ")}</span>
+                    )}
+                    {item.notes && <span className="ml-2 text-gray-300">{item.notes}</span>}
                   </div>
                 </div>
-                {/* テープ使用量 */}
-                {tapeItems.filter(t => !t.disabled).length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">テープ使用量（本）</label>
-                    <div className="space-y-2">
-                      {tapeItems.filter(t => !t.disabled).map(t => (
-                        <div key={t.id} className="flex items-center space-x-2">
-                          <span className="text-sm flex-1">{t.name}</span>
-                          <input
-                            type="number" step="0.5" min="0"
-                            className="w-20 border border-gray-300 rounded-md p-1 text-sm text-right"
-                            value={getUsageQty(t.id)}
-                            onChange={e => setUsageQty(t.id, t.name, Number(e.target.value))}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">備考</label>
-                  <input type="text" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                    value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} />
-                </div>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" checked={draft.disabled}
-                    onChange={e => setDraft({ ...draft, disabled: e.target.checked })} />
-                  <span className="text-sm text-gray-700">無効にする</span>
-                </label>
-              </div>
-              <div className="flex justify-end space-x-3 mt-5">
-                <button className="px-4 py-2 text-sm border border-gray-300 rounded-md" onClick={() => setShowForm(false)}>キャンセル</button>
-                <button className="px-4 py-2 text-sm bg-blue-700 text-white rounded-md disabled:opacity-50"
-                  onClick={saveMenu} disabled={!draft.name}>保存</button>
-              </div>
-            </div>
+                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+              </button>
+            ))}
+            {items.length === 0 && (
+              <div className="py-16 text-center text-sm text-gray-400">メニューがありません</div>
+            )}
           </div>
         )}
 
-        {/* テープ素材 フォーム */}
-        {showTapeForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
-              <h2 className="text-lg font-bold mb-4">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">名称 <span className="text-red-500">*</span></label>
-                  <input type="text" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                    value={tapeDraft.name} onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
+        {/* テープ素材リスト */}
+        {activeTab === "tape" && (
+          <div className="divide-y divide-gray-100">
+            {tapeItems.map(t => (
+              <button
+                key={t.id}
+                className={`w-full flex items-center px-4 py-4 text-left active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
+                onClick={() => openTapeEdit(t)}
+              >
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="text-sm font-medium">{t.name}</div>
+                  {t.stockCount > 0 && (
+                    <div className="text-xs text-gray-400 mt-0.5">基本ストック {t.stockCount}本</div>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">基本ストック（本）</label>
-                    <input type="number" step="0.5" min="0" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                      value={tapeDraft.stock_count} onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">表示順</label>
-                    <input type="number" className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                      value={tapeDraft.sort_order} onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
-                  </div>
-                </div>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" checked={tapeDraft.disabled}
-                    onChange={e => setTapeDraft({ ...tapeDraft, disabled: e.target.checked })} />
-                  <span className="text-sm text-gray-700">無効にする</span>
-                </label>
-              </div>
-              <div className="flex justify-end space-x-3 mt-5">
-                <button className="px-4 py-2 text-sm border border-gray-300 rounded-md" onClick={() => setShowTapeForm(false)}>キャンセル</button>
-                <button className="px-4 py-2 text-sm bg-blue-700 text-white rounded-md disabled:opacity-50"
-                  onClick={saveTape} disabled={!tapeDraft.name}>保存</button>
-              </div>
-            </div>
+                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+              </button>
+            ))}
+            {tapeItems.length === 0 && (
+              <div className="py-16 text-center text-sm text-gray-400">テープ素材がありません</div>
+            )}
           </div>
         )}
       </div>
+
+      {/* 固定下部: 追加ボタン */}
+      <div className="fixed left-0 bottom-0 w-full px-4 py-4 bg-white border-t border-gray-100">
+        <button
+          className="w-full bg-blue-700 text-white py-3 rounded-xl text-sm font-medium"
+          onClick={activeTab === "menu" ? openCreate : openTapeCreate}
+        >+ {activeTab === "menu" ? "施術メニューを追加" : "テープ素材を追加"}</button>
+      </div>
+
+      {/* 施術メニュー フォーム — ボトムシート */}
+      {showForm && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowForm(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[88vh]">
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+            <div className="px-4 py-3 flex-shrink-0 border-b border-gray-100">
+              <h2 className="text-base font-semibold">{editing ? "メニュー編集" : "メニュー追加"}</h2>
+            </div>
+            <div className="overflow-y-auto px-4 py-4 space-y-4 flex-1">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
+                <input type="text"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                  value={draft.name}
+                  onChange={e => setDraft({ ...draft, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">単価目安（円）</label>
+                  <input type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    value={draft.price}
+                    onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">表示順</label>
+                  <input type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    value={draft.sort_order}
+                    onChange={e => setDraft({ ...draft, sort_order: Number(e.target.value) })} />
+                </div>
+              </div>
+              {tapeItems.filter(t => !t.disabled).length > 0 && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-2">テープ使用量（本）</label>
+                  <div className="space-y-2">
+                    {tapeItems.filter(t => !t.disabled).map(t => (
+                      <div key={t.id} className="flex items-center border border-gray-200 rounded-xl px-3 py-2.5">
+                        <span className="text-sm flex-1">{t.name}</span>
+                        <input
+                          type="number" step="0.5" min="0"
+                          className="w-14 text-sm text-right bg-transparent border-0 outline-none"
+                          value={getUsageQty(t.id)}
+                          onChange={e => setUsageQty(t.id, t.name, Number(e.target.value))}
+                        />
+                        <span className="text-xs text-gray-400 ml-1">本</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">備考</label>
+                <input type="text"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                  value={draft.notes}
+                  onChange={e => setDraft({ ...draft, notes: e.target.value })} />
+              </div>
+              <label className="flex items-center space-x-3 py-1 cursor-pointer">
+                <input type="checkbox" className="w-5 h-5 rounded" checked={draft.disabled}
+                  onChange={e => setDraft({ ...draft, disabled: e.target.checked })} />
+                <span className="text-sm text-gray-600">無効にする</span>
+              </label>
+            </div>
+            <div className="px-4 pb-8 pt-3 flex-shrink-0 space-y-2 border-t border-gray-100">
+              <button
+                className="w-full py-4 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40"
+                onClick={saveMenu}
+                disabled={!draft.name}
+              >保存する</button>
+              {editing && (
+                <button
+                  className="w-full py-3 text-sm text-red-500"
+                  onClick={() => {
+                    if (!confirm(`「${editing.name}」を削除しますか？`)) return;
+                    repo.menuDelete(editing.id)
+                      .then(() => repo.menuList().then(setItems))
+                      .then(() => setShowForm(false));
+                  }}
+                >削除する</button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* テープ素材 フォーム — ボトムシート */}
+      {showTapeForm && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowTapeForm(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h2 className="text-base font-semibold">{editingTape ? "テープ素材編集" : "テープ素材追加"}</h2>
+            </div>
+            <div className="px-4 py-4 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">名称 <span className="text-red-400">*</span></label>
+                <input type="text"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                  value={tapeDraft.name}
+                  onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">基本ストック（本）</label>
+                  <input type="number" step="0.5" min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    value={tapeDraft.stock_count}
+                    onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">表示順</label>
+                  <input type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm"
+                    value={tapeDraft.sort_order}
+                    onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
+                </div>
+              </div>
+              <label className="flex items-center space-x-3 py-1 cursor-pointer">
+                <input type="checkbox" className="w-5 h-5 rounded" checked={tapeDraft.disabled}
+                  onChange={e => setTapeDraft({ ...tapeDraft, disabled: e.target.checked })} />
+                <span className="text-sm text-gray-600">無効にする</span>
+              </label>
+            </div>
+            <div className="px-4 pb-8 pt-3 space-y-2 border-t border-gray-100">
+              <button
+                className="w-full py-4 bg-blue-700 text-white font-medium rounded-xl text-sm disabled:opacity-40"
+                onClick={saveTape}
+                disabled={!tapeDraft.name}
+              >保存する</button>
+              {editingTape && (
+                <button
+                  className="w-full py-3 text-sm text-red-500"
+                  onClick={() => {
+                    if (!confirm(`「${editingTape.name}」を削除しますか？`)) return;
+                    repo.tapeItemDelete(editingTape.id)
+                      .then(() => repo.tapeItemList().then(setTapeItems))
+                      .then(() => setShowTapeForm(false));
+                  }}
+                >削除する</button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </Layout>
   );
 }
