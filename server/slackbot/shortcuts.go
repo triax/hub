@@ -96,9 +96,28 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		postSlackJSON(payload.ResponseURL, fmt.Sprintf(":white_check_mark: %s ⇒ %s", payload.Message.Text, member.Name()))
-
-		// TODO: 全回答フィードバック
+		// 回答済みブロックのみ確認テキストに差し替え、未回答ブロックのドロップダウンは維持する
+		newBlocks := make([]slack.Block, 0, len(payload.Message.Blocks.BlockSet))
+		for _, block := range payload.Message.Blocks.BlockSet {
+			if block.BlockType() == slack.MBTSection {
+				if sb, ok := block.(*slack.SectionBlock); ok && sb.BlockID == action.BlockID {
+					newBlocks = append(newBlocks, slack.NewSectionBlock(
+						slack.NewTextBlockObject(slack.MarkdownType,
+							fmt.Sprintf(":white_check_mark: %s ⇒ %s", sb.Text.Text, member.Name()),
+							false, false),
+						nil, nil,
+					))
+					continue
+				}
+			}
+			newBlocks = append(newBlocks, block)
+		}
+		body, _ := json.Marshal(map[string]interface{}{
+			"replace_original": true,
+			"text":             payload.Message.Text,
+			"blocks":           newBlocks,
+		})
+		http.Post(payload.ResponseURL, "application/json", bytes.NewReader(body))
 	}
 
 	if err != nil {
