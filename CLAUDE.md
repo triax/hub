@@ -1,3 +1,7 @@
+---
+env_provisioner: scripts/env-provision
+---
+
 # CLAUDE.md
 
 ## Project Overview
