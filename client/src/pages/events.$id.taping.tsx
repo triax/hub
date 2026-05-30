@@ -1,6 +1,6 @@
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router"; // useNavigate は下部ボタンで使用
 import { useEffect, useMemo, useState } from "react";
-import { isTapingManager } from "../utils/tapingAuth";
+import { isTapingManager } from "../utils/tapingAuth"; // 全体集計セクションの表示判定にのみ使用
 import Layout from "../../components/layout";
 import Taping from "../../models/Taping";
 import Member from "../../models/Member";
@@ -22,11 +22,10 @@ export default function EventTaping() {
 
   useEffect(() => {
     if (!myself?.slack?.id || myself.slack.id === "xxx") return;
-    if (!isTapingManager(myself)) { navigate({ to: "/" }); return; }
     if (!id) return;
     eventRepo.get(id).then(setEvent);
     tapingRepo.listRequests(id).then(setTapings);
-  }, [id, myself, tapingRepo, eventRepo, navigate]);
+  }, [id, myself, tapingRepo, eventRepo]);
 
   const byMember = tapings.reduce<Record<string, Taping[]>>((acc, t) => {
     (acc[t.memberID] ||= []).push(t);
