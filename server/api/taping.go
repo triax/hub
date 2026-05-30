@@ -360,31 +360,37 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// 新規・更新分を Put（NameKey により upsert）
+	// 新規・更新分を PutMulti（NameKey により upsert）
 	now := time.Now().Unix() * 1000
-	result := []models.Taping{}
+	putKeys := make([]*datastore.Key, 0, len(body.MenuItemIDs))
+	putValues := make([]*models.Taping, 0, len(body.MenuItemIDs))
 	for i, mid := range body.MenuItemIDs {
 		menuItem := menuItems[i]
-		usages := unmarshalTapeUsages(menuItem.TapeUsagesJSON)
-		t := models.Taping{
+		t := &models.Taping{
 			MemberID:       slackID,
 			EventID:        body.EventID,
 			MenuItemID:     mid,
 			MenuItemName:   menuItem.Name,
 			Price:          menuItem.Price,
-			TapeUsagesJSON: marshalTapeUsages(usages),
-			TapeUsages:     usages,
+			TapeUsagesJSON: menuItem.TapeUsagesJSON, // JSON 文字列をそのままコピー（decode→encodeの往復を省略）
+			TapeUsages:     unmarshalTapeUsages(menuItem.TapeUsagesJSON),
 			RequestedAt:    now,
 		}
-		nameKey := datastore.NameKey(models.KindTaping,
-			fmt.Sprintf("%s_%s_%d", slackID, body.EventID, mid), nil)
-		if _, err := client.Put(ctx, nameKey, &t); err != nil {
+		putKeys = append(putKeys, datastore.NameKey(models.KindTaping,
+			fmt.Sprintf("%s_%s_%d", slackID, body.EventID, mid), nil))
+		putValues = append(putValues, t)
+	}
+	if len(putKeys) > 0 {
+		if _, err := client.PutMulti(ctx, putKeys, putValues); err != nil {
 			render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 			return
 		}
-		result = append(result, t)
 	}
 
+	result := make([]models.Taping, len(putValues))
+	for i, t := range putValues {
+		result[i] = *t
+	}
 	render.JSON(http.StatusOK, result)
 }
 

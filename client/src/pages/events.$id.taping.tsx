@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { isTapingManager } from "../utils/tapingAuth";
 import Layout from "../../components/layout";
 import Taping from "../../models/Taping";
 import Member from "../../models/Member";
@@ -9,11 +10,6 @@ import TeamEventRepo from "../../repository/EventRepo";
 import { MemberCache } from "../../repository/MemberRepo";
 import { useAppContext } from "../context";
 
-function isTapingManager(myself: any): boolean {
-  if (!myself?.slack?.id || myself.slack.id === "xxx") return false;
-  if (myself.slack.is_admin) return true;
-  return !!(myself.slack.profile?.title?.match(/trainer/i));
-}
 
 export default function EventTaping() {
   const { myself } = useAppContext();

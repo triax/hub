@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon } from "@heroicons/react/outline";
+import { isTapingManager } from "../utils/tapingAuth";
 import Layout from "../../components/layout";
 import TapeItem from "../../models/TapeItem";
 import TapingMenuItem, { TapingMenuItemDraft } from "../../models/TapingMenuItem";
 import TapingRepo from "../../repository/TapingRepo";
 import { useAppContext } from "../context";
 
-function isTapingManager(myself: any): boolean {
-  if (!myself?.slack?.id || myself.slack.id === "xxx") return false;
-  if (myself.slack.is_admin) return true;
-  return !!(myself.slack.profile?.title?.match(/trainer|staff/i));
-}
 
 const emptyDraft = (): TapingMenuItemDraft => ({
   name: "", price: 0, notes: "", tape_usages: [], sort_order: 0, disabled: false,

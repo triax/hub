@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
+import { isTapingManager } from "../utils/tapingAuth";
 import Taping from "../../models/Taping";
 import TapeItem from "../../models/TapeItem";
 import Member from "../../models/Member";
@@ -9,11 +10,6 @@ import TapingRepo from "../../repository/TapingRepo";
 import { MemberCache } from "../../repository/MemberRepo";
 import { useAppContext } from "../context";
 
-function isTapingManager(myself: any): boolean {
-  if (!myself?.slack?.id || myself.slack.id === "xxx") return false;
-  if (myself.slack.is_admin) return true;
-  return !!(myself.slack.profile?.title?.match(/trainer|staff/i));
-}
 
 export default function TapingOverview() {
   const { myself } = useAppContext();
@@ -40,6 +36,8 @@ export default function TapingOverview() {
         .then(results => setUpcomingTapings(results.flat()));
     });
   }, [myself, navigate, repo, year]);
+
+  const activeTapeItems = useMemo(() => tapeItems.filter(t => !t.disabled), [tapeItems]);
 
   if (myself?.slack?.id && myself.slack.id !== "xxx" && !isTapingManager(myself)) return null;
 
@@ -88,11 +86,11 @@ export default function TapingOverview() {
             <span className="font-semibold text-sm">テープ在庫状況</span>
             <span className="text-xs text-gray-400">今後 {upcomingEvents.length} イベントの申請より</span>
           </div>
-          {tapeItems.filter(t => !t.disabled).length === 0 ? (
+          {activeTapeItems.length === 0 ? (
             <div className="text-sm text-gray-400 py-4 text-center">テープ素材が未登録です</div>
           ) : (
             <div className="divide-y">
-              {tapeItems.filter(t => !t.disabled).map(item => {
+              {activeTapeItems.map(item => {
                 const needed = upcomingByTape[item.name] ?? 0;
                 const stock = item.stockCount;
                 const shortage = stock > 0 && needed > stock;
@@ -118,7 +116,7 @@ export default function TapingOverview() {
               })}
             </div>
           )}
-          {tapeItems.some(t => !t.disabled && t.stockCount === 0) && (
+          {activeTapeItems.some(t => t.stockCount === 0) && (
             <div className="mt-2 text-xs text-gray-400">
               ストック本数は
               <button className="underline mx-1" onClick={() => navigate({ to: "/taping/master" })}>テープ素材マスタ</button>

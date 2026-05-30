@@ -1,3 +1,4 @@
+import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import TapingMenuItem from "../../models/TapingMenuItem";
@@ -9,7 +10,8 @@ export default function TapingRequest() {
   const [menuItems, setMenuItems] = useState<TapingMenuItem[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
   // URL の ?event= があれば初期値として使う
-  const initialEventID = useMemo(() => new URLSearchParams(window.location.search).get("event") ?? "", []);
+  const search = useSearch({ strict: false }) as { event?: string };
+  const initialEventID = useMemo(() => search.event ?? "", [search.event]);
   const [selectedEventID, setSelectedEventID] = useState<string>(initialEventID);
   const [selectedIDs, setSelectedIDs] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
