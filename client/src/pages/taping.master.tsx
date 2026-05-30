@@ -54,6 +54,7 @@ export default function TapingMaster() {
   const [editingTape, setEditingTape] = useState<TapeItem | null>(null);
   const [tapeDraft, setTapeDraft] = useState({ name: "", stock_count: 0, sort_order: 0, disabled: false });
   const [saving, setSaving] = useState(false);
+  const [tabVisible, setTabVisible] = useState(true);
 
   const menuModal = useModal();
   const tapeModal = useModal();
@@ -133,62 +134,68 @@ export default function TapingMaster() {
               className={`flex-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors duration-150 ${
                 activeTab === tab ? "border-blue-700 text-blue-700" : "border-transparent text-gray-400"
               }`}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                if (tab === activeTab) return;
+                setTabVisible(false);
+                setTimeout(() => { setActiveTab(tab); setTabVisible(true); }, 120);
+              }}
             >{tab === "menu" ? "施術メニュー" : "テープ素材"}</button>
           ))}
         </div>
 
-        {/* 施術メニューリスト */}
-        {activeTab === "menu" && (
-          <div className="divide-y divide-gray-100">
-            {items.map(item => (
-              <button
-                key={item.id}
-                className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
-                onClick={() => openEdit(item)}
-              >
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="text-sm font-medium">{item.name}</div>
-                  <div className="text-xs text-gray-400 mt-0.5 truncate">
+        <div className={`transition-opacity duration-[120ms] ${tabVisible ? "opacity-100" : "opacity-0"}`}>
+          {/* 施術メニューリスト */}
+          {activeTab === "menu" && (
+            <div className="divide-y divide-gray-100">
+              {items.map(item => (
+                <button
+                  key={item.id}
+                  className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${item.disabled ? "opacity-40" : ""}`}
+                  onClick={() => openEdit(item)}
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-sm font-medium">{item.name}</div>
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
                     ¥{item.price}
-                    {item.tapeUsages?.length > 0 && (
-                      <span className="ml-2">{item.tapeUsages.map(u => `${u.tape_item_name}×${u.quantity}`).join(" · ")}</span>
-                    )}
-                    {item.notes && <span className="ml-2 text-gray-300">{item.notes}</span>}
+                      {item.tapeUsages?.length > 0 && (
+                        <span className="ml-2">{item.tapeUsages.map(u => `${u.tape_item_name}×${u.quantity}`).join(" · ")}</span>
+                      )}
+                      {item.notes && <span className="ml-2 text-gray-300">{item.notes}</span>}
+                    </div>
                   </div>
-                </div>
-                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-100 group-active:translate-x-0.5" />
-              </button>
-            ))}
-            {items.length === 0 && (
-              <div className="py-16 text-center text-sm text-gray-400">メニューがありません</div>
-            )}
-          </div>
-        )}
+                  <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-100 group-active:translate-x-0.5" />
+                </button>
+              ))}
+              {items.length === 0 && (
+                <div className="py-16 text-center text-sm text-gray-400">メニューがありません</div>
+              )}
+            </div>
+          )}
 
-        {/* テープ素材リスト */}
-        {activeTab === "tape" && (
-          <div className="divide-y divide-gray-100">
-            {tapeItems.map(t => (
-              <button
-                key={t.id}
-                className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
-                onClick={() => openTapeEdit(t)}
-              >
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="text-sm font-medium">{t.name}</div>
-                  {t.stockCount > 0 && (
-                    <div className="text-xs text-gray-400 mt-0.5">基本ストック {t.stockCount}本</div>
-                  )}
-                </div>
-                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
-              </button>
-            ))}
-            {tapeItems.length === 0 && (
-              <div className="py-16 text-center text-sm text-gray-400">テープ素材がありません</div>
-            )}
-          </div>
-        )}
+          {/* テープ素材リスト */}
+          {activeTab === "tape" && (
+            <div className="divide-y divide-gray-100">
+              {tapeItems.map(t => (
+                <button
+                  key={t.id}
+                  className={`w-full flex items-center px-4 py-4 text-left transition-colors duration-100 active:bg-gray-50 ${t.disabled ? "opacity-40" : ""}`}
+                  onClick={() => openTapeEdit(t)}
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-sm font-medium">{t.name}</div>
+                    {t.stockCount > 0 && (
+                      <div className="text-xs text-gray-400 mt-0.5">基本ストック {t.stockCount}本</div>
+                    )}
+                  </div>
+                  <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+              {tapeItems.length === 0 && (
+                <div className="py-16 text-center text-sm text-gray-400">テープ素材がありません</div>
+              )}
+            </div>
+          )}
+        </div>{/* /タブコンテンツ */}
       </div>
 
       {/* 固定下部: 追加ボタン */}
