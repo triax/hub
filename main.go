@@ -69,6 +69,11 @@ func main() {
 		r.Post("/numbers/{num}/assign", api.AssignPlayerNumber)
 		r.Post("/numbers/{num}/deprive", api.DeprivePlayerNumber)
 		r.Get("/numbers", api.GetAllNumbers)
+		// TapeItem
+		r.Get("/tape-items", api.ListTapeItems)
+		r.Post("/tape-items", api.CreateTapeItem)
+		r.Post("/tape-items/{id}/update", api.UpdateTapeItem)
+		r.Post("/tape-items/{id}/delete", api.DeleteTapeItem)
 		// Taping
 		r.Get("/taping/menu", api.ListTapingMenuItems)
 		r.Post("/taping/menu", api.CreateTapingMenuItem)

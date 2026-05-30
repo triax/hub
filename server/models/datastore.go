@@ -10,6 +10,7 @@ const (
 	KindEquip          = "Equip"
 	KindCustody        = "Custody"
 	KindNumber         = "Number"
+	KindTapeItem       = "TapeItem"
 	KindTapingMenuItem = "TapingMenuItem"
 	KindTaping         = "Taping"
 )

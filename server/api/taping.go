@@ -30,6 +30,144 @@ func isTapingManager(ctx context.Context, slackID string, client *datastore.Clie
 	return yes, err
 }
 
+// marshalTapeUsages は TapeUsages を JSON 文字列にシリアライズする。
+func marshalTapeUsages(usages []models.TapeUsage) string {
+	if len(usages) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(usages)
+	return string(b)
+}
+
+// unmarshalTapeUsages は JSON 文字列を TapeUsages にデシリアライズする。
+func unmarshalTapeUsages(s string) []models.TapeUsage {
+	if s == "" {
+		return nil
+	}
+	var usages []models.TapeUsage
+	json.Unmarshal([]byte(s), &usages)
+	return usages
+}
+
+// --- TapeItem CRUD ---
+
+func ListTapeItems(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	items := []models.TapeItem{}
+	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindTapeItem).Order("SortOrder"), &items); err != nil && !models.IsFiledMismatch(err) {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	for i, it := range items {
+		items[i].ID = it.Key.ID
+	}
+	render.JSON(http.StatusOK, items)
+}
+
+func CreateTapeItem(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	slackID := filters.GetSessionUserContext(req)
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
+		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
+		return
+	}
+
+	item := models.TapeItem{}
+	defer req.Body.Close()
+	if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	key, err := client.Put(ctx, datastore.IncompleteKey(models.KindTapeItem, nil), &item)
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	item.ID = key.ID
+	render.JSON(http.StatusCreated, item)
+}
+
+func UpdateTapeItem(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	slackID := filters.GetSessionUserContext(req)
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
+		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
+		return
+	}
+
+	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	item := models.TapeItem{}
+	defer req.Body.Close()
+	if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	if _, err := client.Put(ctx, datastore.IDKey(models.KindTapeItem, id, nil), &item); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	item.ID = id
+	render.JSON(http.StatusOK, item)
+}
+
+func DeleteTapeItem(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+	ctx := req.Context()
+	slackID := filters.GetSessionUserContext(req)
+	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
+		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
+		return
+	}
+
+	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+	if err != nil {
+		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
+		return
+	}
+	if err := client.Delete(ctx, datastore.IDKey(models.KindTapeItem, id, nil)); err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+	render.JSON(http.StatusOK, marmoset.P{"id": id})
+}
+
+// --- TapingMenuItem CRUD ---
+
 func ListTapingMenuItems(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
@@ -41,13 +179,13 @@ func ListTapingMenuItems(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	items := []models.TapingMenuItem{}
-	query := datastore.NewQuery(models.KindTapingMenuItem).Order("SortOrder")
-	if _, err := client.GetAll(ctx, query, &items); err != nil && !models.IsFiledMismatch(err) {
+	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindTapingMenuItem).Order("SortOrder"), &items); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
 	for i, it := range items {
 		items[i].ID = it.Key.ID
+		items[i].TapeUsages = unmarshalTapeUsages(it.TapeUsagesJSON)
 	}
 	render.JSON(http.StatusOK, items)
 }
@@ -63,8 +201,7 @@ func CreateTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	ok, err := isTapingManager(ctx, slackID, client)
-	if err != nil || !ok {
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -75,6 +212,7 @@ func CreateTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
+	item.TapeUsagesJSON = marshalTapeUsages(item.TapeUsages)
 	key, err := client.Put(ctx, datastore.IncompleteKey(models.KindTapingMenuItem, nil), &item)
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
@@ -95,8 +233,7 @@ func UpdateTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	ok, err := isTapingManager(ctx, slackID, client)
-	if err != nil || !ok {
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -112,8 +249,8 @@ func UpdateTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
 		return
 	}
-	key := datastore.IDKey(models.KindTapingMenuItem, id, nil)
-	if _, err := client.Put(ctx, key, &item); err != nil {
+	item.TapeUsagesJSON = marshalTapeUsages(item.TapeUsages)
+	if _, err := client.Put(ctx, datastore.IDKey(models.KindTapingMenuItem, id, nil), &item); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
@@ -132,8 +269,7 @@ func DeleteTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	ok, err := isTapingManager(ctx, slackID, client)
-	if err != nil || !ok {
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -150,9 +286,8 @@ func DeleteTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 	render.JSON(http.StatusOK, marmoset.P{"id": id})
 }
 
-// SubmitTapingRequest は POST /api/1/taping/requests。
-// body: { event_id: string, menu_item_ids: int64[] }
-// 既存 Taping エンティティと diff して不要分を削除し、新規分を Put する。
+// --- Taping requests ---
+
 func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
@@ -198,10 +333,10 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 
 	// 既存の Taping エンティティ（同 memberID + eventID）を取得
 	existing := []models.Taping{}
-	existQuery := datastore.NewQuery(models.KindTaping).
-		Filter("MemberID =", slackID).
-		Filter("EventID =", body.EventID)
-	existKeys, err := client.GetAll(ctx, existQuery, &existing)
+	existKeys, err := client.GetAll(ctx,
+		datastore.NewQuery(models.KindTaping).Filter("MemberID =", slackID).Filter("EventID =", body.EventID),
+		&existing,
+	)
 	if err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
@@ -229,14 +364,16 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	now := time.Now().Unix() * 1000
 	result := []models.Taping{}
 	for i, mid := range body.MenuItemIDs {
-		item := menuItems[i]
+		menuItem := menuItems[i]
+		usages := unmarshalTapeUsages(menuItem.TapeUsagesJSON)
 		t := models.Taping{
 			MemberID:       slackID,
 			EventID:        body.EventID,
 			MenuItemID:     mid,
-			MenuItemName:   item.Name,
-			Price:          item.Price,
-			EstimatedRolls: item.EstimatedRolls,
+			MenuItemName:   menuItem.Name,
+			Price:          menuItem.Price,
+			TapeUsagesJSON: marshalTapeUsages(usages),
+			TapeUsages:     usages,
 			RequestedAt:    now,
 		}
 		nameKey := datastore.NameKey(models.KindTaping,
@@ -268,12 +405,15 @@ func GetMyTapingRequest(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	tapings := []models.Taping{}
-	query := datastore.NewQuery(models.KindTaping).
-		Filter("MemberID =", slackID).
-		Filter("EventID =", eventID)
-	if _, err := client.GetAll(ctx, query, &tapings); err != nil && !models.IsFiledMismatch(err) {
+	if _, err := client.GetAll(ctx,
+		datastore.NewQuery(models.KindTaping).Filter("MemberID =", slackID).Filter("EventID =", eventID),
+		&tapings,
+	); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
+	}
+	for i, t := range tapings {
+		tapings[i].TapeUsages = unmarshalTapeUsages(t.TapeUsagesJSON)
 	}
 	render.JSON(http.StatusOK, tapings)
 }
@@ -289,8 +429,7 @@ func ListTapingRequests(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	ok, err := isTapingManager(ctx, slackID, client)
-	if err != nil || !ok {
+	if ok, err := isTapingManager(ctx, slackID, client); err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -304,10 +443,13 @@ func ListTapingRequests(w http.ResponseWriter, req *http.Request) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}
+	for i, t := range tapings {
+		tapings[i].TapeUsages = unmarshalTapeUsages(t.TapeUsagesJSON)
+	}
 	render.JSON(http.StatusOK, tapings)
 }
 
-// ListTapingEvents は直近40日以内のイベントを新しい順で返す（テーピングリクエストのセレクト用）。
+// ListTapingEvents は直近40日以内のイベントを返す（テーピングリクエストのセレクト用）。
 func ListTapingEvents(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
@@ -320,10 +462,10 @@ func ListTapingEvents(w http.ResponseWriter, req *http.Request) {
 
 	from := time.Now().Add(-40 * 24 * time.Hour).Unix() * 1000
 	events := []models.Event{}
-	query := datastore.NewQuery(models.KindEvent).
-		Filter("Google.StartTime >", from).
-		Order("Google.StartTime")
-	if _, err := client.GetAll(ctx, query, &events); err != nil && !models.IsFiledMismatch(err) {
+	if _, err := client.GetAll(ctx,
+		datastore.NewQuery(models.KindEvent).Filter("Google.StartTime >", from).Order("Google.StartTime"),
+		&events,
+	); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
 	}

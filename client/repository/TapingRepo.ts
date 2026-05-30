@@ -1,4 +1,5 @@
 import Taping from "../models/Taping";
+import TapeItem from "../models/TapeItem";
 import TapingMenuItem, { TapingMenuItemDraft } from "../models/TapingMenuItem";
 import TeamEvent from "../models/TriaxEvent";
 import { fetchJSON } from "./fetch";
@@ -7,6 +8,30 @@ export default class TapingRepo {
   constructor(
     public baseURL = import.meta.env.VITE_API_BASE_URL || "",
   ) {}
+
+  // TapeItem 管理
+  tapeItemList(): Promise<TapeItem[]> {
+    return fetchJSON(this.baseURL + "/api/1/tape-items")
+      .then(TapeItem.listFromAPIResponse);
+  }
+
+  tapeItemCreate(draft: { name: string; sort_order: number; disabled: boolean }): Promise<TapeItem> {
+    return fetchJSON(this.baseURL + "/api/1/tape-items", {
+      method: "POST",
+      body: JSON.stringify(draft),
+    }).then(TapeItem.fromAPIResponse);
+  }
+
+  tapeItemUpdate(id: number, draft: { name: string; sort_order: number; disabled: boolean }): Promise<TapeItem> {
+    return fetchJSON(this.baseURL + `/api/1/tape-items/${id}/update`, {
+      method: "POST",
+      body: JSON.stringify(draft),
+    }).then(TapeItem.fromAPIResponse);
+  }
+
+  tapeItemDelete(id: number): Promise<{ id: number }> {
+    return fetchJSON(this.baseURL + `/api/1/tape-items/${id}/delete`, { method: "POST" });
+  }
 
   // メニュー管理
   menuList(): Promise<TapingMenuItem[]> {

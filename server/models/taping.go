@@ -2,13 +2,30 @@ package models
 
 import "cloud.google.com/go/datastore"
 
+// TapeItem はテープ素材のマスタ（ホワイト、キネシオ等）。
+type TapeItem struct {
+	ID        int64          `json:"id" datastore:"-"`
+	Key       *datastore.Key `datastore:"__key__"`
+	Name      string         `json:"name"`
+	SortOrder int            `json:"sort_order"`
+	Disabled  bool           `json:"disabled"`
+}
+
+// TapeUsage は施術1件で使用するテープの種類と量。
+type TapeUsage struct {
+	TapeItemID   int64   `json:"tape_item_id"`
+	TapeItemName string  `json:"tape_item_name"` // スナップショット
+	Quantity     float64 `json:"quantity"`
+}
+
 type TapingMenuItem struct {
 	ID             int64          `json:"id" datastore:"-"`
 	Key            *datastore.Key `datastore:"__key__"`
 	Name           string         `json:"name"`
 	Price          int            `json:"price"`
-	EstimatedRolls float64        `json:"estimated_rolls"`
 	Notes          string         `json:"notes"`
+	TapeUsagesJSON string         `json:"-" datastore:",noindex"` // JSON: []TapeUsage
+	TapeUsages     []TapeUsage    `json:"tape_usages" datastore:"-"`
 	SortOrder      int            `json:"sort_order"`
 	Disabled       bool           `json:"disabled"`
 }
@@ -23,6 +40,7 @@ type Taping struct {
 	MenuItemID     int64          `json:"menu_item_id"`
 	MenuItemName   string         `json:"menu_item_name"`
 	Price          int            `json:"price"`
-	EstimatedRolls float64        `json:"estimated_rolls"`
+	TapeUsagesJSON string         `json:"-" datastore:",noindex"` // JSON: []TapeUsage（申請時スナップショット）
+	TapeUsages     []TapeUsage    `json:"tape_usages" datastore:"-"`
 	RequestedAt    int64          `json:"requested_at"`
 }

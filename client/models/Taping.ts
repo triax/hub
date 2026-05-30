@@ -1,3 +1,5 @@
+import { TapeUsage } from "./TapingMenuItem";
+
 export default class Taping {
   constructor(
     public memberID: string,
@@ -5,18 +7,18 @@ export default class Taping {
     public menuItemID: number,
     public menuItemName: string,
     public price: number,
-    public estimatedRolls: number,
+    public tapeUsages: TapeUsage[],
     public requestedAt: number,
   ) {}
 
-  static fromAPIResponse({ member_id, event_id, menu_item_id, menu_item_name, price, estimated_rolls, requested_at }): Taping {
+  static fromAPIResponse({ member_id, event_id, menu_item_id, menu_item_name, price, tape_usages, requested_at }): Taping {
     return new Taping(
       member_id ?? "",
       event_id ?? "",
       menu_item_id ?? 0,
       menu_item_name ?? "",
       price ?? 0,
-      estimated_rolls ?? 0,
+      tape_usages ?? [],
       requested_at ?? 0,
     );
   }
