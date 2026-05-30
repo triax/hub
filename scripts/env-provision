@@ -92,17 +92,9 @@ _provision() {
     sleep 1
   done
 
-  # --- フロントエンドビルド ---
-  # VITE_API_BASE_URL はデフォルト "" (同オリジン相対パス) のため、
-  # ビルドした SPA を Go が配信すれば /api/1/... は api_port に届く。
-  # Vite dev server (port 3000) は使わず、Go が client/dest/ を静的配信する構成。
-  (cd "${REPO_ROOT}" && npm run build) > "${workdir}/build.log" 2>&1 || {
-    printf '{"ready":false,"id":"%s","diagnostics":["npm run build failed. See %s/build.log"]}\n' \
-      "$id" "$workdir"
-    exit 1
-  }
+  local vite_port=$((3100 + offset))   # Vite dev server ポート（HMR 有効）
 
-  # --- Go サーバ起動（API + SPA 静的配信を兼務）---
+  # --- Go API サーバ起動 ---
   # secrets.local.yaml は Go の init() 内で appyaml.Load() により自動ロードされる。
   PORT="${api_port}" \
   DATASTORE_EMULATOR_HOST="localhost:${ds_port}" \
@@ -114,20 +106,40 @@ _provision() {
     > "${workdir}/api.log" 2>&1 &
   echo $! > "${workdir}/api.pid"
 
-  # サーバの起動を待つ（最大 30 秒）
+  # API サーバの起動を待つ（最大 30 秒）
   retries=30
   while ! nc -z localhost "${api_port}" 2>/dev/null; do
     retries=$((retries - 1))
     if [[ $retries -le 0 ]]; then
-      printf '{"ready":false,"id":"%s","diagnostics":["Go server timed out on port %s. See %s/api.log"]}\n' \
+      printf '{"ready":false,"id":"%s","diagnostics":["Go API server timed out on port %s. See %s/api.log"]}\n' \
         "$id" "$api_port" "$workdir"
       exit 1
     fi
     sleep 1
   done
 
+  # --- Vite dev server 起動（HMR 有効・proxy → api_port）---
+  # VITE_PORT / VITE_API_PORT は vite.config.ts で参照される。
+  VITE_PORT="${vite_port}" \
+  VITE_API_PORT="${api_port}" \
+    npm --prefix "${REPO_ROOT}" run dev \
+    > "${workdir}/vite.log" 2>&1 &
+  echo $! > "${workdir}/vite.pid"
+
+  # Vite の起動を待つ（最大 30 秒）
+  retries=30
+  while ! nc -z localhost "${vite_port}" 2>/dev/null; do
+    retries=$((retries - 1))
+    if [[ $retries -le 0 ]]; then
+      printf '{"ready":false,"id":"%s","diagnostics":["Vite dev server timed out on port %s. See %s/vite.log"]}\n' \
+        "$id" "$vite_port" "$workdir"
+      exit 1
+    fi
+    sleep 1
+  done
+
   printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"diagnostics":[]}\n' \
-    "$id" "$api_port" "$api_port" "$ds_port"
+    "$id" "$vite_port" "$api_port" "$ds_port"
 }
 
 # --------------------------------------------------------------- teardown ---
