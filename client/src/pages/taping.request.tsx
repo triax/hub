@@ -8,7 +8,9 @@ export default function TapingRequest() {
   const repo = useMemo(() => new TapingRepo(), []);
   const [menuItems, setMenuItems] = useState<TapingMenuItem[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
-  const [selectedEventID, setSelectedEventID] = useState<string>("");
+  // URL の ?event= があれば初期値として使う
+  const initialEventID = useMemo(() => new URLSearchParams(window.location.search).get("event") ?? "", []);
+  const [selectedEventID, setSelectedEventID] = useState<string>(initialEventID);
   const [selectedIDs, setSelectedIDs] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -17,9 +19,10 @@ export default function TapingRequest() {
     Promise.all([repo.menuList(), repo.listEvents()]).then(([items, evs]) => {
       setMenuItems(items.filter(it => !it.disabled));
       setEvents(evs);
-      if (evs.length > 0) setSelectedEventID(evs[0].google.id);
+      // ?event= 指定がなければ最新イベントをデフォルト選択
+      if (!initialEventID && evs.length > 0) setSelectedEventID(evs[0].google.id);
     });
-  }, [repo]);
+  }, [repo, initialEventID]);
 
   // イベントが変わったら既存リクエストを読み込む
   useEffect(() => {

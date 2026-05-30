@@ -82,6 +82,14 @@ export default function EventTaping() {
           >← イベントに戻る</button>
         </div>
       </div>
+
+      {/* 下部固定ボタン */}
+      <div className="fixed left-0 bottom-0 w-full px-4 py-4 bg-white border-t border-gray-100">
+        <button
+          className="w-full border border-blue-600 text-blue-600 py-3 rounded-md font-medium text-sm"
+          onClick={() => navigate({ to: `/taping/request?event=${id}` })}
+        >テーピングリクエストをする</button>
+      </div>
     </Layout>
   );
 }
