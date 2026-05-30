@@ -92,9 +92,18 @@ _provision() {
     sleep 1
   done
 
-  # --- Go API サーバ起動 ---
+  # --- フロントエンドビルド ---
+  # VITE_API_BASE_URL はデフォルト "" (同オリジン相対パス) のため、
+  # ビルドした SPA を Go が配信すれば /api/1/... は api_port に届く。
+  # Vite dev server (port 3000) は使わず、Go が client/dest/ を静的配信する構成。
+  (cd "${REPO_ROOT}" && npm run build) > "${workdir}/build.log" 2>&1 || {
+    printf '{"ready":false,"id":"%s","diagnostics":["npm run build failed. See %s/build.log"]}\n' \
+      "$id" "$workdir"
+    exit 1
+  }
+
+  # --- Go サーバ起動（API + SPA 静的配信を兼務）---
   # secrets.local.yaml は Go の init() 内で appyaml.Load() により自動ロードされる。
-  # ここでは Datastore 接続先とポートだけ上書きする。
   PORT="${api_port}" \
   DATASTORE_EMULATOR_HOST="localhost:${ds_port}" \
   DATASTORE_PROJECT_ID="${PROJECT_ID}" \
@@ -105,23 +114,17 @@ _provision() {
     > "${workdir}/api.log" 2>&1 &
   echo $! > "${workdir}/api.pid"
 
-  # API サーバの起動を待つ（最大 30 秒）
+  # サーバの起動を待つ（最大 30 秒）
   retries=30
   while ! nc -z localhost "${api_port}" 2>/dev/null; do
     retries=$((retries - 1))
     if [[ $retries -le 0 ]]; then
-      printf '{"ready":false,"id":"%s","diagnostics":["Go API server timed out on port %s. See %s/api.log"]}\n' \
+      printf '{"ready":false,"id":"%s","diagnostics":["Go server timed out on port %s. See %s/api.log"]}\n' \
         "$id" "$api_port" "$workdir"
       exit 1
     fi
     sleep 1
   done
-
-  # TODO: /uat がブラウザ UI テストを行う場合は npm run build で SPA をビルドし、
-  #       Go に静的ファイルを配信させること（go run main.go は client/dest/ を参照する）。
-  #       現状、Go が client/dest/index.html を見つけられない場合は API のみのテストとなる。
-  #       必要なら下記のコメントを外す:
-  # (cd "${REPO_ROOT}" && npm run build) 2>&1 | tee "${workdir}/build.log"
 
   printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"diagnostics":[]}\n' \
     "$id" "$api_port" "$api_port" "$ds_port"
