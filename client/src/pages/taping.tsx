@@ -20,8 +20,10 @@ export default function TapingOverview() {
   const [selectedEventID, setSelectedEventID] = useState<string>("");
   const [tapings, setTapings] = useState<Taping[]>([]);
 
+  // 権限チェック: placeholder(id="xxx") のうちは待つ
   useEffect(() => {
-    if (myself?.slack && !isTapingManager(myself)) {
+    if (!myself?.slack?.id || myself.slack.id === "xxx") return;
+    if (!isTapingManager(myself)) {
       navigate({ to: "/" });
     }
   }, [myself, navigate]);

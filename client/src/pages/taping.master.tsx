@@ -24,9 +24,10 @@ export default function TapingMaster() {
   const [draft, setDraft] = useState<TapingMenuItemDraft>(emptyDraft());
   const [showForm, setShowForm] = useState(false);
 
-  // 権限チェック
+  // 権限チェック: placeholder(id="xxx") のうちは待つ
   useEffect(() => {
-    if (myself?.slack && !isTapingManager(myself)) {
+    if (!myself?.slack?.id || myself.slack.id === "xxx") return;
+    if (!isTapingManager(myself)) {
       navigate({ to: "/" });
     }
   }, [myself, navigate]);
