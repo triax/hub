@@ -13,7 +13,6 @@ export default function MemberView() {
   const repo = useMemo(() => new MemberRepo(), []);
   const { id } = useParams({ strict: false });
   const [member, setMember] = useState<Member>(null);
-  const [num, setNumberInput] = useState<number>(null);
   useEffect(() => { if (id) repo.get(id).then(setMember); }, [id, repo]);
   if (!member) return <></>;
 
@@ -40,22 +39,6 @@ export default function MemberView() {
       <hr className="my-4" />
 
       <div className="py-2">
-        <div className="form-group flex items-center space-x-4">
-          <span>背番号:</span>
-          <input type="number"
-            defaultValue={member.number || num}
-            onChange={ev => setNumberInput(parseInt(ev.target.value))}
-            className="flex-grow form-input border-transparent bg-gray-100 rounded-md"
-            placeholder="0~99を選択"
-            min="0" max="99" step="1"
-          />
-          <button
-            role="button" className="border rounded-md px-4 py-2 cursor-pointer"
-            onClick={() => repo.update(member.slack.id, { number: num })}
-          >設定</button>
-        </div>
-      </div>
-      <div className="py-2">
         <div className="flex space-x-2"><StatusBadges member={member} size="text-lg px-4 py-1" /></div>
       </div>
 
@@ -63,7 +46,13 @@ export default function MemberView() {
 
       <hr className="my-4" />
 
-      {isOwnPage && <HPProfileSection memberId={member.slack.id} />}
+      {isOwnPage && (
+        <HPProfileSection
+          memberId={member.slack.id}
+          initialNumber={member.number ?? null}
+          onSaveNumber={(n) => repo.update(member.slack.id, { number: n })}
+        />
+      )}
 
       <div className="p-8 flex justify-center items-center">
         <a href="/members" className="underline">一覧に戻る</a>
@@ -130,9 +119,18 @@ const FIELD_LABELS: Record<string, string> = {
   bio: "ひとこと",
 };
 
-function HPProfileSection({ memberId }: { memberId: string }) {
+function HPProfileSection({
+  memberId,
+  initialNumber,
+  onSaveNumber,
+}: {
+  memberId: string;
+  initialNumber: number | null;
+  onSaveNumber?: (n: number | null) => Promise<void>;
+}) {
   const repo = useMemo(() => new HPProfileRepo(), []);
   const [profile, setProfile] = useState<HPProfile>(emptyHPProfile());
+  const [jerseyNumber, setJerseyNumber] = useState<number | null>(initialNumber ?? null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const formalRef = useRef<HTMLInputElement>(null);
@@ -163,6 +161,9 @@ function HPProfileSection({ memberId }: { memberId: string }) {
     try {
       const saved = await repo.update(memberId, profile);
       setProfile(saved);
+      if (onSaveNumber) {
+        await onSaveNumber(jerseyNumber);
+      }
       setMessage("保存しました");
     } catch (e) {
       setMessage("保存に失敗しました: " + (e as Error).message);
@@ -215,6 +216,21 @@ function HPProfileSection({ memberId }: { memberId: string }) {
         profile.hide_from_hp ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
       }`}>
         <div className="overflow-hidden">
+          {/* 背番号 */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-gray-700">背番号</label>
+            </div>
+            <input
+              type="number"
+              className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+              value={jerseyNumber ?? ""}
+              onChange={e => setJerseyNumber(e.target.value === "" ? null : parseInt(e.target.value))}
+              placeholder="0〜99"
+              min="0" max="99" step="1"
+            />
+          </div>
+
           {/* テキストフィールド: ラベル+スイッチ行 → 入力行 */}
           <div className="grid grid-cols-1 gap-4 mb-5">
             {(Object.keys(FIELD_LABELS) as HiddenFieldKey[]).map(key => (
