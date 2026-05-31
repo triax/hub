@@ -50,6 +50,7 @@ export default function MemberView() {
         <HPProfileSection
           memberId={member.slack.id}
           initialNumber={member.number ?? null}
+          slackTitle={member.slack.profile.title || ""}
           onSaveNumber={(n) => repo.update(member.slack.id, { number: n })}
         />
       )}
@@ -122,15 +123,18 @@ const FIELD_LABELS: Record<string, string> = {
 function HPProfileSection({
   memberId,
   initialNumber,
+  slackTitle,
   onSaveNumber,
 }: {
   memberId: string;
   initialNumber: number | null;
+  slackTitle: string;
   onSaveNumber?: (n: number | null) => Promise<void>;
 }) {
   const repo = useMemo(() => new HPProfileRepo(), []);
   const [profile, setProfile] = useState<HPProfile>(emptyHPProfile());
   const [jerseyNumber, setJerseyNumber] = useState<number | null>(initialNumber ?? null);
+  const [showPositionHint, setShowPositionHint] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const formalRef = useRef<HTMLInputElement>(null);
@@ -159,7 +163,8 @@ function HPProfileSection({
     setSaving(true);
     setMessage("");
     try {
-      const saved = await repo.update(memberId, profile);
+      const profileToSave = slackTitle ? { ...profile, position: slackTitle } : profile;
+      const saved = await repo.update(memberId, profileToSave);
       setProfile(saved);
       if (onSaveNumber) {
         await onSaveNumber(jerseyNumber);
@@ -246,7 +251,22 @@ function HPProfileSection({
                   isHidden(key) ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
                 }`}>
                   <div className="overflow-hidden">
-                    {key === "bio" ? (
+                    {key === "position" ? (
+                      <>
+                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md text-sm p-2 text-gray-500 min-h-[38px]">
+                          <span className="flex-1">{slackTitle || "（未設定）"}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPositionHint(p => !p)}
+                            className="w-5 h-5 rounded-full bg-gray-200 text-gray-500 text-xs flex items-center justify-center hover:bg-gray-300 shrink-0"
+                            aria-label="説明"
+                          >?</button>
+                        </div>
+                        {showPositionHint && (
+                          <p className="mt-1 text-xs text-blue-500">Slackプロフィールの Title / 役職 欄を更新してください</p>
+                        )}
+                      </>
+                    ) : key === "bio" ? (
                       <textarea
                         className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
                         rows={2}
