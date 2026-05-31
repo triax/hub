@@ -13,6 +13,7 @@ const (
 	KindTapeItem       = "TapeItem"
 	KindTapingMenuItem = "TapingMenuItem"
 	KindTaping         = "Taping"
+	KindApplication    = "Application"
 )
 
 // IsFieldMismatch ...

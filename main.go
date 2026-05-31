@@ -45,7 +45,7 @@ func main() {
 	v1.Use(auth.Handle)
 
 	// 写真アップロードは 10MB まで許容（他の全エンドポイントは下の Group で 1MB）
-	v1.With(filters.MaxBodySize(10 << 20)).Post("/members/{id}/hp-profile/photo", api.UploadHPPhoto)
+	v1.With(filters.MaxBodySize(10<<20)).Post("/members/{id}/hp-profile/photo", api.UploadHPPhoto)
 
 	v1.Group(func(r chi.Router) {
 		r.Use(filters.MaxBodySize(1 << 20)) // 1MB
@@ -83,11 +83,15 @@ func main() {
 		r.Post("/taping/requests", api.SubmitTapingRequest)
 		r.Get("/taping/requests/me", api.GetMyTapingRequest)
 		r.Get("/taping/events", api.ListTapingEvents)
+		// Applications
+		r.Get("/applications", api.GetApplications)
+		r.Patch("/applications/{id}", api.UpdateApplication)
 	})
 	r.Mount("/api/1", v1)
 
 	// 認証不要の公開 API（外部 HP サイト向け）
 	r.With(filters.MaxBodySize(1<<20)).Get("/api/1/public/members", api.ListPublicMembers)
+	r.With(filters.MaxBodySize(512<<10)).Post("/api/1/applications", api.CreateApplication)
 
 	// Unauthorized pages
 	smallBody := filters.MaxBodySize(1 << 20) // 1MB
@@ -129,6 +133,8 @@ func main() {
 	r.With(page.Handle).Get("/taping/master", controllers.TapingMaster)
 	r.With(page.Handle).Get("/taping", controllers.TapingOverview)
 	r.With(page.Handle).Get("/events/{id}/taping", controllers.EventTaping)
+	r.Get("/applications/onboarding", controllers.Applications)        // 公開（認証なし）
+	r.With(page.Handle).Get("/applications", controllers.Applications) // 管理（認証あり）
 
 	// Cloud Tasks (GAE cronリクエストのみ許可)
 	cron := chi.NewRouter()
