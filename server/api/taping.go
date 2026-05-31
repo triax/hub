@@ -469,13 +469,20 @@ func ListTapingEvents(w http.ResponseWriter, req *http.Request) {
 	defer client.Close()
 
 	from := time.Now().Add(-40 * 24 * time.Hour).Unix() * 1000
-	events := []models.Event{}
+	all := []models.Event{}
 	if _, err := client.GetAll(ctx,
 		datastore.NewQuery(models.KindEvent).Filter("Google.StartTime >", from).Order("Google.StartTime"),
-		&events,
+		&all,
 	); err != nil && !models.IsFiledMismatch(err) {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
+	}
+	// テーピングが必要なのは練習・試合のみ
+	events := []models.Event{}
+	for _, ev := range all {
+		if ev.IsPractice() || ev.IsGame() {
+			events = append(events, ev)
+		}
 	}
 	render.JSON(http.StatusOK, events)
 }
