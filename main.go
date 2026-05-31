@@ -89,9 +89,14 @@ func main() {
 	})
 	r.Mount("/api/1", v1)
 
-	// 認証不要の公開 API（外部 HP サイト向け）
+	// 認証不要の公開 API（外部 HP サイト向け、および公開フォーム）
 	r.With(filters.MaxBodySize(1<<20)).Get("/api/1/public/members", api.ListPublicMembers)
-	r.With(filters.MaxBodySize(512<<10)).Post("/api/1/applications", api.CreateApplication)
+
+	// 入部申請フォーム送信（認証不要）
+	// NOTE: chi の Mount は /api/1/* を v1 サブルーターに転送するが、
+	// /api/1/public/* のような明示パスは先に登録することで回避できる。
+	// ここでは /api/1/public/applications に配置して競合を避ける。
+	r.With(filters.MaxBodySize(512<<10)).Post("/api/1/public/applications", api.CreateApplication)
 
 	// Unauthorized pages
 	smallBody := filters.MaxBodySize(1 << 20) // 1MB

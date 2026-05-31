@@ -178,7 +178,7 @@ export default function OnboardingForm() {
                 type={field.type}
                 value={fields[field.key]}
                 onChange={value => setField(field.key, value)}
-                required={field.key !== "extra_email"}
+                required={field.key !== "extra_email" && field.key !== "previous_team"}
               />
             ))}
             <SelectField

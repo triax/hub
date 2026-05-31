@@ -8,7 +8,7 @@ export default class ApplicationRepo {
     fields: Record<string, string>;
     consent_agreed_at: string;
   }) {
-    const res = await fetch(`${BASE}/api/1/applications`, {
+    const res = await fetch(`${BASE}/api/1/public/applications`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
