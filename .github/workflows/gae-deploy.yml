@@ -3,6 +3,7 @@ name: GAE Deploy
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     types: [opened, reopened, synchronize]
     branches: [ main ]
@@ -45,7 +46,7 @@ jobs:
 
   gae-deploy-dev:
     name: GAE Deploy DEV
-    if: github.event.pull_request.head.ref == 'develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [go-test, js-test]
     runs-on: ubuntu-latest
     steps:
@@ -79,14 +80,13 @@ jobs:
 
   gae-deploy-prod:
     name: GAE Deploy PROD
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [go-test, js-test]
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v4
       with:
-        ref: main
         fetch-depth: 0
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -117,14 +117,16 @@ jobs:
       run: gcloud app deploy ./cron.yaml --quiet --no-cache
     - name: Announce on Slack
       run: |
-        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
-        echo "[INFO] PREVIOUS_MERGE_COMMIT  ${PREVIOUS_MERGE_COMMIT}"
-        COMMITS_INCLUDED=`git log --no-merges --pretty="・ %s" $PREVIOUS_MERGE_COMMIT..`
+        CURRENT_TAG=${GITHUB_REF#refs/tags/}
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+        echo "[INFO] CURRENT_TAG:  ${CURRENT_TAG}"
+        echo "[INFO] PREVIOUS_TAG: ${PREVIOUS_TAG}"
+        COMMITS_INCLUDED=$(git log --no-merges --pretty="・ %s" ${PREVIOUS_TAG}..HEAD)
         echo "[INFO] COMMITS_INCLUDED ${COMMITS_INCLUDED}"
         curl -XPOST \
           -d "{
             \"channel\": \"tech\",
-            \"text\": \"あたらしいバージョンがリリースされました！ :tada:\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_MERGE_COMMIT}..main\"
+            \"text\": \"あたらしいバージョン ${CURRENT_TAG} がリリースされました！ :tada:\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${CURRENT_TAG}\"
           }" \
           -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
