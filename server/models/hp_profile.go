@@ -10,24 +10,39 @@ import (
 
 const KindHPProfile = "MemberHPProfile"
 
+// HPCustomField はユーザが自由に追加できる key-value フィールド。
+type HPCustomField struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Hidden bool   `json:"hidden"`
+}
+
 // MemberHPProfile はメンバーが自己編集するHP向けプロフィール情報。
 // Datastore のキーは Member と同じ Slack ID を使って 1:1 対応させる。
 type MemberHPProfile struct {
+	// 表示名（HP掲載用・イニシャルや偽名も可）
+	DisplayName     string `json:"display_name"`
+	DisplayNameKana string `json:"display_name_kana"`
+	FirstName       string `json:"first_name"`
+	FamilyName      string `json:"family_name"`
+
 	// テキスト情報
 	Height   int    `json:"height"`
 	Weight   int    `json:"weight"`
 	Position string `json:"position"`
 	Hometown string `json:"hometown"`
 	School   string `json:"school"`
-	Faculty  string `json:"faculty"`
 	Bio      string `json:"bio"`
+
+	// ユーザ定義カスタムフィールド
+	CustomFields []HPCustomField `json:"custom_fields" datastore:",noindex"`
 
 	// 写真（GCS 上のオブジェクト公開 URL）
 	PortraitFormalURL   string   `json:"portrait_formal_url"`
 	PortraitCasualURL   string   `json:"portrait_casual_url"`
 	AdditionalPhotoURLs []string `json:"additional_photo_urls" datastore:",noindex"`
 
-	// 公開制御
+	// 掲載制御
 	HideFromHP   bool     `json:"hide_from_hp"`
 	HiddenFields []string `json:"hidden_fields" datastore:",noindex"`
 }
@@ -48,6 +63,18 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	}
 	hidden := p.HiddenFieldSet()
 	out := p
+	if hidden["display_name"] {
+		out.DisplayName = ""
+	}
+	if hidden["display_name_kana"] {
+		out.DisplayNameKana = ""
+	}
+	if hidden["first_name"] {
+		out.FirstName = ""
+	}
+	if hidden["family_name"] {
+		out.FamilyName = ""
+	}
 	if hidden["height"] {
 		out.Height = 0
 	}
@@ -63,9 +90,6 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if hidden["school"] {
 		out.School = ""
 	}
-	if hidden["faculty"] {
-		out.Faculty = ""
-	}
 	if hidden["bio"] {
 		out.Bio = ""
 	}
@@ -75,10 +99,15 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if hidden["portrait_casual"] {
 		out.PortraitCasualURL = ""
 	}
-	if hidden["additional_photos"] {
-		out.AdditionalPhotoURLs = nil
+	// カスタムフィールド: hidden=true のものを除外
+	visible := out.CustomFields[:0]
+	for _, cf := range out.CustomFields {
+		if !cf.Hidden {
+			visible = append(visible, cf)
+		}
 	}
-	// 公開ビューでは制御フィールド自体も隠す
+	out.CustomFields = visible
+	// 掲載ビューでは制御フィールド自体も隠す
 	out.HideFromHP = false
 	out.HiddenFields = nil
 	return out
