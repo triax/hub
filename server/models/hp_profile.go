@@ -13,6 +13,12 @@ const KindHPProfile = "MemberHPProfile"
 // MemberHPProfile はメンバーが自己編集するHP向けプロフィール情報。
 // Datastore のキーは Member と同じ Slack ID を使って 1:1 対応させる。
 type MemberHPProfile struct {
+	// 表示名（HP掲載用・イニシャルや偽名も可）
+	DisplayName     string `json:"display_name"`
+	DisplayNameKana string `json:"display_name_kana"`
+	FirstName       string `json:"first_name"`
+	FamilyName      string `json:"family_name"`
+
 	// テキスト情報
 	Height   int    `json:"height"`
 	Weight   int    `json:"weight"`
@@ -27,7 +33,7 @@ type MemberHPProfile struct {
 	PortraitCasualURL   string   `json:"portrait_casual_url"`
 	AdditionalPhotoURLs []string `json:"additional_photo_urls" datastore:",noindex"`
 
-	// 公開制御
+	// 掲載制御
 	HideFromHP   bool     `json:"hide_from_hp"`
 	HiddenFields []string `json:"hidden_fields" datastore:",noindex"`
 }
@@ -48,6 +54,18 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	}
 	hidden := p.HiddenFieldSet()
 	out := p
+	if hidden["display_name"] {
+		out.DisplayName = ""
+	}
+	if hidden["display_name_kana"] {
+		out.DisplayNameKana = ""
+	}
+	if hidden["first_name"] {
+		out.FirstName = ""
+	}
+	if hidden["family_name"] {
+		out.FamilyName = ""
+	}
 	if hidden["height"] {
 		out.Height = 0
 	}
@@ -75,10 +93,7 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if hidden["portrait_casual"] {
 		out.PortraitCasualURL = ""
 	}
-	if hidden["additional_photos"] {
-		out.AdditionalPhotoURLs = nil
-	}
-	// 公開ビューでは制御フィールド自体も隠す
+	// 掲載ビューでは制御フィールド自体も隠す
 	out.HideFromHP = false
 	out.HiddenFields = nil
 	return out

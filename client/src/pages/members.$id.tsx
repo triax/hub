@@ -97,7 +97,31 @@ function AdminMenu({ member, repo }: { member: Member, repo: MemberRepo }) {
   </div>;
 }
 
+function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        checked ? "bg-blue-500" : "bg-gray-300"
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+}
+
 const FIELD_LABELS: Record<string, string> = {
+  display_name: "表示名（スタッフはイニシャルや偽名も可）",
+  display_name_kana: "表示名かな",
+  first_name: "FirstName",
+  family_name: "FamilyName",
   height: "身長 (cm)",
   weight: "体重 (kg)",
   position: "ポジション",
@@ -173,24 +197,47 @@ function HPProfileSection({ memberId }: { memberId: string }) {
     <div className="mt-2 border rounded-md p-4">
       <h2 className="text-xl font-semibold mb-3">HPプロフィール編集</h2>
 
-      <label className="flex items-center space-x-2 mb-4 text-red-600">
-        <input
-          type="checkbox"
-          checked={profile.hide_from_hp}
-          onChange={e => setProfile(p => ({ ...p, hide_from_hp: e.target.checked }))}
+      {/* 全体掲載トグル */}
+      <button
+        type="button"
+        onClick={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
+        className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-colors mb-5 text-left ${
+          profile.hide_from_hp
+            ? "border-gray-200 bg-gray-50"
+            : "border-blue-200 bg-blue-50"
+        }`}
+      >
+        <div>
+          <div className={`text-sm font-semibold ${profile.hide_from_hp ? "text-gray-500" : "text-blue-700"}`}>
+            {profile.hide_from_hp ? "非掲載" : "HP掲載中"}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {profile.hide_from_hp
+              ? "このプロフィールはHPに掲載されていません"
+              : "このプロフィールはHPに掲載されています"}
+          </div>
+        </div>
+        <Switch
+          checked={!profile.hide_from_hp}
+          onChange={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
         />
-        <span>HPに表示しない（すべての情報を非掲載にする）</span>
-      </label>
+      </button>
 
       <div className={profile.hide_from_hp ? "opacity-40 pointer-events-none" : ""}>
-        {/* テキストフィールド */}
-        <div className="grid grid-cols-1 gap-3 mb-4">
+        {/* テキストフィールド: ラベル+スイッチ行 → 入力行 */}
+        <div className="grid grid-cols-1 gap-4 mb-5">
           {(Object.keys(FIELD_LABELS) as HiddenFieldKey[]).map(key => (
-            <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
-              <label className="text-sm text-gray-600 sm:w-32 sm:shrink-0 mb-1 sm:mb-0">{FIELD_LABELS[key]}</label>
+            <div key={key}>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm text-gray-700 pr-2 leading-tight">{FIELD_LABELS[key]}</label>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs text-gray-500">{isHidden(key) ? "非掲載" : "掲載"}</span>
+                  <Switch checked={!isHidden(key)} onChange={() => toggleHiddenField(key)} />
+                </div>
+              </div>
               {key === "bio" ? (
                 <textarea
-                  className="flex-grow form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                  className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
                   rows={2}
                   value={(profile[key as keyof HPProfile] as string) || ""}
                   onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}
@@ -198,7 +245,7 @@ function HPProfileSection({ memberId }: { memberId: string }) {
               ) : (
                 <input
                   type={key === "height" || key === "weight" ? "number" : "text"}
-                  className="flex-grow form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                  className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
                   value={(profile[key as keyof HPProfile] as string | number) || ""}
                   onChange={e => setProfile(p => ({
                     ...p,
@@ -208,79 +255,72 @@ function HPProfileSection({ memberId }: { memberId: string }) {
                   }))}
                 />
               )}
-              <label className="flex items-center space-x-1 text-xs text-gray-500 sm:shrink-0 mt-1 sm:mt-0 py-2 sm:py-0">
-                <input
-                  type="checkbox"
-                  checked={isHidden(key)}
-                  onChange={() => toggleHiddenField(key)}
-                />
-                <span>非公開</span>
-              </label>
             </div>
           ))}
         </div>
 
         {/* 写真 */}
-        <div className="mb-4 space-y-4">
+        <div className="mb-5 space-y-3">
           <h3 className="text-sm font-medium text-gray-700">プロフィール写真</h3>
 
-          {/* Formal */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
-            <span className="text-sm text-gray-600 sm:w-32 sm:shrink-0 mb-1 sm:mb-0">公式バストアップ <span className="text-red-500">*</span></span>
-            <div className="flex items-center space-x-3">
+          {/* ポートレイト */}
+          <div className="border border-gray-200 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-700">ポートレイト <span className="text-red-500">*</span></span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500">{isHidden("portrait_formal") ? "非掲載" : "掲載"}</span>
+                <Switch checked={!isHidden("portrait_formal")} onChange={() => toggleHiddenField("portrait_formal")} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               {profile.portrait_formal_url && (
-                <img src={profile.portrait_formal_url} className="w-16 h-16 object-cover rounded" alt="formal" />
+                <img src={profile.portrait_formal_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="ポートレイト" />
               )}
               <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={formalRef} className="hidden"
                 onChange={e => e.target.files?.[0] && handlePhotoUpload("formal", e.target.files[0])} />
-              <button className="text-sm border rounded px-3 py-2" onClick={() => formalRef.current?.click()}>
-                {profile.portrait_formal_url ? "変更" : "アップロード"}
+              <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
+                onClick={() => formalRef.current?.click()}>
+                {profile.portrait_formal_url ? "写真を変更" : "写真をアップロード"}
               </button>
-              <label className="flex items-center space-x-1 text-xs text-gray-500 py-2">
-                <input type="checkbox" checked={isHidden("portrait_formal")} onChange={() => toggleHiddenField("portrait_formal")} />
-                <span>非公開</span>
-              </label>
             </div>
           </div>
 
-          {/* Casual */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
-            <span className="text-sm text-gray-600 sm:w-32 sm:shrink-0 mb-1 sm:mb-0">カジュアルバストアップ <span className="text-red-500">*</span></span>
-            <div className="flex items-center space-x-3">
+          {/* カジュアルポートレイト */}
+          <div className="border border-gray-200 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-700">カジュアルポートレイト <span className="text-red-500">*</span></span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500">{isHidden("portrait_casual") ? "非掲載" : "掲載"}</span>
+                <Switch checked={!isHidden("portrait_casual")} onChange={() => toggleHiddenField("portrait_casual")} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               {profile.portrait_casual_url && (
-                <img src={profile.portrait_casual_url} className="w-16 h-16 object-cover rounded" alt="casual" />
+                <img src={profile.portrait_casual_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="カジュアルポートレイト" />
               )}
               <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={casualRef} className="hidden"
                 onChange={e => e.target.files?.[0] && handlePhotoUpload("casual", e.target.files[0])} />
-              <button className="text-sm border rounded px-3 py-2" onClick={() => casualRef.current?.click()}>
-                {profile.portrait_casual_url ? "変更" : "アップロード"}
+              <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
+                onClick={() => casualRef.current?.click()}>
+                {profile.portrait_casual_url ? "写真を変更" : "写真をアップロード"}
               </button>
-              <label className="flex items-center space-x-1 text-xs text-gray-500 py-2">
-                <input type="checkbox" checked={isHidden("portrait_casual")} onChange={() => toggleHiddenField("portrait_casual")} />
-                <span>非公開</span>
-              </label>
             </div>
           </div>
 
-          {/* Additional */}
-          <div className="flex flex-col sm:flex-row sm:items-start sm:space-x-3">
-            <span className="text-sm text-gray-600 sm:w-32 sm:shrink-0 mb-1 sm:mb-0 sm:pt-1">追加写真</span>
-            <div className="flex-grow">
-              <div className="flex flex-wrap gap-2 mb-2">
-                {(profile.additional_photo_urls || []).map((url, i) => (
-                  <img key={i} src={url} className="w-16 h-16 object-cover rounded" alt={`追加${i + 1}`} />
-                ))}
-              </div>
-              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={additionalRef} className="hidden"
-                onChange={e => e.target.files?.[0] && handlePhotoUpload("additional", e.target.files[0])} />
-              <button className="text-sm border rounded px-3 py-2" onClick={() => additionalRef.current?.click()}>
-                追加
-              </button>
+          {/* 追加スナップ写真（掲載/非掲載スイッチなし） */}
+          <div className="border border-gray-200 rounded-xl p-3">
+            <div className="text-sm text-gray-700 mb-2">追加スナップ写真</div>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {(profile.additional_photo_urls || []).map((url, i) => (
+                <img key={i} src={url} className="w-14 h-14 object-cover rounded-lg" alt={`スナップ${i + 1}`} />
+              ))}
             </div>
-            <label className="flex items-center space-x-1 text-xs text-gray-500 sm:shrink-0 sm:pt-1 mt-2 sm:mt-0 py-2 sm:py-0">
-              <input type="checkbox" checked={isHidden("additional_photos")} onChange={() => toggleHiddenField("additional_photos")} />
-              <span>非公開</span>
-            </label>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={additionalRef} className="hidden"
+              onChange={e => e.target.files?.[0] && handlePhotoUpload("additional", e.target.files[0])} />
+            <button type="button" className="text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
+              onClick={() => additionalRef.current?.click()}>
+              写真を追加
+            </button>
           </div>
         </div>
 

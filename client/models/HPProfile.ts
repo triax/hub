@@ -1,4 +1,8 @@
 export default interface HPProfile {
+  display_name: string;
+  display_name_kana: string;
+  first_name: string;
+  family_name: string;
   height: number;
   weight: number;
   position: string;
@@ -14,6 +18,10 @@ export default interface HPProfile {
 }
 
 export const HIDDEN_FIELD_KEYS = [
+  "display_name",
+  "display_name_kana",
+  "first_name",
+  "family_name",
   "height",
   "weight",
   "position",
@@ -23,13 +31,16 @@ export const HIDDEN_FIELD_KEYS = [
   "bio",
   "portrait_formal",
   "portrait_casual",
-  "additional_photos",
 ] as const;
 
 export type HiddenFieldKey = (typeof HIDDEN_FIELD_KEYS)[number];
 
 export function emptyHPProfile(): HPProfile {
   return {
+    display_name: "",
+    display_name_kana: "",
+    first_name: "",
+    family_name: "",
     height: 0,
     weight: 0,
     position: "",
