@@ -195,20 +195,20 @@ function HPProfileSection({ memberId }: { memberId: string }) {
 
   return (
     <div className="mt-2 border rounded-md p-4">
-      {/* タイトル行: 右端に全体掲載スイッチ */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">HPプロフィール</h2>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium transition-colors duration-200 ${
-            profile.hide_from_hp ? "text-gray-400" : "text-blue-600"
-          }`}>
-            {profile.hide_from_hp ? "非掲載" : "掲載"}
-          </span>
-          <Switch
-            checked={!profile.hide_from_hp}
-            onChange={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
-          />
-        </div>
+      {/* タイトル行: 左端に全体掲載スイッチ、右にタイトル */}
+      <div className="flex items-center gap-3 mb-4">
+        <Switch
+          checked={!profile.hide_from_hp}
+          onChange={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
+        />
+        <h2 className={`text-xl font-semibold transition-colors duration-200 ${
+          profile.hide_from_hp ? "text-gray-400" : "text-gray-900"
+        }`}>HPプロフィール</h2>
+        <span className={`text-xs font-medium transition-colors duration-200 ${
+          profile.hide_from_hp ? "text-gray-400" : "text-blue-600"
+        }`}>
+          {profile.hide_from_hp ? "非掲載" : "掲載"}
+        </span>
       </div>
 
       {/* fold アニメーション: grid-rows トリックで自然なスライド+フェード */}
