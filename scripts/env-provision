@@ -104,8 +104,18 @@ _provision() {
 
   mkdir -p "$workdir" "$datadir"
 
-  # --- worktree 補完（node_modules・secrets・client/dest のシンボリックリンク）---
-  _setup_worktree_symlinks
+  # id に対応する worktree があれば、そのソースを使う（なければ main リポジトリ）
+  local source_root="${REPO_ROOT}"
+  local worktree_candidate="${REPO_ROOT}/.worktrees/${id}"
+  if [[ -d "$worktree_candidate" ]]; then
+    source_root="$worktree_candidate"
+    # worktree に必要なシンボリックリンクを補完する
+    [[ -e "${source_root}/node_modules" ]] || ln -s "${REPO_ROOT}/node_modules" "${source_root}/node_modules"
+    [[ -e "${source_root}/secrets.local.yaml" ]] || ln -s "${REPO_ROOT}/secrets.local.yaml" "${source_root}/secrets.local.yaml"
+    mkdir -p "${source_root}/client/dest"
+  else
+    _setup_worktree_symlinks
+  fi
 
   # --- Datastore Emulator 起動 ---
   gcloud beta emulators datastore start \
@@ -130,13 +140,22 @@ _provision() {
   # --- Seed: devdata/2024-1201-200205 をエミュレータへインポート ---
   local seed_meta="${REPO_ROOT}/devdata/2024-1201-200205/2024-1201-200205.overall_export_metadata"
   if [[ -f "$seed_meta" ]]; then
-    sleep 2  # REST API が応答可能になるまで少し待つ
-    curl -s -X POST \
+    # REST API（ヘルスチェックエンドポイント）が応答するまで待つ（最大 20 秒）
+    local api_retries=20
+    while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
+      api_retries=$((api_retries - 1))
+      [[ $api_retries -le 0 ]] && break
+      sleep 1
+    done
+    # インポート実行（同期完了を確認: "done":true になるまで待つ）
+    local import_result
+    import_result=$(curl -s -X POST \
       "http://localhost:${ds_port}/v1/projects/${PROJECT_ID}:import" \
       -H "Content-Type: application/json" \
-      -d "{\"input_url\":\"${seed_meta}\"}" \
-      >> "${workdir}/datastore.log" 2>&1 || true
-    sleep 1  # インポート完了を待つ
+      -d "{\"input_url\":\"${seed_meta}\"}" 2>/dev/null)
+    echo "seed import: ${import_result}" >> "${workdir}/datastore.log"
+    # インポートが非同期の場合でも少し待つ
+    sleep 2
   fi
 
   local vite_port=$((3100 + offset))   # Vite dev server ポート（HMR 有効）
@@ -151,7 +170,7 @@ _provision() {
   DATASTORE_DATASET="${PROJECT_ID}" \
   DATASTORE_EMULATOR_HOST_PATH="localhost:${ds_port}/datastore" \
   DATASTORE_HOST="http://localhost:${ds_port}" \
-    go run "${REPO_ROOT}/main.go" \
+    go run "${source_root}/main.go" \
     > "${workdir}/api.log" 2>&1 &
   echo $! > "${workdir}/api.pid"
 
@@ -171,7 +190,7 @@ _provision() {
   # VITE_PORT / VITE_API_PORT は vite.config.ts で参照される。
   VITE_PORT="${vite_port}" \
   VITE_API_PORT="${api_port}" \
-    npm --prefix "${REPO_ROOT}" run dev \
+    npm --prefix "${source_root}" run dev \
     > "${workdir}/vite.log" 2>&1 &
   echo $! > "${workdir}/vite.pid"
 
