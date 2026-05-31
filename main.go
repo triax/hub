@@ -69,6 +69,20 @@ func main() {
 		r.Post("/numbers/{num}/assign", api.AssignPlayerNumber)
 		r.Post("/numbers/{num}/deprive", api.DeprivePlayerNumber)
 		r.Get("/numbers", api.GetAllNumbers)
+		// TapeItem
+		r.Get("/tape-items", api.ListTapeItems)
+		r.Post("/tape-items", api.CreateTapeItem)
+		r.Post("/tape-items/{id}/update", api.UpdateTapeItem)
+		r.Post("/tape-items/{id}/delete", api.DeleteTapeItem)
+		// Taping
+		r.Get("/taping/menu", api.ListTapingMenuItems)
+		r.Post("/taping/menu", api.CreateTapingMenuItem)
+		r.Post("/taping/menu/{id}/update", api.UpdateTapingMenuItem)
+		r.Post("/taping/menu/{id}/delete", api.DeleteTapingMenuItem)
+		r.Get("/taping/requests", api.ListTapingRequests)
+		r.Post("/taping/requests", api.SubmitTapingRequest)
+		r.Get("/taping/requests/me", api.GetMyTapingRequest)
+		r.Get("/taping/events", api.ListTapingEvents)
 	})
 	r.Mount("/api/1", v1)
 
@@ -111,6 +125,10 @@ func main() {
 	r.With(page.Handle).Get("/equips/{id}/edit", controllers.EquipEdit)
 	r.With(page.Handle).Get("/uniforms", controllers.Uniforms)
 	r.With(page.Handle).Get("/redirect/conditioning-form", controllers.RedirectConditioningForm)
+	r.With(page.Handle).Get("/taping/request", controllers.TapingRequest)
+	r.With(page.Handle).Get("/taping/master", controllers.TapingMaster)
+	r.With(page.Handle).Get("/taping", controllers.TapingOverview)
+	r.With(page.Handle).Get("/events/{id}/taping", controllers.EventTaping)
 
 	// Cloud Tasks (GAE cronリクエストのみ許可)
 	cron := chi.NewRouter()

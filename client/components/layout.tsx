@@ -12,7 +12,7 @@ const HELP_PAGE_URL = import.meta.env.VITE_HELP_PAGE_URL || "https://sites.googl
 const navigation = [
   { label: 'Schedule', link: '/' },
   { label: 'Equips', link: '/equips' },
-  { label: 'Uniforms', link: '/uniforms' },
+  { label: 'Taping', link: '/taping' },
   { label: 'Team', link: '/members' },
 ];
 
