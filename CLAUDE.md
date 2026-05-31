@@ -54,6 +54,8 @@ npm run lint         # ESLint
 - `main` — production (auto-deploys to GAE on merge)
 - `develop` — staging (PRs from develop to main trigger dev deploy)
 - Feature branches → PR to `develop` or `main`
+- **New branches and worktrees must be based on `develop` (not `main`)**
+- **Worktrees must be created under `.claude/worktrees/`** (e.g. `git worktree add .claude/worktrees/<name> -b <branch> origin/develop`)
 
 ## Local Dev Setup
 
