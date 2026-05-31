@@ -115,23 +115,37 @@ _provision() {
     > "${workdir}/datastore.log" 2>&1 &
   echo $! > "${workdir}/datastore.pid"
 
-  # エミュレータの起動を待つ（最大 30 秒）
+  # エミュレータの起動を待つ（最大 30 秒、ポート open で判定）
   local retries=30
-  while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
+  while ! nc -z localhost "${ds_port}" 2>/dev/null; do
     retries=$((retries - 1))
     if [[ $retries -le 0 ]]; then
-      printf '{"ready":false,"id":"%s","diagnostics":["Datastore emulator timed out on port %s. See %s/datastore.log"]}\n' \
+      printf '{"ready":false,"id":"%s","diagnostics":[{"check":"datastore","status":"fail","detail":"timeout on port %s","remediation":"check %s/datastore.log"}]}\n' \
         "$id" "$ds_port" "$workdir"
       exit 1
     fi
     sleep 1
   done
 
+  # --- Seed: devdata/2024-1201-200205 をエミュレータへインポート ---
+  local seed_meta="${REPO_ROOT}/devdata/2024-1201-200205/2024-1201-200205.overall_export_metadata"
+  if [[ -f "$seed_meta" ]]; then
+    sleep 2  # REST API が応答可能になるまで少し待つ
+    curl -s -X POST \
+      "http://localhost:${ds_port}/v1/projects/${PROJECT_ID}:import" \
+      -H "Content-Type: application/json" \
+      -d "{\"input_url\":\"${seed_meta}\"}" \
+      >> "${workdir}/datastore.log" 2>&1 || true
+    sleep 1  # インポート完了を待つ
+  fi
+
   local vite_port=$((3100 + offset))   # Vite dev server ポート（HMR 有効）
 
   # --- Go API サーバ起動 ---
   # secrets.local.yaml は Go の init() 内で appyaml.Load() により自動ロードされる。
+  # GOOGLE_CLOUD_PROJECT は models/*.go の datastore.NewClient が参照する。
   PORT="${api_port}" \
+  GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
   DATASTORE_EMULATOR_HOST="localhost:${ds_port}" \
   DATASTORE_PROJECT_ID="${PROJECT_ID}" \
   DATASTORE_DATASET="${PROJECT_ID}" \
@@ -173,8 +187,14 @@ _provision() {
     sleep 1
   done
 
-  printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"diagnostics":[]}\n' \
-    "$id" "$vite_port" "$api_port" "$ds_port"
+  # local-user.json の sub（Slack ID）を取得してメンバーページの URL を構築
+  local local_user_id
+  local_user_id=$(python3 -c \
+    "import json; d=json.load(open('${REPO_ROOT}/server/filters/local-user.json')); print(d['openid']['sub'])" \
+    2>/dev/null || echo "unknown")
+
+  printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"accounts":{"dev_user":{"email":"local-dev-auto","secret_ref":"server/filters/local-user.json","verified":true}},"fixtures":{"my-member-page":{"url":"http://localhost:%s/members/%s","notes":"local-user.json のメンバー詳細ページ (isOwnPage=true)"}},"diagnostics":[],"notes":"LocalDev mode: 認証は server/filters/local-user.json から自動注入"}\n' \
+    "$id" "$vite_port" "$api_port" "$ds_port" "$vite_port" "$local_user_id"
 }
 
 # --------------------------------------------------------------- teardown ---
