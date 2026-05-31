@@ -227,26 +227,32 @@ function HPProfileSection({ memberId }: { memberId: string }) {
                     <Switch checked={!isHidden(key)} onChange={() => toggleHiddenField(key)} />
                   </div>
                 </div>
-                {key === "bio" ? (
-                  <textarea
-                    className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
-                    rows={2}
-                    value={(profile[key as keyof HPProfile] as string) || ""}
-                    onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}
-                  />
-                ) : (
-                  <input
-                    type={key === "height" || key === "weight" ? "number" : "text"}
-                    className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
-                    value={(profile[key as keyof HPProfile] as string | number) || ""}
-                    onChange={e => setProfile(p => ({
-                      ...p,
-                      [key]: key === "height" || key === "weight"
-                        ? parseInt(e.target.value) || 0
-                        : e.target.value,
-                    }))}
-                  />
-                )}
+                <div className={`grid transition-all duration-200 ease-in-out ${
+                  isHidden(key) ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                }`}>
+                  <div className="overflow-hidden">
+                    {key === "bio" ? (
+                      <textarea
+                        className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                        rows={2}
+                        value={(profile[key as keyof HPProfile] as string) || ""}
+                        onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}
+                      />
+                    ) : (
+                      <input
+                        type={key === "height" || key === "weight" ? "number" : "text"}
+                        className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                        value={(profile[key as keyof HPProfile] as string | number) || ""}
+                        onChange={e => setProfile(p => ({
+                          ...p,
+                          [key]: key === "height" || key === "weight"
+                            ? parseInt(e.target.value) || 0
+                            : e.target.value,
+                        }))}
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -257,45 +263,57 @@ function HPProfileSection({ memberId }: { memberId: string }) {
 
             {/* ポートレイト */}
             <div className="border border-gray-200 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700">ポートレイト <span className="text-red-500">*</span></span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">{isHidden("portrait_formal") ? "非掲載" : "掲載"}</span>
                   <Switch checked={!isHidden("portrait_formal")} onChange={() => toggleHiddenField("portrait_formal")} />
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {profile.portrait_formal_url && (
-                  <img src={profile.portrait_formal_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="ポートレイト" />
-                )}
-                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={formalRef} className="hidden"
-                  onChange={e => e.target.files?.[0] && handlePhotoUpload("formal", e.target.files[0])} />
-                <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
-                  onClick={() => formalRef.current?.click()}>
-                  {profile.portrait_formal_url ? "写真を変更" : "写真をアップロード"}
-                </button>
+              <div className={`grid transition-all duration-200 ease-in-out ${
+                isHidden("portrait_formal") ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+              }`}>
+                <div className="overflow-hidden">
+                  <div className="flex items-center gap-3 pt-1">
+                    {profile.portrait_formal_url && (
+                      <img src={profile.portrait_formal_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="ポートレイト" />
+                    )}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={formalRef} className="hidden"
+                      onChange={e => e.target.files?.[0] && handlePhotoUpload("formal", e.target.files[0])} />
+                    <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
+                      onClick={() => formalRef.current?.click()}>
+                      {profile.portrait_formal_url ? "写真を変更" : "写真をアップロード"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* カジュアルポートレイト */}
             <div className="border border-gray-200 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700">カジュアルポートレイト <span className="text-red-500">*</span></span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">{isHidden("portrait_casual") ? "非掲載" : "掲載"}</span>
                   <Switch checked={!isHidden("portrait_casual")} onChange={() => toggleHiddenField("portrait_casual")} />
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {profile.portrait_casual_url && (
-                  <img src={profile.portrait_casual_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="カジュアルポートレイト" />
-                )}
-                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={casualRef} className="hidden"
-                  onChange={e => e.target.files?.[0] && handlePhotoUpload("casual", e.target.files[0])} />
-                <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
-                  onClick={() => casualRef.current?.click()}>
-                  {profile.portrait_casual_url ? "写真を変更" : "写真をアップロード"}
-                </button>
+              <div className={`grid transition-all duration-200 ease-in-out ${
+                isHidden("portrait_casual") ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+              }`}>
+                <div className="overflow-hidden">
+                  <div className="flex items-center gap-3 pt-2">
+                    {profile.portrait_casual_url && (
+                      <img src={profile.portrait_casual_url} className="w-14 h-14 object-cover rounded-lg shrink-0" alt="カジュアルポートレイト" />
+                    )}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ref={casualRef} className="hidden"
+                      onChange={e => e.target.files?.[0] && handlePhotoUpload("casual", e.target.files[0])} />
+                    <button type="button" className="flex-grow text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-600 bg-white"
+                      onClick={() => casualRef.current?.click()}>
+                      {profile.portrait_casual_url ? "写真を変更" : "写真をアップロード"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
