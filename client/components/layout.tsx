@@ -198,7 +198,7 @@ export default function Layout({ children }: LayoutProps) {
                 ))}
               </div>
               <div className="pt-4 pb-3 border-t border-gray-700">
-                <div className="flex items-center px-5">
+                <a href={`/members/${myself.slack.id}`} className="flex items-center px-5 hover:bg-gray-700 rounded-md py-2 transition-colors">
                   <div className="flex-shrink-0">
                     {myIcon ? <img
                       className="h-10 w-10 rounded-full"
@@ -208,17 +208,8 @@ export default function Layout({ children }: LayoutProps) {
                   </div>
                   <div className="ml-3">
                     <div className="text-base font-medium leading-none text-white">{myself.slack.profile.real_name}</div>
-                    <div className="text-sm font-medium leading-none text-gray-400">tom@example.com</div>
                   </div>
-
-                  <button
-                    type="button"
-                    className="ml-auto bg-gray-800 flex-shrink-0 p-1 rounded-full text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
-                  >
-                    <span className="sr-only">View Notifications</span>
-                    <BellIcon className="h-6 w-6" aria-hidden="true" />
-                  </button>
-                </div>
+                </a>
                 <div className="mt-3 px-2 space-y-1">
                   <form
                     method="POST" action="/logout"
