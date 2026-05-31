@@ -10,6 +10,13 @@ import (
 
 const KindHPProfile = "MemberHPProfile"
 
+// HPCustomField はユーザが自由に追加できる key-value フィールド。
+type HPCustomField struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Hidden bool   `json:"hidden"`
+}
+
 // MemberHPProfile はメンバーが自己編集するHP向けプロフィール情報。
 // Datastore のキーは Member と同じ Slack ID を使って 1:1 対応させる。
 type MemberHPProfile struct {
@@ -25,8 +32,10 @@ type MemberHPProfile struct {
 	Position string `json:"position"`
 	Hometown string `json:"hometown"`
 	School   string `json:"school"`
-	Faculty  string `json:"faculty"`
 	Bio      string `json:"bio"`
+
+	// ユーザ定義カスタムフィールド
+	CustomFields []HPCustomField `json:"custom_fields" datastore:",noindex"`
 
 	// 写真（GCS 上のオブジェクト公開 URL）
 	PortraitFormalURL   string   `json:"portrait_formal_url"`
@@ -81,9 +90,6 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if hidden["school"] {
 		out.School = ""
 	}
-	if hidden["faculty"] {
-		out.Faculty = ""
-	}
 	if hidden["bio"] {
 		out.Bio = ""
 	}
@@ -93,6 +99,14 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if hidden["portrait_casual"] {
 		out.PortraitCasualURL = ""
 	}
+	// カスタムフィールド: hidden=true のものを除外
+	visible := out.CustomFields[:0]
+	for _, cf := range out.CustomFields {
+		if !cf.Hidden {
+			visible = append(visible, cf)
+		}
+	}
+	out.CustomFields = visible
 	// 掲載ビューでは制御フィールド自体も隠す
 	out.HideFromHP = false
 	out.HiddenFields = nil

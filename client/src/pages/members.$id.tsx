@@ -5,7 +5,7 @@ import StatusBadges from "../../components/statusbadges";
 import MemberRepo from "../../repository/MemberRepo";
 import HPProfileRepo, { validatePhotoFile } from "../../repository/HPProfileRepo";
 import Member from "../../models/Member";
-import HPProfile, { emptyHPProfile, HIDDEN_FIELD_KEYS, HiddenFieldKey } from "../../models/HPProfile";
+import HPProfile, { CustomField, emptyHPProfile, HIDDEN_FIELD_KEYS, HiddenFieldKey } from "../../models/HPProfile";
 import { useAppContext } from "../context";
 
 export default function MemberView() {
@@ -127,7 +127,6 @@ const FIELD_LABELS: Record<string, string> = {
   position: "ポジション",
   hometown: "出身地",
   school: "出身校",
-  faculty: "学部・学科",
   bio: "ひとこと",
 };
 
@@ -255,6 +254,81 @@ function HPProfileSection({ memberId }: { memberId: string }) {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* カスタムフィールド */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-700">カスタム項目</h3>
+              <button
+                type="button"
+                onClick={() => setProfile(p => ({
+                  ...p,
+                  custom_fields: [...(p.custom_fields || []), { key: "", value: "", hidden: false }],
+                }))}
+                className="text-xs text-blue-600 border border-blue-300 rounded-lg px-2 py-1 bg-white hover:bg-blue-50 transition-colors"
+              >
+                ＋ 項目を追加
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(profile.custom_fields || []).map((cf: CustomField, i: number) => (
+                <div key={i} className="border border-gray-200 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <input
+                      type="text"
+                      placeholder="項目名"
+                      className="flex-1 min-w-0 form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                      value={cf.key}
+                      onChange={e => setProfile(p => {
+                        const fields = [...(p.custom_fields || [])];
+                        fields[i] = { ...fields[i], key: e.target.value };
+                        return { ...p, custom_fields: fields };
+                      })}
+                    />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-xs text-gray-500">{cf.hidden ? "非掲載" : "掲載"}</span>
+                      <Switch
+                        checked={!cf.hidden}
+                        onChange={() => setProfile(p => {
+                          const fields = [...(p.custom_fields || [])];
+                          fields[i] = { ...fields[i], hidden: !fields[i].hidden };
+                          return { ...p, custom_fields: fields };
+                        })}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProfile(p => ({
+                        ...p,
+                        custom_fields: (p.custom_fields || []).filter((_, j) => j !== i),
+                      }))}
+                      className="text-gray-400 hover:text-red-500 transition-colors shrink-0 text-lg leading-none"
+                      aria-label="削除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className={`grid transition-all duration-200 ease-in-out ${
+                    cf.hidden ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                  }`}>
+                    <div className="overflow-hidden">
+                      <input
+                        type="text"
+                        placeholder="値"
+                        className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
+                        value={cf.value}
+                        onChange={e => setProfile(p => {
+                          const fields = [...(p.custom_fields || [])];
+                          fields[i] = { ...fields[i], value: e.target.value };
+                          return { ...p, custom_fields: fields };
+                        })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* 写真 */}

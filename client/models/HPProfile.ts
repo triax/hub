@@ -1,3 +1,9 @@
+export interface CustomField {
+  key: string;
+  value: string;
+  hidden: boolean;
+}
+
 export default interface HPProfile {
   display_name: string;
   display_name_kana: string;
@@ -8,8 +14,8 @@ export default interface HPProfile {
   position: string;
   hometown: string;
   school: string;
-  faculty: string;
   bio: string;
+  custom_fields: CustomField[];
   portrait_formal_url: string;
   portrait_casual_url: string;
   additional_photo_urls: string[];
@@ -27,7 +33,6 @@ export const HIDDEN_FIELD_KEYS = [
   "position",
   "hometown",
   "school",
-  "faculty",
   "bio",
   "portrait_formal",
   "portrait_casual",
@@ -46,8 +51,8 @@ export function emptyHPProfile(): HPProfile {
     position: "",
     hometown: "",
     school: "",
-    faculty: "",
     bio: "",
+    custom_fields: [],
     portrait_formal_url: "",
     portrait_casual_url: "",
     additional_photo_urls: [],
