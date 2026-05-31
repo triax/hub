@@ -198,15 +198,9 @@ function HPProfileSection({ memberId }: { memberId: string }) {
       <h2 className="text-xl font-semibold mb-3">HPプロフィール編集</h2>
 
       {/* 全体掲載トグル */}
-      <button
-        type="button"
-        onClick={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
-        className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-colors mb-5 text-left ${
-          profile.hide_from_hp
-            ? "border-gray-200 bg-gray-50"
-            : "border-blue-200 bg-blue-50"
-        }`}
-      >
+      <div className={`flex items-center justify-between p-3 rounded-xl border-2 transition-colors mb-5 ${
+        profile.hide_from_hp ? "border-gray-200 bg-gray-50" : "border-blue-200 bg-blue-50"
+      }`}>
         <div>
           <div className={`text-sm font-semibold ${profile.hide_from_hp ? "text-gray-500" : "text-blue-700"}`}>
             {profile.hide_from_hp ? "非掲載" : "HP掲載中"}
@@ -221,7 +215,7 @@ function HPProfileSection({ memberId }: { memberId: string }) {
           checked={!profile.hide_from_hp}
           onChange={() => setProfile(p => ({ ...p, hide_from_hp: !p.hide_from_hp }))}
         />
-      </button>
+      </div>
 
       <div className={profile.hide_from_hp ? "opacity-40 pointer-events-none" : ""}>
         {/* テキストフィールド: ラベル+スイッチ行 → 入力行 */}
