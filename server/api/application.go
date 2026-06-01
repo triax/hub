@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -11,9 +13,24 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
 )
+
+const slackChannelApplications = "C06SZGR7L1W" // #入部退部者処理
+
+// isAllowedOrigin はブラウザ経由の正規リクエストかどうかを Origin ヘッダーで判定する。
+// 非認証エンドポイントへの Slack 通知増幅を防ぐためのガード。
+func isAllowedOrigin(origin string) bool {
+	switch origin {
+	case "https://hub.triax.football",
+		"http://localhost:3000",
+		"http://localhost:8080":
+		return true
+	}
+	return false
+}
 
 func isApplicationAdmin(ctx context.Context, slackID string) (bool, error) {
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
@@ -73,6 +90,16 @@ func CreateApplication(w http.ResponseWriter, req *http.Request) {
 	if err := models.PutApplication(req.Context(), id, app); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
+	}
+
+	if input.Type == "onboarding" && isAllowedOrigin(req.Header.Get("Origin")) {
+		go func() {
+			api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+			msg := fmt.Sprintf("<!channel> 新しい入部申請が届きました。\nhttps://hub.triax.football/applications")
+			if _, _, err := api.PostMessage(slackChannelApplications, slack.MsgOptionText(msg, false)); err != nil {
+				log.Printf("[ERROR] 9010 Slack notification for new application: %v", err)
+			}
+		}()
 	}
 
 	type response struct {
