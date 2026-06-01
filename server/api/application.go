@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/otiai10/marmoset"
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/filters"
 	"github.com/triax/hub/server/models"
 )
@@ -73,6 +76,16 @@ func CreateApplication(w http.ResponseWriter, req *http.Request) {
 	if err := models.PutApplication(req.Context(), id, app); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
+	}
+
+	if input.Type == "onboarding" {
+		go func() {
+			api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
+			msg := fmt.Sprintf("<!channel> 新しい入部申請が届きました。\nhttps://hub.triax.football/applications")
+			if _, _, err := api.PostMessage("C06SZGR7L1W", slack.MsgOptionText(msg, false)); err != nil {
+				log.Printf("[ERROR] 9010 Slack notification for new application: %v", err)
+			}
+		}()
 	}
 
 	type response struct {
