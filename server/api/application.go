@@ -20,6 +20,18 @@ import (
 
 const slackChannelApplications = "C06SZGR7L1W" // #入部退部者処理
 
+// isAllowedOrigin はブラウザ経由の正規リクエストかどうかを Origin ヘッダーで判定する。
+// 非認証エンドポイントへの Slack 通知増幅を防ぐためのガード。
+func isAllowedOrigin(origin string) bool {
+	switch origin {
+	case "https://hub.triax.football",
+		"http://localhost:3000",
+		"http://localhost:8080":
+		return true
+	}
+	return false
+}
+
 func isApplicationAdmin(ctx context.Context, slackID string) (bool, error) {
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
@@ -80,7 +92,7 @@ func CreateApplication(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if input.Type == "onboarding" {
+	if input.Type == "onboarding" && isAllowedOrigin(req.Header.Get("Origin")) {
 		go func() {
 			api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 			msg := fmt.Sprintf("<!channel> 新しい入部申請が届きました。\nhttps://hub.triax.football/applications")
