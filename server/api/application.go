@@ -18,6 +18,8 @@ import (
 	"github.com/triax/hub/server/models"
 )
 
+const slackChannelApplications = "C06SZGR7L1W" // #入部退部者処理
+
 func isApplicationAdmin(ctx context.Context, slackID string) (bool, error) {
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
@@ -82,7 +84,7 @@ func CreateApplication(w http.ResponseWriter, req *http.Request) {
 		go func() {
 			api := slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN"))
 			msg := fmt.Sprintf("<!channel> 新しい入部申請が届きました。\nhttps://hub.triax.football/applications")
-			if _, _, err := api.PostMessage("C06SZGR7L1W", slack.MsgOptionText(msg, false)); err != nil {
+			if _, _, err := api.PostMessage(slackChannelApplications, slack.MsgOptionText(msg, false)); err != nil {
 				log.Printf("[ERROR] 9010 Slack notification for new application: %v", err)
 			}
 		}()
