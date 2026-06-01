@@ -1,11 +1,8 @@
-name: GAE Deploy
+name: GAE Deploy PROD
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    types: [opened, reopened, synchronize]
-    branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -43,50 +40,14 @@ jobs:
     - name: Export Test
       run: npm run export
 
-  gae-deploy-dev:
-    name: GAE Deploy DEV
-    if: github.event.pull_request.head.ref == 'develop'
-    needs: [go-test, js-test]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v4
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: 1.25
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.x
-    - name: Install dependencies
-      run: npm install
-    - name: Export assets
-      run: npm run export
-    - name: Auth GCP
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-    - name: Recover App Secrets DEV
-      run: 'echo "$APP_SECRETS_DEV_YAML" > secrets.dev.yaml'
-      shell: bash
-      env:
-        APP_SECRETS_DEV_YAML: ${{ secrets.APP_SECRETS_DEV_YAML }}
-    - name: Deploy DEV
-      run: gcloud app deploy ./app.dev.yaml --quiet --no-cache
-
-  gae-deploy-prod:
+  deploy:
     name: GAE Deploy PROD
-    if: github.ref == 'refs/heads/main'
     needs: [go-test, js-test]
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v4
       with:
-        ref: main
         fetch-depth: 0
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -115,17 +76,24 @@ jobs:
       run: gcloud app deploy ./app.yaml --quiet --no-cache
     - name: Deploy CRON
       run: gcloud app deploy ./cron.yaml --quiet --no-cache
+    - name: Deploy Index
+      run: gcloud datastore indexes create index.yaml --quiet
     - name: Announce on Slack
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}
       run: |
-        PREVIOUS_MERGE_COMMIT=`git log --merges --max-count=1 --pretty="%H" --skip=1`
+        PREVIOUS_MERGE_COMMIT=$(git log --merges --max-count=1 --pretty="%H" --skip=1)
         echo "[INFO] PREVIOUS_MERGE_COMMIT  ${PREVIOUS_MERGE_COMMIT}"
-        COMMITS_INCLUDED=`git log --no-merges --pretty="・ %s" $PREVIOUS_MERGE_COMMIT..`
+        COMMITS_INCLUDED=$(git log --no-merges --pretty="・ %s" "${PREVIOUS_MERGE_COMMIT}..")
         echo "[INFO] COMMITS_INCLUDED ${COMMITS_INCLUDED}"
+        PAYLOAD=$(jq -n \
+          --arg channel "tech" \
+          --arg commits "$COMMITS_INCLUDED" \
+          --arg repo "$GITHUB_REPOSITORY" \
+          --arg prev "$PREVIOUS_MERGE_COMMIT" \
+          '{channel: $channel, text: ("あたらしいバージョンがリリースされました！ :tada:\n" + $commits + "\ngithub.com/" + $repo + "/compare/" + $prev + "..main")}')
         curl -XPOST \
-          -d "{
-            \"channel\": \"tech\",
-            \"text\": \"あたらしいバージョンがリリースされました！ :tada:\n${COMMITS_INCLUDED}\ngithub.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_MERGE_COMMIT}..main\"
-          }" \
-          -H "Authorization: Bearer ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}" \
+          -d "$PAYLOAD" \
+          -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
           -H "Content-Type: application/json" \
           https://slack.com/api/chat.postMessage

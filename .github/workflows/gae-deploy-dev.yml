@@ -1,0 +1,76 @@
+name: GAE Deploy DEV
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.25
+    - name: Get dependencies
+      run: go get -v -t -d ./...
+    - name: Test
+      run: go test -v -cover -race
+
+  js-test:
+    name: JavaScript Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+    - name: Install dependencies
+      run: npm install
+    - name: Lint
+      run: npm run lint
+    - name: Test
+      run: npm test
+    - name: Export Test
+      run: npm run export
+
+  deploy:
+    name: GAE Deploy DEV
+    needs: [go-test, js-test]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.25
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+    - name: Install dependencies
+      run: npm install
+    - name: Export assets
+      run: npm run export
+    - name: Auth GCP
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+    - name: Recover App Secrets DEV
+      run: 'echo "$APP_SECRETS_DEV_YAML" > secrets.dev.yaml'
+      shell: bash
+      env:
+        APP_SECRETS_DEV_YAML: ${{ secrets.APP_SECRETS_DEV_YAML }}
+    - name: Deploy DEV
+      run: gcloud app deploy ./app.dev.yaml --quiet --no-cache
+    - name: Deploy Index
+      run: gcloud datastore indexes create index.yaml --quiet
