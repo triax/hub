@@ -8,6 +8,19 @@ import { useAppContext } from "../context";
 
 type Filter = "pending" | "all";
 
+const FIELD_LABELS: Record<string, string> = {
+  family_name: "姓", given_name: "名",
+  family_name_kana: "姓（カナ）", given_name_kana: "名（カナ）",
+  family_name_alphabet: "姓（アルファベット）", given_name_alphabet: "名（アルファベット）",
+  date_of_birth: "生年月日", phone: "電話番号",
+  emergency_phone: "緊急連絡先電話番号", emergency_name: "緊急連絡先氏名",
+  emergency_relation: "緊急連絡先続柄", university: "出身大学",
+  workplace: "勤務先", previous_team: "前所属チーム",
+  gmail: "Gmail", extra_email: "追加メール",
+  hometown: "出身地", role: "区分",
+  position: "希望ポジション", height: "身長（cm）", weight: "体重（kg）",
+};
+
 export default function ApplicationsPage() {
   const { myself } = useAppContext();
   const repo = useMemo(() => new ApplicationRepo(), []);
@@ -219,7 +232,7 @@ function ApplicationRow({
         )}
       </div>
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
         {app.steps.map(step => (
           <label key={step.key} className="flex items-center gap-3 text-sm text-gray-800">
             <input
@@ -233,6 +246,22 @@ function ApplicationRow({
           </label>
         ))}
       </div>
+
+      {app.fields && Object.values(app.fields).some(v => v) && (
+        <details className="mt-3">
+          <summary className="cursor-pointer select-none text-xs text-gray-400 hover:text-gray-600">
+            個人情報を見る
+          </summary>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+            {Object.entries(app.fields).filter(([, v]) => v).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-gray-400">{FIELD_LABELS[k] ?? k}</dt>
+                <dd className="text-gray-800">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
     </article>
   );
 }
