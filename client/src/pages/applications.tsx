@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { ClipboardIcon, CheckIcon } from "@heroicons/react/outline";
 import Layout from "../../components/layout";
 import Application, { ApplicationStep } from "../../models/Application";
 import ApplicationRepo from "../../repository/ApplicationRepo";
@@ -167,6 +168,13 @@ function ApplicationRow({
 }) {
   const role = app.fields?.role || "未設定";
   const allStepsDone = app.steps.length > 0 && app.steps.every(step => step.done);
+  const [copied, setCopied] = useState(false);
+
+  const copyEmail = () => {
+    navigator.clipboard.writeText(app.email);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -183,7 +191,20 @@ function ApplicationRow({
               </span>
             )}
           </div>
-          <div className="mt-1 break-all text-sm text-gray-500">{app.email}</div>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="break-all text-sm text-gray-500">{app.email}</span>
+            <button
+              type="button"
+              onClick={copyEmail}
+              className="shrink-0 rounded p-0.5 text-gray-400 transition-colors hover:text-gray-600"
+              aria-label="メールアドレスをコピー"
+            >
+              {copied
+                ? <CheckIcon className="h-4 w-4 text-green-500" />
+                : <ClipboardIcon className="h-4 w-4" />
+              }
+            </button>
+          </div>
           <div className="mt-1 text-xs text-gray-400">{formatDate(app.created_at)}</div>
         </div>
         {allStepsDone && !app.done && (
