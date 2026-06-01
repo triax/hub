@@ -18,6 +18,8 @@ import TapingRequestPage from './pages/taping.request';
 import TapingMasterPage from './pages/taping.master';
 import TapingOverviewPage from './pages/taping';
 import EventTapingPage from './pages/events.$id.taping';
+import OnboardingForm from './pages/applications.onboarding';
+import ApplicationsPage from './pages/applications';
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -129,6 +131,18 @@ const eventTapingRoute = createRoute({
   component: EventTapingPage,
 });
 
+const applicationsOnboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/applications/onboarding',
+  component: OnboardingForm,
+});
+
+const applicationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/applications',
+  component: ApplicationsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -147,6 +161,8 @@ const routeTree = rootRoute.addChildren([
   tapingMasterRoute,
   tapingOverviewRoute,
   eventTapingRoute,
+  applicationsOnboardingRoute,
+  applicationsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

@@ -25,7 +25,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const path = router.state.location.pathname;
-    if (path === "/login" || path === "/errors") return;
+    if (path === "/login" || path === "/errors" || path === "/applications/onboarding") return;
     repo.myself().then(setMyself);
   }, [router.state.location.pathname, repo]);
 
