@@ -1,5 +1,11 @@
 indexes:
 
+- kind: Application
+  properties:
+  - name: Type
+  - name: CreatedAt
+    direction: desc
+
 - kind: Custody
   ancestor: yes
   properties:
