@@ -25,6 +25,7 @@ coverage.*.txt
 
 # Agents
 .claude/settings.local.json
+.claude/worktrees
 .zygarde
 .playwright-mcp
 .playwright-cli/
