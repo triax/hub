@@ -9,8 +9,18 @@ ID="${2:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ID="${PROJECT_ID:-triax-football}"
 
+# 投入する fixture scenario（カンマ区切り）。mission が SEED_SCENARIOS で上書きできる。
+SEED_SCENARIOS="${SEED_SCENARIOS:-default}"
+
+# --import-devdata 指定時のみ devdata（prod ダンプ）を import する。
+# デフォルトは fixtures/default を cmd/seed で投入する（概念分離）。
+IMPORT_DEVDATA=false
+for _arg in "$@"; do
+  [[ "$_arg" == "--import-devdata" ]] && IMPORT_DEVDATA=true
+done
+
 if [[ -z "$VERB" ]]; then
-  echo "Usage: $0 <verb> [<id>]" >&2
+  echo "Usage: $0 <verb> [<id>] [--import-devdata]" >&2
   echo "  verbs: provision, doctor, manifest, teardown, status" >&2
   exit 1
 fi
@@ -90,7 +100,7 @@ _setup_worktree_symlinks() {
 # per_env に列挙されたリソースは provision が管理するため、エージェントは
 # これらを理由に検証を SKIP しない。
 _manifest() {
-  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_import","lifecycle":"provision (初回のみ、冪等)","detail":"devdata/2024-1201-200205 からの seed データ投入"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
+  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_fixtures","lifecycle":"provision (毎回、冪等)","detail":"fixtures/default を cmd/seed で投入（key-based upsert）。devdata import は --import-devdata 明示時のみ"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
 }
 
 # ------------------------------------------------------------------ doctor ---
@@ -189,28 +199,45 @@ _provision() {
     sleep 1
   done
 
-  # --- Seed: devdata/2024-1201-200205 をエミュレータへインポート ---
-  # datadir が空（初回 provision または teardown 後）のときのみ実行する。
-  # emulator 起動後は datadir にファイルが書き込まれるため、seed_needed は起動前に確定済み。
-  local seed_meta="${REPO_ROOT}/devdata/2024-1201-200205/2024-1201-200205.overall_export_metadata"
-  if [[ "$seed_needed" == true ]] && [[ -f "$seed_meta" ]]; then
-    # REST API（ヘルスチェックエンドポイント）が応答するまで待つ（最大 20 秒）
-    local api_retries=20
-    while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
-      api_retries=$((api_retries - 1))
-      [[ $api_retries -le 0 ]] && break
-      sleep 1
-    done
-    # インポート実行（同期完了を確認: "done":true になるまで待つ）
-    local import_result
-    import_result=$(curl -s -X POST \
-      "http://localhost:${ds_port}/v1/projects/${PROJECT_ID}:import" \
-      -H "Content-Type: application/json" \
-      -d "{\"input_url\":\"${seed_meta}\"}" 2>/dev/null)
-    echo "seed import: ${import_result}" >> "${workdir}/datastore.log"
-    # インポートが非同期の場合でも少し待つ
-    sleep 2
+  # --- Datastore REST API（ヘルスチェック）が応答するまで待つ（最大 20 秒）---
+  local ds_api_retries=20
+  while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
+    ds_api_retries=$((ds_api_retries - 1))
+    [[ $ds_api_retries -le 0 ]] && break
+    sleep 1
+  done
+
+  # --- Seed (devdata): prod ダンプの import は --import-devdata 明示時のみ ---
+  # devdata は本番データ参照用ツールであり、provision のデフォルト責務ではない（概念分離）。
+  # REST :import は冪等でないため、datadir が空（初回/teardown 後）のときのみ実行する。
+  if [[ "$IMPORT_DEVDATA" == true ]]; then
+    local seed_meta="${REPO_ROOT}/devdata/2024-1201-200205/2024-1201-200205.overall_export_metadata"
+    if [[ "$seed_needed" == true ]] && [[ -f "$seed_meta" ]]; then
+      local import_result
+      import_result=$(curl -s -X POST \
+        "http://localhost:${ds_port}/v1/projects/${PROJECT_ID}:import" \
+        -H "Content-Type: application/json" \
+        -d "{\"input_url\":\"${seed_meta}\"}" 2>/dev/null)
+      echo "devdata import: ${import_result}" >> "${workdir}/datastore.log"
+      sleep 2
+    fi
   fi
+
+  # --- Seed (fixtures): 設計された scenario を cmd/seed で投入（デフォルト）---
+  # key-based upsert で冪等なので毎回実行する。source_root（worktree）から実行することで
+  # code+fixture を同一 revision に揃える。exit 0 を確認できなければ provision を失敗させる。
+  local seed_log
+  if ! seed_log=$(cd "$source_root" && \
+    DATASTORE_EMULATOR_HOST="localhost:${ds_port}" \
+    DATASTORE_PROJECT_ID="${PROJECT_ID}" \
+    GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
+    go run ./cmd/seed --scenarios "${SEED_SCENARIOS}" 2>&1); then
+    echo "fixtures seed FAILED: ${seed_log}" >> "${workdir}/datastore.log"
+    printf '{"ready":false,"id":"%s","diagnostics":[{"check":"seed","status":"fail","detail":"cmd/seed failed for scenarios %s","remediation":"check %s/datastore.log"}]}\n' \
+      "$id" "${SEED_SCENARIOS}" "$workdir"
+    exit 1
+  fi
+  echo "fixtures seed: ${seed_log}" >> "${workdir}/datastore.log"
 
   local vite_port=$((3100 + offset))   # Vite dev server ポート（HMR 有効）
 
