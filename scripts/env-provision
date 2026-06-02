@@ -207,6 +207,10 @@ _provision() {
     sleep 1
   done
 
+  # seed の出力は専用ログへ書く。datastore.log は emulator が `>` で fd を保持しており、
+  # `>>` で追記しても emulator の後続出力に上書きされるため（fd オフセット競合）。
+  local seed_logfile="${workdir}/seed.log"
+
   # --- Seed (devdata): prod ダンプの import は --import-devdata 明示時のみ ---
   # devdata は本番データ参照用ツールであり、provision のデフォルト責務ではない（概念分離）。
   # REST :import は冪等でないため、datadir が空（初回/teardown 後）のときのみ実行する。
@@ -218,7 +222,7 @@ _provision() {
         "http://localhost:${ds_port}/v1/projects/${PROJECT_ID}:import" \
         -H "Content-Type: application/json" \
         -d "{\"input_url\":\"${seed_meta}\"}" 2>/dev/null)
-      echo "devdata import: ${import_result}" >> "${workdir}/datastore.log"
+      echo "devdata import: ${import_result}" >> "${seed_logfile}"
       sleep 2
     fi
   fi
@@ -232,12 +236,12 @@ _provision() {
     DATASTORE_PROJECT_ID="${PROJECT_ID}" \
     GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
     go run ./cmd/seed --scenarios "${SEED_SCENARIOS}" 2>&1); then
-    echo "fixtures seed FAILED: ${seed_log}" >> "${workdir}/datastore.log"
-    printf '{"ready":false,"id":"%s","diagnostics":[{"check":"seed","status":"fail","detail":"cmd/seed failed for scenarios %s","remediation":"check %s/datastore.log"}]}\n' \
+    echo "fixtures seed FAILED: ${seed_log}" >> "${seed_logfile}"
+    printf '{"ready":false,"id":"%s","diagnostics":[{"check":"seed","status":"fail","detail":"cmd/seed failed for scenarios %s","remediation":"check %s/seed.log"}]}\n' \
       "$id" "${SEED_SCENARIOS}" "$workdir"
     exit 1
   fi
-  echo "fixtures seed: ${seed_log}" >> "${workdir}/datastore.log"
+  echo "fixtures seed: ${seed_log}" >> "${seed_logfile}"
 
   local vite_port=$((3100 + offset))   # Vite dev server ポート（HMR 有効）
 
