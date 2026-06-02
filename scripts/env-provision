@@ -11,7 +11,7 @@ PROJECT_ID="${PROJECT_ID:-triax-football}"
 
 if [[ -z "$VERB" ]]; then
   echo "Usage: $0 <verb> [<id>]" >&2
-  echo "  verbs: provision, doctor, teardown, status" >&2
+  echo "  verbs: provision, doctor, manifest, teardown, status" >&2
   exit 1
 fi
 
@@ -85,36 +85,53 @@ _setup_worktree_symlinks() {
   mkdir -p "${REPO_ROOT}/client/dest"
 }
 
+# ---------------------------------------------------------------- manifest ---
+# エージェントが「何が shared で何が per-env か」を判断するためのメタ情報を返す。
+# per_env に列挙されたリソースは provision が管理するため、エージェントは
+# これらを理由に検証を SKIP しない。
+_manifest() {
+  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_import","lifecycle":"provision (初回のみ、冪等)","detail":"devdata/2024-1201-200205 からの seed データ投入"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
+}
+
 # ------------------------------------------------------------------ doctor ---
 _doctor() {
   local ok=true
   local issues=()
 
   _check() {
-    local name="$1" cmd="$2" detail_ok="$3" detail_fail="$4" fix="$5"
+    local name="$1" cmd="$2" detail_ok="$3" detail_fail="$4" fix="$5" manifest_item="${6:-}"
+    local entry
     if eval "$cmd" >/dev/null 2>&1; then
-      issues+=("{\"check\":\"${name}\",\"status\":\"pass\",\"detail\":\"${detail_ok}\"}")
+      entry="{\"check\":\"${name}\",\"status\":\"pass\",\"detail\":\"${detail_ok}\""
     else
       ok=false
-      issues+=("{\"check\":\"${name}\",\"status\":\"fail\",\"detail\":\"${detail_fail}\",\"remediation\":\"${fix}\"}")
+      entry="{\"check\":\"${name}\",\"status\":\"fail\",\"detail\":\"${detail_fail}\",\"remediation\":\"${fix}\""
     fi
+    [[ -n "$manifest_item" ]] && entry="${entry},\"manifest_item\":\"${manifest_item}\""
+    issues+=("${entry}}")
   }
 
-  _check "gcloud"          "command -v gcloud"      "gcloud CLI found" "gcloud CLI not found"          "Install Google Cloud SDK"
+  _check "gcloud"          "command -v gcloud"      "gcloud CLI found" "gcloud CLI not found"          "Install Google Cloud SDK"                                    "gcloud"
   _check "datastore-comp"  "gcloud components list --format='value(id)' 2>/dev/null | grep -q cloud-datastore-emulator" \
                                                     "cloud-datastore-emulator installed" "cloud-datastore-emulator not installed" \
-                                                    "gcloud components install cloud-datastore-emulator"
-  _check "go"              "command -v go"          "go found"          "go not found"                  "Install Go"
-  _check "npm"             "command -v npm"          "npm found"         "npm not found"                 "Install Node.js"
+                                                    "gcloud components install cloud-datastore-emulator"                          "datastore_component"
+  _check "go"              "command -v go"          "go found"          "go not found"                  "Install Go"                                                  "go"
+  _check "npm"             "command -v npm"          "npm found"         "npm not found"                 "Install Node.js"                                             "npm"
   _check "secrets"         "test -f '${REPO_ROOT}/secrets.local.yaml'" \
                                                     "secrets.local.yaml found" "secrets.local.yaml not found" \
-                                                    "cp secrets.example.yaml secrets.local.yaml && fill in values"
+                                                    "cp secrets.example.yaml secrets.local.yaml && fill in values"                "secrets"
+
+  local all_pass=true
+  for item in "${issues[@]}"; do
+    [[ "$item" == *'"status":"fail"'* ]] && all_pass=false && break
+  done
 
   local checks_json
   local joined
   joined=$(printf '%s,' "${issues[@]}")
   checks_json="[${joined%,}]"
-  printf '{"ok":%s,"checks":%s}\n' "$ok" "$checks_json"
+  printf '{"ok":%s,"checks":%s,"provision_readiness":{"ready":%s,"note":"per_env リソース（Datastore エミュレーター・Go API・Vite）は provision verb が管理する。doctor は shared 前提条件のみ検証する"}}\n' \
+    "$ok" "$checks_json" "$all_pass"
 }
 
 # --------------------------------------------------------------- provision ---
@@ -297,6 +314,7 @@ _status() {
 case "$VERB" in
   provision)  _provision "$ID" ;;
   doctor)     _doctor ;;
+  manifest)   _manifest ;;
   teardown)   _teardown "$ID" ;;
   status)     _status "$ID" ;;
   *)
