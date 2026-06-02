@@ -15,9 +15,37 @@ if [[ -z "$VERB" ]]; then
   exit 1
 fi
 
-# ID から 0-99 のオフセットを算出（並列 env 間のポート衝突を回避）
+# ID から 0-99 のオフセットを算出。既存 env との衝突は offset ファイルを参照して回避する。
 _port_offset() {
-  printf '%s' "${1}" | cksum | awk '{print $1 % 100}'
+  local id="$1"
+  local preferred
+  preferred=$(printf '%s' "$id" | cksum | awk '{print $1 % 100}')
+
+  # 実行中の他の env が記録した使用済みオフセットを収集（自分自身の workdir は除外）
+  local my_workdir
+  my_workdir=$(_workdir "$id")
+  local used=()
+  for f in /tmp/hub-env-*/offset; do
+    [[ -f "$f" ]] && [[ "$f" != "${my_workdir}/offset" ]] && used+=("$(cat "$f")")
+  done
+
+  # preferred から衝突しないオフセットを 0-99 の範囲で探す
+  local i
+  for i in $(seq 0 99); do
+    local candidate=$(( (preferred + i) % 100 ))
+    local conflict=false
+    if [[ ${#used[@]} -gt 0 ]]; then
+      local u
+      for u in "${used[@]}"; do
+        [[ "$u" == "$candidate" ]] && conflict=true && break
+      done
+    fi
+    if ! $conflict; then echo "$candidate"; return; fi
+  done
+
+  printf '{"ready":false,"id":"%s","diagnostics":[{"check":"port-offset","status":"fail","detail":"port collision — all 100 offsets in use","remediation":"teardown unused envs: scripts/env-provision teardown <id>"}]}\n' \
+    "$id" >&2
+  exit 1
 }
 
 # PID / ログの作業ディレクトリ
@@ -104,6 +132,13 @@ _provision() {
 
   mkdir -p "$workdir" "$datadir"
 
+  # seed が必要かを emulator 起動前に確定する（起動後は emulator がファイルを書き込む）
+  local seed_needed=false
+  [[ -z "$(ls -A "$datadir" 2>/dev/null)" ]] && seed_needed=true
+
+  # オフセットをファイルに記録（他の env との衝突検出用、teardown で workdir ごと削除される）
+  echo "$offset" > "${workdir}/offset"
+
   # id に対応する worktree があれば、そのソースを使う（なければ main リポジトリ）
   local source_root="${REPO_ROOT}"
   local worktree_candidate="${REPO_ROOT}/.worktrees/${id}"
@@ -138,8 +173,10 @@ _provision() {
   done
 
   # --- Seed: devdata/2024-1201-200205 をエミュレータへインポート ---
+  # datadir が空（初回 provision または teardown 後）のときのみ実行する。
+  # emulator 起動後は datadir にファイルが書き込まれるため、seed_needed は起動前に確定済み。
   local seed_meta="${REPO_ROOT}/devdata/2024-1201-200205/2024-1201-200205.overall_export_metadata"
-  if [[ -f "$seed_meta" ]]; then
+  if [[ "$seed_needed" == true ]] && [[ -f "$seed_meta" ]]; then
     # REST API（ヘルスチェックエンドポイント）が応答するまで待つ（最大 20 秒）
     local api_retries=20
     while ! curl -sf "http://localhost:${ds_port}/" >/dev/null 2>&1; do
@@ -174,12 +211,12 @@ _provision() {
     > "${workdir}/api.log" 2>&1 &
   echo $! > "${workdir}/api.pid"
 
-  # API サーバの起動を待つ（最大 30 秒）
+  # API サーバの起動を待つ（最大 30 秒、/healthz が 200 を返すまで）
   retries=30
-  while ! nc -z localhost "${api_port}" 2>/dev/null; do
+  while ! curl -sf "http://localhost:${api_port}/healthz" >/dev/null 2>&1; do
     retries=$((retries - 1))
     if [[ $retries -le 0 ]]; then
-      printf '{"ready":false,"id":"%s","diagnostics":["Go API server timed out on port %s. See %s/api.log"]}\n' \
+      printf '{"ready":false,"id":"%s","diagnostics":[{"check":"api","status":"fail","detail":"timeout waiting for /healthz on port %s","remediation":"check %s/api.log"}]}\n' \
         "$id" "$api_port" "$workdir"
       exit 1
     fi
@@ -194,12 +231,12 @@ _provision() {
     > "${workdir}/vite.log" 2>&1 &
   echo $! > "${workdir}/vite.pid"
 
-  # Vite の起動を待つ（最大 30 秒）
+  # Vite の起動を待つ（最大 30 秒、HTTP 200 を返すまで）
   retries=30
-  while ! nc -z localhost "${vite_port}" 2>/dev/null; do
+  while ! curl -sf "http://localhost:${vite_port}/" >/dev/null 2>&1; do
     retries=$((retries - 1))
     if [[ $retries -le 0 ]]; then
-      printf '{"ready":false,"id":"%s","diagnostics":["Vite dev server timed out on port %s. See %s/vite.log"]}\n' \
+      printf '{"ready":false,"id":"%s","diagnostics":[{"check":"vite","status":"fail","detail":"timeout waiting for HTTP on port %s","remediation":"check %s/vite.log"}]}\n' \
         "$id" "$vite_port" "$workdir"
       exit 1
     fi

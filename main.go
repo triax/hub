@@ -98,6 +98,12 @@ func main() {
 	// ここでは /api/1/public/applications に配置して競合を避ける。
 	r.With(filters.MaxBodySize(512<<10)).Post("/api/1/public/applications", api.CreateApplication)
 
+	// ヘルスチェック（認証不要・Datastore 非依存）
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	})
+
 	// Unauthorized pages
 	smallBody := filters.MaxBodySize(1 << 20) // 1MB
 	r.With(smallBody).Post("/login", controllers.Login)
