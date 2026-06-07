@@ -12,7 +12,8 @@ const HELP_PAGE_URL = import.meta.env.VITE_HELP_PAGE_URL || "https://sites.googl
 const navigation = [
   { label: 'Schedule', link: '/' },
   { label: 'Equips', link: '/equips' },
-  { label: 'Taping', link: '/taping' },
+  // TODO: テーピング機能（#570/#571）は現在未使用のため導線を一時無効化。再開時にコメント解除する。
+  // { label: 'Taping', link: '/taping' },
   { label: 'Team', link: '/members' },
 ];
 

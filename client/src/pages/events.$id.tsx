@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
 import { LocationMarkerIcon } from "@heroicons/react/outline";
@@ -17,7 +17,8 @@ export default function EventView() {
   const evrepo = useMemo(() => new TeamEventRepo(), []);
   const merepo = useMemo(() => new MemberCache(), []);
   const { id } = useParams({ strict: false });
-  const navigate = useNavigate();
+  // TODO: テーピング機能（#570/#571）の導線無効化に伴い未使用。再開時にコメント解除する。
+  // const navigate = useNavigate();
   const [event, setEvent] = useState<TeamEvent>(TeamEvent.placeholder());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [modalevent, setModalEvent] = useState(null);
@@ -67,10 +68,12 @@ export default function EventView() {
       <div>
         <div className="flex items-baseline justify-between mb-4">
           <h1 className="text-xl text-gray-800">{event.google.title}</h1>
+          {/* TODO: テーピング機能（#570/#571）は現在未使用のため導線を一時無効化。再開時にコメント解除する。
           <button
             className="text-xs text-blue-600 border border-blue-300 rounded px-2 py-1 ml-3 whitespace-nowrap"
             onClick={() => navigate({ to: `/events/${id}/taping` })}
           >テーピング確認</button>
+          */}
         </div>
         <div className="flex flex-col">
           <div className="flex space-x-2">
