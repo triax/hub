@@ -15,6 +15,7 @@ triax-football-*.json
 # Development
 dev
 devdata
+.devenv
 
 # Test and coverage
 coverage
