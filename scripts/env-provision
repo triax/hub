@@ -22,6 +22,7 @@ done
 if [[ -z "$VERB" ]]; then
   echo "Usage: $0 <verb> [<id>] [--import-devdata]" >&2
   echo "  verbs: provision, doctor, manifest, teardown, status" >&2
+  echo "  teardown <id> | teardown --all  (--all は既知 env を一括破棄)" >&2
   exit 1
 fi
 
@@ -35,7 +36,7 @@ _port_offset() {
   local my_workdir
   my_workdir=$(_workdir "$id")
   local used=()
-  for f in /tmp/hub-env-*/offset; do
+  for f in "$(_state_root)"/*/offset; do
     [[ -f "$f" ]] && [[ "$f" != "${my_workdir}/offset" ]] && used+=("$(cat "$f")")
   done
 
@@ -58,9 +59,29 @@ _port_offset() {
   exit 1
 }
 
-# PID / ログの作業ディレクトリ
+# PID / オフセット / ログ等のランタイム状態の置き場所。
+#
+# 配置は「メインリポジトリ配下の .devenv/<id>」に固定する。これは teardown が
+# kill する宛先（pid ファイル）を確実に生き残らせるための設計上の要請:
+#   - /tmp は macOS の periodic cleaner（/etc/periodic/daily）が ~3 日で中身を
+#     掃除するため、長命な env では pid ファイルが揮発し、teardown が宛先を失って
+#     無言の no-op になる（プロセスはスクリプト経由で二度と回収できなくなる）。
+#   - worktree 内（$REPO_ROOT 相対）に置くと、worktree を削除した瞬間に kill
+#     リストごと消える。/tidy は worktree 削除前に teardown を呼ぶ想定だが、手動で
+#     worktree を消すフローでは漏れる。
+# main repo の .devenv なら、worktree 削除にも OS の /tmp GC にも耐える。
+_state_root() {
+  echo "$(_main_repo_root)/.devenv"
+}
 _workdir() {
-  echo "/tmp/hub-env-${1}"
+  echo "$(_state_root)/${1}"
+}
+
+# Datastore のデータディレクトリも main repo に固定する。worktree から provision
+# されても、worktree 削除後に（/tidy が main repo から呼ぶ）teardown が同じパスで
+# 発見・削除できるようにするため。<id> 単位の subdir で env 間は隔離される。
+_datadir() {
+  echo "$(_main_repo_root)/devdata/env-${1}"
 }
 
 # git worktree 内で実行中なら main リポジトリのルートを返す。
@@ -155,7 +176,8 @@ _provision() {
   local api_port=$((9101 + offset * 2))     # Go API ポート
   local workdir
   workdir=$(_workdir "$id")
-  local datadir="${REPO_ROOT}/devdata/env-${id}"
+  local datadir
+  datadir=$(_datadir "$id")
 
   mkdir -p "$workdir" "$datadir"
 
@@ -302,24 +324,146 @@ _provision() {
 }
 
 # --------------------------------------------------------------- teardown ---
-_teardown() {
-  local id="$1"
-  local workdir
-  workdir=$(_workdir "$id")
 
-  # PID ファイルにあるプロセスを全て停止
+# pgid 配列に重複なく追加する（set -u 安全）。
+_add_pgid() {
+  local p="$1" existing
+  [[ -z "$p" ]] && return 0
+  for existing in "${_PGIDS[@]:-}"; do [[ "$existing" == "$p" ]] && return 0; done
+  _PGIDS+=("$p")
+}
+
+# 単一 env を破棄する。プロセスグループ単位で SIGTERM → 残れば SIGKILL し、
+# Datastore データと状態ディレクトリを削除する。冪等（存在しない env は no-op）。
+#
+# 倒すべき process group は 2 経路で集める:
+#  (a) pid ファイル経由（正常系）— 生きている pid の live pgid を引く。
+#      live pid から引くので pgid の取り違え（番号再利用）リスクは無い。
+#  (b) 発見フォールバック（④）— pid ファイルが揮発・消失していても、この env 固有の
+#      datadir シグネチャ（`devdata/env-<id> ` が Datastore emulator の起動コマンドに
+#      現れる）で実プロセスを探し、その live pgid を引く。emulator / API / Vite / npm は
+#      provision 時に同一プロセスグループで起動されるため、どれか 1 つ見つかれば
+#      グループ全体を倒せる。
+#
+# stdout には "<groups> <signaled> <datadir_removed> <workdir_removed>" を返す
+# （呼び出し側が JSON を組み立てる）。
+_reap_env() {
+  local id="$1"
+  local workdir datadir
+  workdir=$(_workdir "$id")
+  datadir=$(_datadir "$id")
+
+  _PGIDS=()
+
+  # (a) pid ファイル経由
+  local pidfile pid pgid
   for pidfile in "${workdir}"/*.pid; do
     [[ -f "$pidfile" ]] || continue
-    local pid
-    pid=$(cat "$pidfile")
-    # 子プロセスごとグループを停止
-    kill -- -"$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')" 2>/dev/null || kill "$pid" 2>/dev/null || true
-    rm -f "$pidfile"
+    pid=$(cat "$pidfile" 2>/dev/null || true)
+    [[ -n "$pid" ]] || continue
+    if kill -0 "$pid" 2>/dev/null; then
+      pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')
+      _add_pgid "$pgid"
+    fi
   done
 
-  # emulator データと作業ディレクトリを削除
-  rm -rf "${REPO_ROOT}/devdata/env-${id}"
-  rm -rf "$workdir"
+  # (b) 発見フォールバック: datadir シグネチャ（末尾スペースで env-<id> の前方一致を防ぐ）
+  local dpid
+  for dpid in $(pgrep -f "devdata/env-${id} " 2>/dev/null || true); do
+    pgid=$(ps -o pgid= -p "$dpid" 2>/dev/null | tr -d ' ')
+    _add_pgid "$pgid"
+  done
+
+  # --- kill: SIGTERM → 待機 → 残存していれば SIGKILL ---
+  local signaled=0 g before
+  for g in "${_PGIDS[@]:-}"; do
+    [[ -z "$g" ]] && continue
+    before=$({ pgrep -g "$g" 2>/dev/null || true; } | wc -l | tr -d ' ')
+    kill -TERM -- -"$g" 2>/dev/null || true
+    signaled=$((signaled + before))
+  done
+  if [[ ${#_PGIDS[@]} -gt 0 ]]; then
+    sleep 2
+    for g in "${_PGIDS[@]:-}"; do
+      [[ -z "$g" ]] && continue
+      if pgrep -g "$g" >/dev/null 2>&1; then
+        kill -KILL -- -"$g" 2>/dev/null || true
+      fi
+    done
+  fi
+
+  # --- データ・状態の削除 ---
+  local datadir_removed=false workdir_removed=false
+  if [[ -e "$datadir" ]]; then rm -rf "$datadir" && datadir_removed=true; fi
+  if [[ -e "$workdir" ]]; then rm -rf "$workdir" && workdir_removed=true; fi
+
+  printf '%s %s %s %s' "${#_PGIDS[@]}" "$signaled" "$datadir_removed" "$workdir_removed"
+}
+
+_teardown() {
+  local id="$1"
+  if [[ -z "$id" ]]; then
+    echo 'Usage: teardown <id> | teardown --all' >&2
+    exit 1
+  fi
+  local groups signaled datadir_removed workdir_removed
+  read -r groups signaled datadir_removed workdir_removed <<< "$(_reap_env "$id")"
+  printf '{"id":"%s","torn_down":true,"groups_killed":%s,"processes_signaled":%s,"datadir_removed":%s,"workdir_removed":%s}\n' \
+    "$id" "$groups" "$signaled" "$datadir_removed" "$workdir_removed"
+}
+
+# 既知の env を全て破棄する（③）。worktree を /tidy 外で消した等で取り残された
+# env をまとめて回収する用途。.devenv/<id>（状態）と devdata/env-<id>（データ）の
+# 和集合を id として走査する。
+_teardown_all() {
+  local state_root devdata_root
+  state_root=$(_state_root)
+  devdata_root="$(_main_repo_root)/devdata"
+
+  local _IDS=() d b
+  _add_id() {
+    local x="$1" e
+    [[ -z "$x" ]] && return 0
+    for e in "${_IDS[@]:-}"; do [[ "$e" == "$x" ]] && return 0; done
+    _IDS+=("$x")
+  }
+  for d in "${state_root}"/*; do [[ -d "$d" ]] && _add_id "$(basename "$d")"; done
+  # devdata/env-* のみ（prod ダンプ 2024-1201-200205 等は env- prefix が無いので除外）
+  for d in "${devdata_root}"/env-*; do
+    [[ -d "$d" ]] || continue
+    b=$(basename "$d")
+    _add_id "${b#env-}"
+  done
+  # 実行中プロセスのコマンドラインからも env-<id> を抽出する。状態 / データが既に
+  # 失われた env（旧 worktree-local datadir で worktree ごと消えた等）でも、emulator が
+  # `--data-dir=.../devdata/env-<id>` を保持している限りここで拾える。
+  #   - `--data-dir=` を持つ行に限定: この抽出パイプ自身の grep/sed が ps に写って
+  #     自己マッチするのを防ぐ（それらの行に `--data-dir=` は無い）。
+  #   - id の文字種を検証: 万一の混入（`[^` 等の正規表現片）を弾く belt-and-suspenders。
+  local pid_id
+  while IFS= read -r pid_id; do
+    _add_id "$pid_id"
+  done < <(ps -axo command 2>/dev/null \
+    | grep -F -- '--data-dir=' \
+    | grep -oE 'devdata/env-[^ /]+' \
+    | sed 's#devdata/env-##' \
+    | grep -E '^[A-Za-z0-9._-]+$' \
+    | sort -u)
+
+  local entries=() total_groups=0 total_signaled=0
+  local id groups signaled dr wr
+  for id in "${_IDS[@]:-}"; do
+    [[ -z "$id" ]] && continue
+    read -r groups signaled dr wr <<< "$(_reap_env "$id")"
+    total_groups=$((total_groups + groups))
+    total_signaled=$((total_signaled + signaled))
+    entries+=("{\"id\":\"${id}\",\"groups_killed\":${groups},\"processes_signaled\":${signaled},\"datadir_removed\":${dr},\"workdir_removed\":${wr}}")
+  done
+
+  local joined
+  joined=$(printf '%s,' "${entries[@]:-}")
+  printf '{"teardown_all":true,"envs":[%s],"total_groups_killed":%s,"total_processes_signaled":%s}\n' \
+    "${joined%,}" "$total_groups" "$total_signaled"
 }
 
 # ----------------------------------------------------------------- status ---
@@ -346,7 +490,8 @@ case "$VERB" in
   provision)  _provision "$ID" ;;
   doctor)     _doctor ;;
   manifest)   _manifest ;;
-  teardown)   _teardown "$ID" ;;
+  teardown)
+    if [[ "$ID" == "--all" ]]; then _teardown_all; else _teardown "$ID"; fi ;;
   status)     _status "$ID" ;;
   *)
     echo "Unknown verb: $VERB" >&2
