@@ -1,19 +1,10 @@
-import { useEffect } from "react";
-import { reportClientError } from "../repository/observability";
-
 /**
  * route 描画中に投げられた例外を捕捉するフォールバック UI。
  * TanStack Router の defaultErrorComponent として全 route に適用する。
- * マウント時にエラーをサーバへ報告し、ユーザには再読み込み導線を提示する。
+ * サーバへの報告は router の defaultOnCatch が担う（componentStack を含められるため）。
+ * 本コンポーネントは表示のみを担当する。
  */
-export default function ErrorFallback({ error }: { error: Error }) {
-  useEffect(() => {
-    reportClientError({
-      message: error?.message || String(error),
-      stack: error?.stack,
-    });
-  }, [error]);
-
+export default function ErrorFallback() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
       <div className="text-3xl mb-3">⚠️</div>
