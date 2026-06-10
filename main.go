@@ -36,6 +36,9 @@ func main() {
 
 	r := chi.NewRouter()
 
+	// panic を捕捉して 500 を返しつつ Slack へアラート（プロセスを落とさない）
+	r.Use(filters.Recovery)
+
 	// セキュリティヘッダー
 	r.Use(filters.SecurityHeaders)
 
@@ -49,6 +52,8 @@ func main() {
 
 	v1.Group(func(r chi.Router) {
 		r.Use(filters.MaxBodySize(1 << 20)) // 1MB
+		// フロントエンドのエラー報告を受け取り Slack へアラート
+		r.Post("/client-errors", api.ReportClientError)
 		r.Get("/members/{id}", api.GetMember)
 		r.Post("/members/{id}/props", api.UpdateMemberProps)
 		r.Get("/members/{id}/hp-profile", api.GetHPProfile)

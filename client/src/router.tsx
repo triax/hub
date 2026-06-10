@@ -1,5 +1,6 @@
 import { createRouter, createRoute, createRootRoute, Outlet } from '@tanstack/react-router';
 import { AppProvider } from './context';
+import ErrorFallback from './ErrorFallback';
 
 import Top from './pages/index';
 import Login from './pages/login';
@@ -165,7 +166,11 @@ const routeTree = rootRoute.addChildren([
   applicationsRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  // route 描画中の例外を全 route で捕捉し、フォールバック表示＋サーバ報告を行う
+  defaultErrorComponent: ErrorFallback,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {
