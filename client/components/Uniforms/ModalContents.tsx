@@ -1,4 +1,4 @@
-import { Dialog } from "@headlessui/react";
+import { DialogPanel, DialogTitle } from "@headlessui/react";
 import Member from "../../models/Member";
 import { PlayerNumber } from "../../models/PlayerNumber";
 import { useState } from "react";
@@ -77,12 +77,12 @@ export function NumAssignModalContent({
 }) {
   const [query, setQuery] = useState("");
   return (
-    <div
-      className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl"
+    <DialogPanel
+      className="w-full max-w-md p-6 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl"
     >
-      <Dialog.Title as="h3" className="font-medium leading-6 text-gray-900 mb-2">
+      <DialogTitle as="h3" className="font-medium leading-6 text-gray-900 mb-2">
         <span>背番号</span> <span className="text-4xl text-red-900 border p-1">{playernumber.number}</span> <span>を選手に割り当てる</span>
-      </Dialog.Title>
+      </DialogTitle>
 
       <div>
         <QueryFieldView query={query} setQuery={setQuery} />
@@ -105,6 +105,6 @@ export function NumAssignModalContent({
       <div>
         <button onClick={close} className="mt-4 bg-red-200 text-gray-800 py-1 px-4 rounded-md">やっぱりやめる</button>
       </div>
-    </div>
+    </DialogPanel>
   );
 }

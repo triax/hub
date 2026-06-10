@@ -4,7 +4,7 @@ import { PlayerNumberRepo } from "../../repository/PlayerNumberRepo";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { PlayerNumber } from "../../models/PlayerNumber";
 import Member from "../../models/Member";
-import { Dialog } from "@headlessui/react";
+import { Dialog, DialogBackdrop } from "@headlessui/react";
 import { NumAssignModalContent } from "../../components/Uniforms/ModalContents";
 import { useAppContext } from "../context";
 
@@ -54,13 +54,14 @@ function PlayerNumberListView({ playernumbers, members, loading }: {
       <Dialog
         open={modalContent !== null}
         as="div"
-        className="fixed inset-0 z-10 overflow-y-auto"
+        className="relative z-10"
         onClose={() => setModalContante(null)}
       >
-        <div className="min-h-screen px-4 text-center">
-          <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-40" />
-          <span className="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
-          {modalContent}
+        <DialogBackdrop className="fixed inset-0 bg-black/40" />
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            {modalContent}
+          </div>
         </div>
       </Dialog>
     </div>

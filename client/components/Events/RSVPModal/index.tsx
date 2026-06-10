@@ -1,4 +1,4 @@
-import { Dialog } from "@headlessui/react";
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { CheckCircleIcon } from "@heroicons/react/outline";
 import { useRef, useState } from "react";
 import { EventDateTime, EventLocation } from "..";
@@ -20,27 +20,26 @@ export function RSVPModal({
     <Dialog
       open={isOpen}
       as="div"
-      className="fixed inset-0 z-10 overflow-y-auto"
+      className="relative z-10"
       onClose={closeModal}
     >
-      <div className="min-h-screen px-4 text-center">
-        <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-40" />
-
-        {/* This element is to trick the browser into centering the modal contents. */}
-        <span className="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
-
-        <div
-          className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
-          <EventDateTime timestamp={event.google.start_time} />
-          <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">{event.google.title}</Dialog.Title>
-          <EventLocation location={event.google.location} />
-          <ParticipationSelectBoxes
-            ptype={ptype} defaultTime={defaultTime} setPType={setPType}
-            onCancel={closeModal} onCommit={async ({type, params}) => {
-              await submit({event, answer: type, params});
-              closeModal();
-            }}
-          />
+      {/* 背景クリック・Esc での close は Dialog/DialogPanel が native に処理する */}
+      <DialogBackdrop className="fixed inset-0 bg-black/40" />
+      <div className="fixed inset-0 overflow-y-auto">
+        <div className="flex min-h-full items-center justify-center p-4 text-center">
+          <DialogPanel
+            className="w-full max-w-md p-6 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+            <EventDateTime timestamp={event.google.start_time} />
+            <DialogTitle as="h3" className="text-lg font-medium leading-6 text-gray-900">{event.google.title}</DialogTitle>
+            <EventLocation location={event.google.location} />
+            <ParticipationSelectBoxes
+              ptype={ptype} defaultTime={defaultTime} setPType={setPType}
+              onCancel={closeModal} onCommit={async ({type, params}) => {
+                await submit({event, answer: type, params});
+                closeModal();
+              }}
+            />
+          </DialogPanel>
         </div>
       </div>
     </Dialog>
