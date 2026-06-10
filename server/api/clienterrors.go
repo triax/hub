@@ -18,12 +18,13 @@ func ReportClientError(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 
 	var input struct {
-		Message   string `json:"message"`
-		Stack     string `json:"stack"`
-		URL       string `json:"url"`
-		UserAgent string `json:"userAgent"`
-		Release   string `json:"release"`
-		TS        int64  `json:"ts"` // epoch ミリ秒
+		Message        string `json:"message"`
+		Stack          string `json:"stack"`
+		ComponentStack string `json:"componentStack"`
+		URL            string `json:"url"`
+		UserAgent      string `json:"userAgent"`
+		Release        string `json:"release"`
+		TS             int64  `json:"ts"` // epoch ミリ秒
 	}
 	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 		render.JSON(http.StatusBadRequest, marmoset.P{"error": err.Error()})
@@ -35,13 +36,15 @@ func ReportClientError(w http.ResponseWriter, req *http.Request) {
 	}
 
 	report := observability.Report{
-		Source:    "frontend",
-		Message:   input.Message,
-		Stack:     input.Stack,
-		URL:       input.URL,
-		UserAgent: input.UserAgent,
-		Release:   input.Release,
-		User:      filters.GetSessionUserContext(req),
+		Source:         "frontend",
+		Message:        input.Message,
+		Stack:          input.Stack,
+		ComponentStack: input.ComponentStack,
+		URL:            input.URL,
+		Referer:        req.Referer(),
+		UserAgent:      input.UserAgent,
+		Release:        input.Release,
+		User:           filters.GetSessionUserContext(req),
 	}
 	if input.TS > 0 {
 		report.Time = time.UnixMilli(input.TS)

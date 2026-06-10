@@ -19,11 +19,13 @@ func Recovery(next http.Handler) http.Handler {
 				stack := string(debug.Stack())
 				log.Printf("[ERROR] 10001 panic recovered: %v\n%s", rec, stack)
 				observability.Notify(observability.Report{
-					Source:  "backend/panic",
-					Message: fmt.Sprintf("%v", rec),
-					Stack:   stack,
-					URL:     r.Method + " " + r.URL.Path,
-					User:    sessionUserSafe(r),
+					Source:    "backend/panic",
+					Message:   fmt.Sprintf("%v (%T)", rec, rec), // panic 値の型も含める
+					Stack:     stack,
+					URL:       r.Method + " " + r.URL.RequestURI(), // クエリ文字列を含む
+					Referer:   r.Referer(),
+					UserAgent: r.UserAgent(),
+					User:      sessionUserSafe(r),
 				})
 				marmoset.Render(w).JSON(http.StatusInternalServerError, marmoset.P{"error": "internal server error"})
 			}

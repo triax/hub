@@ -1,6 +1,7 @@
 import { createRouter, createRoute, createRootRoute, Outlet } from '@tanstack/react-router';
 import { AppProvider } from './context';
 import ErrorFallback from './ErrorFallback';
+import { reportClientError } from '../repository/observability';
 
 import Top from './pages/index';
 import Login from './pages/login';
@@ -168,8 +169,18 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
-  // route 描画中の例外を全 route で捕捉し、フォールバック表示＋サーバ報告を行う
+  // route 描画中の例外を全 route で捕捉してフォールバック表示する
   defaultErrorComponent: ErrorFallback,
+  // 例外の報告はここで行う。defaultErrorComponent の props には componentStack が
+  // 渡らない（空文字固定）ため、React のコンポーネントスタックを含む errorInfo を
+  // 受け取れる defaultOnCatch でサーバへ報告する（描画クラッシュの犯人特定に有効）。
+  defaultOnCatch: (error, errorInfo) => {
+    reportClientError({
+      message: error?.message || String(error),
+      stack: error?.stack,
+      componentStack: errorInfo?.componentStack,
+    });
+  },
 });
 
 declare module '@tanstack/react-router' {

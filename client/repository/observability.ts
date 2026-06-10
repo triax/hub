@@ -6,6 +6,7 @@
 export interface ClientErrorInput {
   message: string;
   stack?: string;
+  componentStack?: string;
   url?: string;
   ts?: number;
 }
@@ -26,6 +27,7 @@ export function reportClientError(input: ClientErrorInput): void {
     const payload = {
       message: input.message,
       stack: input.stack,
+      componentStack: input.componentStack,
       url: input.url ?? (typeof location !== "undefined" ? location.href : undefined),
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       release: env?.VITE_RELEASE,

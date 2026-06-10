@@ -28,14 +28,16 @@ const maxStackLen = 2600
 
 // Report は 1 件のエラーアラートに含める情報。任意項目は空でよい。
 type Report struct {
-	Source    string    // 発生元（例: "frontend", "backend/panic"）
-	Message   string    // エラーメッセージ
-	Stack     string    // スタックトレース
-	URL       string    // 発生 URL / エンドポイント
-	UserAgent string    // クライアント UserAgent
-	Release   string    // ビルド識別子
-	User      string    // Slack ユーザ ID 等
-	Time      time.Time // 発生時刻（zero 値なら送信時刻で補完）
+	Source         string    // 発生元（例: "frontend", "backend/panic"）
+	Message        string    // エラーメッセージ
+	Stack          string    // スタックトレース（JS の minified stack / Go の debug.Stack）
+	ComponentStack string    // React コンポーネントスタック（描画クラッシュの犯人特定に有効）
+	URL            string    // 発生 URL / エンドポイント
+	Referer        string    // 遷移元（任意）
+	UserAgent      string    // クライアント UserAgent
+	Release        string    // ビルド識別子
+	User           string    // Slack ユーザ ID 等
+	Time           time.Time // 発生時刻（zero 値なら送信時刻で補完）
 }
 
 // 同一エラーの短時間連投を抑制するための簡易 dedup 状態。
@@ -115,6 +117,9 @@ func (r Report) blocks() []slack.Block {
 	if r.URL != "" {
 		body += "\n*発生箇所:* `" + r.URL + "`"
 	}
+	if r.Referer != "" {
+		body += "\n*遷移元:* `" + r.Referer + "`"
+	}
 	if r.Release != "" {
 		body += "\n*リリース:* `" + r.Release + "`"
 	}
@@ -126,6 +131,14 @@ func (r Report) blocks() []slack.Block {
 	)
 
 	blocks := []slack.Block{header, meta, msg}
+	// React コンポーネントスタック（描画クラッシュの犯人特定に最も有効）
+	if strings.TrimSpace(r.ComponentStack) != "" {
+		cs := slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, "*コンポーネントスタック:*\n```"+truncate(r.ComponentStack, maxStackLen)+"```", false, false),
+			nil, nil,
+		)
+		blocks = append(blocks, cs)
+	}
 	if strings.TrimSpace(r.Stack) != "" {
 		stack := slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, "*スタック:*\n```"+truncate(r.Stack, maxStackLen)+"```", false, false),
