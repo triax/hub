@@ -126,7 +126,9 @@ func UploadHPPhoto(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	objectName := fmt.Sprintf("hp-profile/%s/%s-%d.%s", id, photoType, time.Now().UnixMilli(), ext)
+	// hp/ プレフィックスは GCS のマネージドフォルダ単位で allUsers:objectViewer を
+	// 付与している公開領域。ここを変える場合はバケットの IAM 設定も合わせること。
+	objectName := fmt.Sprintf("hp/photos/%s/%s-%d.%s", id, photoType, time.Now().UnixMilli(), ext)
 	publicURL, err := uploadToGCS(req.Context(), objectName, detectedMIME, fileData)
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
