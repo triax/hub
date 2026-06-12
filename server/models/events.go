@@ -58,6 +58,7 @@ const (
 	ETIgnore   EventTag = "ignore"
 	ETMeeting  EventTag = "meeting"
 	ETEvent    EventTag = "event"
+	ETSponsor  EventTag = "sponsor"
 	ETUnkonwn  EventTag = "UNKNOWN"
 )
 
@@ -67,6 +68,7 @@ var (
 	EventExpressionIgnore   = regexp.MustCompile("[＃#]ignore")
 	EventExpressionEvent    = regexp.MustCompile("[＃#]event")
 	EventExpressionMeeting  = regexp.MustCompile("[＃#]meeting|mtg")
+	EventExpressionSponsor  = regexp.MustCompile("[＃#](sponsor|スポンサー)")
 )
 
 func (pt ParticipationType) String() string {
@@ -110,6 +112,9 @@ func (e Event) ShouldSkipReminders(rt ReminderType) bool {
 	if e.Tag() == ETEvent && rt != RTRSVP {
 		return true // eventは、RSVP以外はskip
 	}
+	if e.Tag() == ETSponsor && rt != RTRSVP {
+		return true // sponsorは、eventと同等: RSVP以外はskip
+	}
 	return false
 }
 
@@ -128,6 +133,9 @@ func (e Event) Tag() EventTag {
 	}
 	if EventExpressionEvent.MatchString(e.Google.Title) {
 		return ETEvent
+	}
+	if EventExpressionSponsor.MatchString(e.Google.Title) {
+		return ETSponsor
 	}
 	return ETUnkonwn
 }

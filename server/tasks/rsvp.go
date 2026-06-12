@@ -199,7 +199,7 @@ func CronCheckRSVP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if recent.Tag() != models.ETEvent { // #event は、RSVPリマインダーを送信しなくてよい
+	if recent.Tag() != models.ETEvent && recent.Tag() != models.ETSponsor { // #event / #sponsor は未回答者メンションをスキップ
 		reminder := buildRSVPReminderMentionMessage(recent, x["unanswered"])
 		if _, _, err := api.PostMessage("#"+channel, reminder, slack.MsgOptionTS(ts)); err != nil {
 			log.Println("[ERROR]", 4008, err.Error())

@@ -21,7 +21,7 @@ enum ParticipationType {
   ABSENT = "absent",
 }
 
-export type EventTag = "練習" | "試合" | "event" | "meeting" | "UNKNOWN";
+export type EventTag = "練習" | "試合" | "event" | "meeting" | "sponsor" | "ignore" | "UNKNOWN";
 
 export default class TeamEvent {
   constructor(
@@ -41,6 +41,7 @@ export default class TeamEvent {
     if (/[＃#]試合/.test(t)) return "試合";
     if (/[＃#]event/.test(t)) return "event";
     if (/[＃#]meeting|mtg/.test(t)) return "meeting";
+    if (/[＃#](sponsor|スポンサー)/.test(t)) return "sponsor";
     return "UNKNOWN";
   }
 }

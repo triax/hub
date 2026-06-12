@@ -12,12 +12,13 @@ import { useAppContext } from "../context";
 const repo = new TeamEventRepo();
 const merepo = new MemberCache();
 
-type FilterKey = "練習" | "試合" | "イベント" | "その他";
+type FilterKey = "練習" | "試合" | "イベント" | "スポンサー" | "その他";
 
 const filters: { key: FilterKey; label: string; tags: EventTag[] }[] = [
   { key: "練習", label: "練習", tags: ["練習"] },
   { key: "試合", label: "試合", tags: ["試合"] },
   { key: "イベント", label: "イベント", tags: ["event"] },
+  { key: "スポンサー", label: "スポンサー", tags: ["sponsor"] },
   { key: "その他", label: "その他", tags: ["meeting", "UNKNOWN"] },
 ];
 
