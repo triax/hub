@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -132,28 +133,28 @@ func tagSkipsReminder(t EventTag, rt ReminderType) bool {
 	}
 }
 
+// tagDefs はタグ判定の唯一の定義（判定順序込み）。Tags() / HasTag() はこれを回す。
+// クライアント TriaxEvent.ts の TAG_PATTERNS と順序・正規表現を一致させること。
+var tagDefs = []struct {
+	tag EventTag
+	re  *regexp.Regexp
+}{
+	{ETPractice, EventExpressionPractice},
+	{ETGame, EventExpressionGame},
+	{ETIgnore, EventExpressionIgnore},
+	{ETMeeting, EventExpressionMeeting},
+	{ETEvent, EventExpressionEvent},
+	{ETSponsor, EventExpressionSponsor},
+}
+
 // Tags はタイトルに含まれる全てのタグを返す（複数タグ対応）。
 // 該当タグが無ければ ETUnkonwn ひとつを返す。
-// 判定順序はクライアント TriaxEvent.ts の tags() と一致させること。
 func (e Event) Tags() []EventTag {
 	tags := []EventTag{}
-	if EventExpressionPractice.MatchString(e.Google.Title) {
-		tags = append(tags, ETPractice)
-	}
-	if EventExpressionGame.MatchString(e.Google.Title) {
-		tags = append(tags, ETGame)
-	}
-	if EventExpressionIgnore.MatchString(e.Google.Title) {
-		tags = append(tags, ETIgnore)
-	}
-	if EventExpressionMeeting.MatchString(e.Google.Title) {
-		tags = append(tags, ETMeeting)
-	}
-	if EventExpressionEvent.MatchString(e.Google.Title) {
-		tags = append(tags, ETEvent)
-	}
-	if EventExpressionSponsor.MatchString(e.Google.Title) {
-		tags = append(tags, ETSponsor)
+	for _, d := range tagDefs {
+		if d.re.MatchString(e.Google.Title) {
+			tags = append(tags, d.tag)
+		}
 	}
 	if len(tags) == 0 {
 		tags = append(tags, ETUnkonwn)
@@ -162,13 +163,9 @@ func (e Event) Tags() []EventTag {
 }
 
 // HasTag は指定タグがタイトルに含まれるかを返す。
+// Tags() と一貫させるため、タグ無し時の ETUnkonwn も正しく判定できる。
 func (e Event) HasTag(t EventTag) bool {
-	for _, tag := range e.Tags() {
-		if tag == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(e.Tags(), t)
 }
 
 func (t ParticipationType) JoinAnyhow() bool {
