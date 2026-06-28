@@ -23,6 +23,17 @@ enum ParticipationType {
 
 export type EventTag = "練習" | "試合" | "event" | "meeting" | "sponsor" | "ignore" | "UNKNOWN";
 
+// TAG_PATTERNS はタグ判定の唯一の定義（判定順序込み）。
+// サーバ events.go の tagDefs と順序・正規表現を一致させること。
+const TAG_PATTERNS: { tag: EventTag; re: RegExp }[] = [
+  { tag: "練習", re: /[＃#]練習/ },
+  { tag: "試合", re: /[＃#]試合/ },
+  { tag: "ignore", re: /[＃#]ignore/ },
+  { tag: "meeting", re: /[＃#](meeting|mtg)/ },
+  { tag: "event", re: /[＃#]event/ },
+  { tag: "sponsor", re: /[＃#](sponsor|スポンサー)/ },
+];
+
 export default class TeamEvent {
   constructor(
       public google: GoogleEvent,
@@ -35,13 +46,14 @@ export default class TeamEvent {
   static placeholder(): TeamEvent {
     return new TeamEvent({ id: '', title: 'xx', location: 'xxx', start_time: 0, end_time: 0 }, {});
   }
-  tag(): EventTag {
-    const t = this.google.title;
-    if (/[＃#]練習/.test(t)) return "練習";
-    if (/[＃#]試合/.test(t)) return "試合";
-    if (/[＃#]event/.test(t)) return "event";
-    if (/[＃#]meeting|mtg/.test(t)) return "meeting";
-    if (/[＃#](sponsor|スポンサー)/.test(t)) return "sponsor";
-    return "UNKNOWN";
+  // tags はタイトルに含まれる全てのタグを返す（複数タグ対応）。
+  // 該当タグが無ければ "UNKNOWN" ひとつを返す。
+  tags(): EventTag[] {
+    const result = TAG_PATTERNS.filter(p => p.re.test(this.google.title)).map(p => p.tag);
+    return result.length ? result : ["UNKNOWN"];
+  }
+  // hasTag は指定タグがタイトルに含まれるかを返す（tags() と一貫）。
+  hasTag(tag: EventTag): boolean {
+    return this.tags().includes(tag);
   }
 }

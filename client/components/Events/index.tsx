@@ -60,7 +60,7 @@ export function EventRow({ event, myself, submit, setModalEvent, navigate }) {
   const pats = event.participations;
   const answer = pats[myself.slack.id] || {};
   const id = event.google.id.replace(/@google\.com$/, "");
-  if (event.google?.title?.match(/#ignore$/)) return null;
+  if (event.hasTag("ignore")) return null; // #ignore を含む行は一覧から非表示（位置・全半角不問）
   return (
     <div className={"px-0 py-4 " + (event.google.start_time < Date.now() ? "bg-slate-200" : "")}>
       <div onClick={() => navigate({ to: `/events/${id}` })}>

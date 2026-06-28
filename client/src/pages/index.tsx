@@ -29,7 +29,7 @@ function filterEvents(events: TeamEvent[], active: Set<FilterKey>): TeamEvent[] 
   for (const f of filters) {
     if (active.has(f.key)) f.tags.forEach(t => allowedTags.add(t));
   }
-  return events.filter(ev => allowedTags.has(ev.tag()));
+  return events.filter(ev => ev.tags().some(t => allowedTags.has(t)));
 }
 
 export default function Top() {
