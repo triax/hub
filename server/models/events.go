@@ -67,7 +67,7 @@ var (
 	EventExpressionGame     = regexp.MustCompile("[＃#]試合")
 	EventExpressionIgnore   = regexp.MustCompile("[＃#]ignore")
 	EventExpressionEvent    = regexp.MustCompile("[＃#]event")
-	EventExpressionMeeting  = regexp.MustCompile("[＃#]meeting|mtg")
+	EventExpressionMeeting  = regexp.MustCompile("[＃#](meeting|mtg)")
 	EventExpressionSponsor  = regexp.MustCompile("[＃#](sponsor|スポンサー)")
 )
 
@@ -95,49 +95,80 @@ func (e Event) Participations() (Participations, error) {
 }
 
 func (e Event) IsPractice() bool {
-	return e.Tag() == ETPractice
+	return e.HasTag(ETPractice)
 }
 
 func (e Event) IsGame() bool {
-	return e.Tag() == ETGame
+	return e.HasTag(ETGame)
 }
 
 func (e Event) ShouldSkipReminders(rt ReminderType) bool {
-	if e.Tag() == ETIgnore {
-		return true
+	tags := e.Tags()
+	// #ignore は最優先: 含まれていれば全リマインダを skip する（明示オプトアウト）
+	for _, t := range tags {
+		if t == ETIgnore {
+			return true
+		}
 	}
-	if e.Tag() == ETMeeting {
-		return true
+	// most-permissive: いずれかのタグが当該リマインダの送信を望むなら送信する
+	// （= 全タグが skip と判断したときのみ skip する）
+	for _, t := range tags {
+		if !tagSkipsReminder(t, rt) {
+			return false
+		}
 	}
-	if e.Tag() == ETEvent && rt != RTRSVP {
-		return true // eventは、RSVP以外はskip
-	}
-	if e.Tag() == ETSponsor && rt != RTRSVP {
-		return true // sponsorは、eventと同等: RSVP以外はskip
-	}
-	return false
+	return true
 }
 
-func (e Event) Tag() EventTag {
+// tagSkipsReminder は単一タグが当該リマインダ種別を skip すべきかを返す。
+func tagSkipsReminder(t EventTag, rt ReminderType) bool {
+	switch t {
+	case ETIgnore, ETMeeting:
+		return true // ignore / meeting は全リマインダを skip
+	case ETEvent, ETSponsor:
+		return rt != RTRSVP // event / sponsor は RSVP 以外を skip
+	default:
+		return false // 練習 / 試合 / UNKNOWN は skip しない
+	}
+}
+
+// Tags はタイトルに含まれる全てのタグを返す（複数タグ対応）。
+// 該当タグが無ければ ETUnkonwn ひとつを返す。
+// 判定順序はクライアント TriaxEvent.ts の tags() と一致させること。
+func (e Event) Tags() []EventTag {
+	tags := []EventTag{}
 	if EventExpressionPractice.MatchString(e.Google.Title) {
-		return ETPractice
+		tags = append(tags, ETPractice)
 	}
 	if EventExpressionGame.MatchString(e.Google.Title) {
-		return ETGame
+		tags = append(tags, ETGame)
 	}
 	if EventExpressionIgnore.MatchString(e.Google.Title) {
-		return ETIgnore
+		tags = append(tags, ETIgnore)
 	}
 	if EventExpressionMeeting.MatchString(e.Google.Title) {
-		return ETMeeting
+		tags = append(tags, ETMeeting)
 	}
 	if EventExpressionEvent.MatchString(e.Google.Title) {
-		return ETEvent
+		tags = append(tags, ETEvent)
 	}
 	if EventExpressionSponsor.MatchString(e.Google.Title) {
-		return ETSponsor
+		tags = append(tags, ETSponsor)
 	}
-	return ETUnkonwn
+	if len(tags) == 0 {
+		tags = append(tags, ETUnkonwn)
+	}
+	return tags
+}
+
+// HasTag は指定タグがタイトルに含まれるかを返す。
+func (e Event) HasTag(t EventTag) bool {
+	for _, tag := range e.Tags() {
+		if tag == t {
+			return true
+		}
+	}
+	return false
 }
 
 func (t ParticipationType) JoinAnyhow() bool {

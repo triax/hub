@@ -35,13 +35,19 @@ export default class TeamEvent {
   static placeholder(): TeamEvent {
     return new TeamEvent({ id: '', title: 'xx', location: 'xxx', start_time: 0, end_time: 0 }, {});
   }
-  tag(): EventTag {
+  // tags はタイトルに含まれる全てのタグを返す（複数タグ対応）。
+  // 該当タグが無ければ "UNKNOWN" ひとつを返す。
+  // 判定順序はサーバ events.go の Tags() と一致させること。
+  tags(): EventTag[] {
     const t = this.google.title;
-    if (/[＃#]練習/.test(t)) return "練習";
-    if (/[＃#]試合/.test(t)) return "試合";
-    if (/[＃#]event/.test(t)) return "event";
-    if (/[＃#]meeting|mtg/.test(t)) return "meeting";
-    if (/[＃#](sponsor|スポンサー)/.test(t)) return "sponsor";
-    return "UNKNOWN";
+    const result: EventTag[] = [];
+    if (/[＃#]練習/.test(t)) result.push("練習");
+    if (/[＃#]試合/.test(t)) result.push("試合");
+    if (/[＃#]ignore/.test(t)) result.push("ignore");
+    if (/[＃#](meeting|mtg)/.test(t)) result.push("meeting");
+    if (/[＃#]event/.test(t)) result.push("event");
+    if (/[＃#](sponsor|スポンサー)/.test(t)) result.push("sponsor");
+    if (result.length === 0) result.push("UNKNOWN");
+    return result;
   }
 }
