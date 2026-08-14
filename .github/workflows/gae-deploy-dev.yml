@@ -5,6 +5,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# 連続 push（dependabot PR の連続マージ等）で待機中の run を最新1件に集約する。
+# cancel-in-progress は false: gcloud app deploy 実行中のキャンセルを避ける。
+concurrency:
+  group: gae-deploy-dev
+  cancel-in-progress: false
+
 jobs:
 
   go-test:

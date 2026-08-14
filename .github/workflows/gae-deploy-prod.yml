@@ -5,6 +5,11 @@ on:
     tags: [ 'v*' ]
   workflow_dispatch:
 
+# PROD デプロイの同時実行を直列化する（実行中のデプロイはキャンセルしない）。
+concurrency:
+  group: gae-deploy-prod
+  cancel-in-progress: false
+
 jobs:
 
   go-test:
