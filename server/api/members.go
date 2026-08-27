@@ -50,11 +50,22 @@ func ListMembers(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.URL.Query().Get("cached") == "1" {
-		age := 2 * 60 * 60 // 2時間
-		w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
+		w.Header().Add("Cache-Control", memberCacheControl(memberCacheMaxAgeSeconds))
 	}
 
 	render.JSON(http.StatusOK, members)
+}
+
+const memberCacheMaxAgeSeconds = 2 * 60 * 60 // 2時間
+
+// memberCacheControl はメンバー情報レスポンスの Cache-Control 値を組み立てる。
+//
+// max-age は Datastore 読み取りコストの削減が目的（4589f7e "Cache simple list of
+// members for events RSVP"）なので維持する。一方 immutable は付けない:
+// immutable はリロードしても再検証させないディレクティブなので、Slack プロフィールの
+// ポジション（Title）を変更したユーザに反映の回復手段が無くなる（Issue #536）。
+func memberCacheControl(maxAgeSeconds int) string {
+	return fmt.Sprintf("public, max-age=%d", maxAgeSeconds)
 }
 
 func GetMember(w http.ResponseWriter, req *http.Request) {
@@ -75,8 +86,7 @@ func GetMember(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	age := 2 * 60 * 60 // 2時間
-	w.Header().Add("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", age))
+	w.Header().Add("Cache-Control", memberCacheControl(memberCacheMaxAgeSeconds))
 	render.JSON(http.StatusOK, member)
 }
 
