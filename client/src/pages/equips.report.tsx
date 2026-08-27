@@ -17,9 +17,16 @@ export default function Report() {
   const repo = useMemo(() => new EquipRepo(), []);
   const navigate = useNavigate();
   const search: Record<string, string> = useSearch({ strict: false });
-  if (equips.length) { stopLoading(); } else { startLoading(); }
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    repo.list().then(setEquips);
+    startLoading();
+    repo.list()
+      .then(setEquips)
+      .catch(err => console.error(err))
+      .finally(() => { setLoaded(true); stopLoading(); });
+    // startLoading/stopLoading は AppProvider が毎レンダー新しい関数参照を返すため、
+    // deps に含めると isLoading の切り替えのたびにこの effect が再実行され無限ループする。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
   return (
     <Layout>
@@ -36,6 +43,7 @@ export default function Report() {
       </div>
 
       <h1 className="my-4 text-2xl font-bold">何を持って帰ってくれましたか?</h1>
+      {loaded && equips.length === 0 ? <p className="text-center p-8 text-gray-400">回収対象の備品がありません</p> : null}
       <div className="w-full">
         {equips.sort(Equip.sort).map(e => <EquipCard
           key={e.id} equip={e}

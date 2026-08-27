@@ -10,11 +10,18 @@ import { useAppContext } from "../context";
 export default function List() {
   const { myself, startLoading, stopLoading } = useAppContext();
   const [equips, setEquips] = useState<Equip[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const repo = useMemo(() => new EquipRepo(), []);
   const navigate = useNavigate();
-  if (equips.length) { stopLoading(); } else { startLoading(); }
   useEffect(() => {
-    repo.list().then(setEquips);
+    startLoading();
+    repo.list()
+      .then(setEquips)
+      .catch(err => console.error(err))
+      .finally(() => { setLoaded(true); stopLoading(); });
+    // startLoading/stopLoading は AppProvider が毎レンダー新しい関数参照を返すため、
+    // deps に含めると isLoading の切り替えのたびにこの effect が再実行され無限ループする。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
 
   const takeHome = equips.filter(e => e.storageType !== "warehouse").sort(Equip.sort);
@@ -22,6 +29,7 @@ export default function List() {
 
   return (
     <Layout>
+      {loaded && equips.length === 0 ? <p className="text-center p-8 text-gray-400">備品がありません</p> : null}
       <EquipSection title="持ち帰り管理" equips={takeHome} navigate={navigate} />
       <EquipSection title="倉庫管理"     equips={warehouse} navigate={navigate} />
       <div className="
