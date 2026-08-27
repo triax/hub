@@ -99,7 +99,8 @@ export default function TapingRequest() {
                   checked={selectedIDs.has(item.id)}
                   onChange={() => toggle(item.id)}
                 />
-                <span className="text-sm">{item.name}</span>
+                {/* 名前側を伸長させて価格を右端に揃える（/events/{id}/taping の行と同じ見え方） */}
+                <span className="text-sm flex-1">{item.name}</span>
                 {item.price > 0 && (
                   <span className="text-xs text-gray-400">¥{item.price}</span>
                 )}
