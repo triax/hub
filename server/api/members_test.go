@@ -12,7 +12,7 @@ import (
 // Slack プロフィールのポジション（Title）を変更しても、ユーザは最大 max-age の間
 // 反映させる手段を持てない。max-age 自体は Datastore 読み取りコスト削減のために残す。
 func TestMemberCacheControl_NotImmutable(t *testing.T) {
-	got := memberCacheControl(memberCacheMaxAgeSeconds)
+	got := memberCacheControl()
 
 	if strings.Contains(got, "immutable") {
 		t.Fatalf("Cache-Control must not contain %q, got %q", "immutable", got)
@@ -22,12 +22,5 @@ func TestMemberCacheControl_NotImmutable(t *testing.T) {
 	}
 	if want := "public"; !strings.Contains(got, want) {
 		t.Fatalf("Cache-Control must contain %q, got %q", want, got)
-	}
-}
-
-// TestMemberCacheControl_MaxAgeReflectsArgument は、max-age が引数で決まることを検証する。
-func TestMemberCacheControl_MaxAgeReflectsArgument(t *testing.T) {
-	if got, want := memberCacheControl(60), "public, max-age=60"; got != want {
-		t.Fatalf("memberCacheControl(60) = %q, want %q", got, want)
 	}
 }
