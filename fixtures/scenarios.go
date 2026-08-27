@@ -172,13 +172,16 @@ func tapingScenario(now time.Time) Scenario {
 		{9004, "アキレス腱", 150, []models.TapeUsage{under}},
 		{9005, "ふくらはぎ", 180, []models.TapeUsage{white}},
 	}
+	menuByID := map[int64]*models.TapingMenuItem{}
 	for _, d := range menuDefs {
-		entities = append(entities, NewEntity(TapingMenuItemKey(d.id), &models.TapingMenuItem{
+		m := &models.TapingMenuItem{
 			Name:       d.name,
 			Price:      d.price,
 			TapeUsages: d.usages,
-			SortOrder:  0,
-		}))
+			SortOrder:  0, // PROD 同様、明示的な表示順は入っていない
+		}
+		menuByID[d.id] = m
+		entities = append(entities, NewEntity(TapingMenuItemKey(d.id), m))
 	}
 
 	// --- 申請済みリクエスト（2名 × 複数項目） ---
@@ -194,18 +197,6 @@ func tapingScenario(now time.Time) Scenario {
 		{playerBSlackID, 9002}, // 足首
 		{playerBSlackID, 9004}, // アキレス腱
 	}
-	menuByID := map[int64]struct {
-		name   string
-		price  int
-		usages []models.TapeUsage
-	}{}
-	for _, d := range menuDefs {
-		menuByID[d.id] = struct {
-			name   string
-			price  int
-			usages []models.TapeUsage
-		}{d.name, d.price, d.usages}
-	}
 	for _, r := range requestDefs {
 		m := menuByID[r.menuID]
 		entities = append(entities, NewEntity(
@@ -214,13 +205,26 @@ func tapingScenario(now time.Time) Scenario {
 				MemberID:     r.memberID,
 				EventID:      targetEventID,
 				MenuItemID:   r.menuID,
-				MenuItemName: m.name,
-				Price:        m.price,
-				TapeUsages:   m.usages,
+				MenuItemName: m.Name,
+				Price:        m.Price,
+				TapeUsages:   m.TapeUsages,
 				RequestedAt:  now.UnixMilli(),
 			},
 		))
 	}
+
+	// 「その他」自由記述の申請も1件だけ置く。#631 の表示（本文が出て金額列が出ない）と
+	// #632 の並び（名前順に紛れず常に末尾）を、送信操作を挟まずに検証できるようにする。
+	entities = append(entities, NewEntity(
+		TapingNoteKey(playerBSlackID, targetEventID),
+		&models.Taping{
+			MemberID:     playerBSlackID,
+			EventID:      targetEventID,
+			MenuItemName: "その他",
+			Note:         "テープはかぶれにくいものでお願いします",
+			RequestedAt:  now.UnixMilli(),
+		},
+	))
 
 	return Scenario{Name: "taping", Entities: entities}
 }

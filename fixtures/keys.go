@@ -52,6 +52,12 @@ func TapingKey(memberID, eventID string, menuItemID int64) *datastore.Key {
 	return datastore.NameKey(models.KindTaping, fmt.Sprintf("%s_%s_%d", memberID, eventID, menuItemID), nil)
 }
 
+// TapingNoteKey は「その他」自由記述エンティティの key。
+// 同じく実コード（taping.go の tapingNoteKeyName）の NameKey 規約に従う。
+func TapingNoteKey(memberID, eventID string) *datastore.Key {
+	return datastore.NameKey(models.KindTaping, fmt.Sprintf("%s_%s_other", memberID, eventID), nil)
+}
+
 func ApplicationKey(id string) *datastore.Key {
 	return datastore.NameKey(models.KindApplication, id, nil)
 }

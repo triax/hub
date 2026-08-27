@@ -387,17 +387,18 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	}
 	toDelete := []*datastore.Key{}
 	for i, t := range existing {
+		// MenuItemID == 0（「その他」）は menu_item_ids に載らないので、本文が空に
+		// なったときだけ消す。実在する分だけを対象にするので、note を使っていない
+		// 大多数の送信で余計な Delete RPC が出ない。
 		if t.MenuItemID == 0 {
+			if note == "" {
+				toDelete = append(toDelete, existKeys[i])
+			}
 			continue
 		}
 		if !newSet[t.MenuItemID] {
 			toDelete = append(toDelete, existKeys[i])
 		}
-	}
-	// note が空なら「その他」エンティティを消す（存在しない key の Delete は no-op）。
-	noteKey := datastore.NameKey(models.KindTaping, tapingNoteKeyName(slackID, body.EventID), nil)
-	if note == "" {
-		toDelete = append(toDelete, noteKey)
 	}
 	if len(toDelete) > 0 {
 		if err := client.DeleteMulti(ctx, toDelete); err != nil {
@@ -429,7 +430,8 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	// 「その他」自由記述は専用 NameKey の1エンティティとして upsert する。
 	// 費用・テープ本数の集計を壊さないよう Price = 0 / TapeUsages = nil のまま置く。
 	if note != "" {
-		putKeys = append(putKeys, noteKey)
+		putKeys = append(putKeys, datastore.NameKey(models.KindTaping,
+			tapingNoteKeyName(slackID, body.EventID), nil))
 		putValues = append(putValues, &models.Taping{
 			MemberID:     slackID,
 			EventID:      body.EventID,
