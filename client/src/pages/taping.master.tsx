@@ -220,21 +220,17 @@ export default function TapingMaster() {
                     value={draft.name}
                     onChange={e => setDraft({ ...draft, name: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">単価目安（円）</label>
-                    <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
-                      value={draft.price}
-                      onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">表示順</label>
-                    <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
-                      value={draft.sort_order}
-                      onChange={e => setDraft({ ...draft, sort_order: Number(e.target.value) })} />
-                  </div>
+                {/*
+                  「表示順」欄は廃止した。表示順は日本語名の昇順で全画面共通に決まるため
+                  （client/models/*.ts の sort コンパレータ）、手入力しても効かない死んだ UI になる。
+                  draft.sort_order は既存エンティティとの API 互換のため保持し、既存値をそのまま送る。
+                */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">単価目安（円）</label>
+                  <input type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                    value={draft.price}
+                    onChange={e => setDraft({ ...draft, price: Number(e.target.value) })} />
                 </div>
                 {tapeItems.filter(t => !t.disabled).length > 0 && (
                   <div>
@@ -312,21 +308,13 @@ export default function TapingMaster() {
                     value={tapeDraft.name}
                     onChange={e => setTapeDraft({ ...tapeDraft, name: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">基本ストック（本）</label>
-                    <input type="number" step="0.5" min="0"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
-                      value={tapeDraft.stock_count}
-                      onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">表示順</label>
-                    <input type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
-                      value={tapeDraft.sort_order}
-                      onChange={e => setTapeDraft({ ...tapeDraft, sort_order: Number(e.target.value) })} />
-                  </div>
+                {/* 「表示順」欄は廃止（施術メニュー側と同じ理由。sort_order は API 互換のため保持） */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">基本ストック（本）</label>
+                  <input type="number" step="0.5" min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm transition-colors duration-100 focus:border-blue-400 outline-none"
+                    value={tapeDraft.stock_count}
+                    onChange={e => setTapeDraft({ ...tapeDraft, stock_count: Number(e.target.value) })} />
                 </div>
                 <label className="flex items-center space-x-3 py-1 cursor-pointer">
                   <input type="checkbox" className="w-5 h-5 rounded" checked={tapeDraft.disabled}

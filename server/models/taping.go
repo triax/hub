@@ -34,6 +34,11 @@ type TapingMenuItem struct {
 // Taping は1部位=1エンティティ。
 // NameKey: memberID + "_" + eventID + "_" + menuItemID
 // → client.Put が自動 upsert になり、再申請は差分削除＋Put で実現する。
+//
+// 例外として「その他」自由記述は対応する TapingMenuItem を持たないため、
+// NameKey: memberID + "_" + eventID + "_other" の1エンティティとして保存する
+// （MenuItemID = 0 / Price = 0 / TapeUsages = nil）。MenuItemID == 0 が
+// 「その他」の判別子であり、Datastore の自動採番 ID は 0 にならないので衝突しない。
 type Taping struct {
 	Key            *datastore.Key `datastore:"__key__"`
 	MemberID       string         `json:"member_id"`
@@ -43,5 +48,6 @@ type Taping struct {
 	Price          int            `json:"price"`
 	TapeUsagesJSON string         `json:"-" datastore:",noindex"` // JSON: []TapeUsage（申請時スナップショット）
 	TapeUsages     []TapeUsage    `json:"tape_usages" datastore:"-"`
+	Note           string         `json:"note" datastore:",noindex"` // 「その他」自由記述（MenuItemID == 0 のときのみ非空）
 	RequestedAt    int64          `json:"requested_at"`
 }

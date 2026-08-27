@@ -58,10 +58,10 @@ export default class TapingRepo {
   }
 
   // リクエスト
-  submitRequest(eventID: string, menuItemIDs: number[]): Promise<Taping[]> {
+  submitRequest(eventID: string, menuItemIDs: number[], note = ""): Promise<Taping[]> {
     return fetchJSON(this.baseURL + "/api/1/taping/requests", {
       method: "POST",
-      body: JSON.stringify({ event_id: eventID, menu_item_ids: menuItemIDs }),
+      body: JSON.stringify({ event_id: eventID, menu_item_ids: menuItemIDs, note }),
     }).then(Taping.listFromAPIResponse);
   }
 

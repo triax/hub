@@ -1,9 +1,13 @@
 import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/layout";
+import Taping from "../../models/Taping";
 import TapingMenuItem from "../../models/TapingMenuItem";
 import TeamEvent from "../../models/TriaxEvent";
 import TapingRepo from "../../repository/TapingRepo";
+
+// 「その他」自由記述の上限。サーバ側（server/api/taping.go）と揃える。
+const NOTE_MAX_LEN = 200;
 
 export default function TapingRequest() {
   const repo = useMemo(() => new TapingRepo(), []);
@@ -14,6 +18,7 @@ export default function TapingRequest() {
   const initialEventID = useMemo(() => search.event ?? "", [search.event]);
   const [selectedEventID, setSelectedEventID] = useState<string>(initialEventID);
   const [selectedIDs, setSelectedIDs] = useState<Set<number>>(new Set());
+  const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -31,7 +36,10 @@ export default function TapingRequest() {
     if (!selectedEventID) return;
     setSubmitted(false);
     repo.getMyRequest(selectedEventID).then(tapings => {
-      setSelectedIDs(new Set(tapings.map(t => t.menuItemID)));
+      // 「その他」（menuItemID === 0）はチェックボックスに対応しないので選択集合には入れず、
+      // 自由記述欄の初期値として復元する。
+      setSelectedIDs(new Set(tapings.filter(t => !Taping.isNote(t)).map(t => t.menuItemID)));
+      setNote(tapings.find(Taping.isNote)?.note ?? "");
     });
   }, [selectedEventID, repo]);
 
@@ -47,7 +55,7 @@ export default function TapingRequest() {
     if (!selectedEventID) return;
     setSubmitting(true);
     try {
-      await repo.submitRequest(selectedEventID, Array.from(selectedIDs));
+      await repo.submitRequest(selectedEventID, Array.from(selectedIDs), note.trim());
       setSubmitted(true);
     } finally {
       setSubmitting(false);
@@ -91,12 +99,30 @@ export default function TapingRequest() {
                   checked={selectedIDs.has(item.id)}
                   onChange={() => toggle(item.id)}
                 />
-                <span className="text-sm">{item.name}</span>
+                {/* 名前側を伸長させて価格を右端に揃える（/events/{id}/taping の行と同じ見え方） */}
+                <span className="text-sm flex-1">{item.name}</span>
                 {item.price > 0 && (
                   <span className="text-xs text-gray-400">¥{item.price}</span>
                 )}
               </label>
             ))}
+          </div>
+
+          {/*
+            「その他」自由記述。マスタ項目のチェックボックス群（上の space-y-2）の外側に置くことで、
+            日本語名ソートの対象外かつ常に末尾、という位置を DOM 構造で保証する。
+          */}
+          <div className="mt-3">
+            <label htmlFor="taping-note" className="block text-sm text-gray-600 mb-1">その他（自由記述）</label>
+            <input
+              id="taping-note"
+              type="text"
+              className="w-full border border-gray-300 rounded-md p-2 text-sm"
+              placeholder="マスタにない部位・要望があれば記入してください"
+              maxLength={NOTE_MAX_LEN}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+            />
           </div>
         </div>
 
@@ -109,7 +135,7 @@ export default function TapingRequest() {
         <button
           className="w-full bg-blue-700 text-white py-3 rounded-md font-medium disabled:opacity-50"
           onClick={submit}
-          disabled={submitting || selectedIDs.size === 0}
+          disabled={submitting || (selectedIDs.size === 0 && note.trim() === "")}
         >
           {submitting ? "送信中..." : "送信する"}
         </button>

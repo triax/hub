@@ -36,8 +36,16 @@ export default class TapingMenuItem {
     );
   }
 
+  // 日本語名の昇順コンパレータ。sortOrder（表示順）は比較に使わない
+  // （マスタ側の「表示順」欄は廃止済みで、全画面が名前順で揃うことを優先する）。
+  static sort(p: TapingMenuItem, n: TapingMenuItem): number {
+    return p.name.localeCompare(n.name, "ja");
+  }
+
+  // 表示順のソートはここに集約する。ページ側で .sort() を書くと呼び出し漏れが起きるため、
+  // API レスポンスを model に変換するこの choke point でソート済み配列を返す。
   static listFromAPIResponse(res: any[]): TapingMenuItem[] {
-    return res.map(TapingMenuItem.fromAPIResponse);
+    return res.map(TapingMenuItem.fromAPIResponse).sort(TapingMenuItem.sort);
   }
 
   static draft(item?: TapingMenuItem): TapingMenuItemDraft {

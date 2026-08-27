@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"cloud.google.com/go/datastore"
 	"github.com/go-chi/chi/v5"
@@ -288,6 +290,19 @@ func DeleteTapingMenuItem(w http.ResponseWriter, req *http.Request) {
 
 // --- Taping requests ---
 
+const (
+	// tapingNoteMaxLen は「その他」自由記述の上限（rune 数）。
+	tapingNoteMaxLen = 200
+	// tapingNoteMenuItemName は「その他」エンティティの MenuItemName スナップショット。
+	tapingNoteMenuItemName = "その他"
+)
+
+// tapingNoteKeyName は「その他」自由記述エンティティの NameKey 名を返す。
+// メニュー項目側の "{memberID}_{eventID}_{menuItemID}" と衝突しない別体系。
+func tapingNoteKeyName(memberID, eventID string) string {
+	return fmt.Sprintf("%s_%s_other", memberID, eventID)
+}
+
 func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
@@ -302,6 +317,7 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 	body := struct {
 		EventID     string  `json:"event_id"`
 		MenuItemIDs []int64 `json:"menu_item_ids"`
+		Note        string  `json:"note"`
 	}{}
 	defer req.Body.Close()
 	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
@@ -309,12 +325,32 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	note := strings.TrimSpace(body.Note)
+	if utf8.RuneCountInString(note) > tapingNoteMaxLen {
+		render.JSON(http.StatusBadRequest, marmoset.P{
+			"error": fmt.Sprintf("note must be %d characters or less", tapingNoteMaxLen),
+		})
+		return
+	}
+
+	// 「その他」エンティティは MenuItemID = 0 で保存されるため、クライアントの
+	// 復元処理が 0 を menu_item_ids に混ぜて送り返す余地がある。0 は
+	// datastore.IDKey では incomplete key になり GetMulti 全体を落とすので、
+	// ここで確実に除外する（クライアント側にも同じガードを置いた二重の防波堤）。
+	menuItemIDs := make([]int64, 0, len(body.MenuItemIDs))
+	for _, mid := range body.MenuItemIDs {
+		if mid <= 0 {
+			continue
+		}
+		menuItemIDs = append(menuItemIDs, mid)
+	}
+
 	// メニューアイテムをまとめて取得してスナップショット用データを準備
-	menuKeys := make([]*datastore.Key, len(body.MenuItemIDs))
-	for i, mid := range body.MenuItemIDs {
+	menuKeys := make([]*datastore.Key, len(menuItemIDs))
+	for i, mid := range menuItemIDs {
 		menuKeys[i] = datastore.IDKey(models.KindTapingMenuItem, mid, nil)
 	}
-	menuItems := make([]models.TapingMenuItem, len(body.MenuItemIDs))
+	menuItems := make([]models.TapingMenuItem, len(menuItemIDs))
 	if len(menuKeys) > 0 {
 		if err := client.GetMulti(ctx, menuKeys, menuItems); err != nil {
 			if me, ok := err.(datastore.MultiError); ok {
@@ -342,13 +378,24 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 新リクエストに含まれない既存エンティティを削除
+	// 新リクエストに含まれない既存エンティティを削除。
+	// MenuItemID == 0（「その他」）は menu_item_ids に載らないため、この差分削除の
+	// 対象からは除外し、note の有無だけで put / delete を決める（下に一元化）。
 	newSet := map[int64]bool{}
-	for _, mid := range body.MenuItemIDs {
+	for _, mid := range menuItemIDs {
 		newSet[mid] = true
 	}
 	toDelete := []*datastore.Key{}
 	for i, t := range existing {
+		// MenuItemID == 0（「その他」）は menu_item_ids に載らないので、本文が空に
+		// なったときだけ消す。実在する分だけを対象にするので、note を使っていない
+		// 大多数の送信で余計な Delete RPC が出ない。
+		if t.MenuItemID == 0 {
+			if note == "" {
+				toDelete = append(toDelete, existKeys[i])
+			}
+			continue
+		}
 		if !newSet[t.MenuItemID] {
 			toDelete = append(toDelete, existKeys[i])
 		}
@@ -362,9 +409,9 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 
 	// 新規・更新分を PutMulti（NameKey により upsert）
 	now := time.Now().Unix() * 1000
-	putKeys := make([]*datastore.Key, 0, len(body.MenuItemIDs))
-	putValues := make([]*models.Taping, 0, len(body.MenuItemIDs))
-	for i, mid := range body.MenuItemIDs {
+	putKeys := make([]*datastore.Key, 0, len(menuItemIDs)+1)
+	putValues := make([]*models.Taping, 0, len(menuItemIDs)+1)
+	for i, mid := range menuItemIDs {
 		menuItem := menuItems[i]
 		t := &models.Taping{
 			MemberID:       slackID,
@@ -379,6 +426,20 @@ func SubmitTapingRequest(w http.ResponseWriter, req *http.Request) {
 		putKeys = append(putKeys, datastore.NameKey(models.KindTaping,
 			fmt.Sprintf("%s_%s_%d", slackID, body.EventID, mid), nil))
 		putValues = append(putValues, t)
+	}
+	// 「その他」自由記述は専用 NameKey の1エンティティとして upsert する。
+	// 費用・テープ本数の集計を壊さないよう Price = 0 / TapeUsages = nil のまま置く。
+	if note != "" {
+		putKeys = append(putKeys, datastore.NameKey(models.KindTaping,
+			tapingNoteKeyName(slackID, body.EventID), nil))
+		putValues = append(putValues, &models.Taping{
+			MemberID:     slackID,
+			EventID:      body.EventID,
+			MenuItemID:   0,
+			MenuItemName: tapingNoteMenuItemName,
+			Note:         note,
+			RequestedAt:  now,
+		})
 	}
 	if len(putKeys) > 0 {
 		if _, err := client.PutMulti(ctx, putKeys, putValues); err != nil {
@@ -468,7 +529,7 @@ func ListTapingEvents(w http.ResponseWriter, req *http.Request) {
 	}
 	defer client.Close()
 
-	from := time.Now().Add(-40 * 24 * time.Hour).Unix() * 1000
+	from := time.Now().Add(-40*24*time.Hour).Unix() * 1000
 	all := []models.Event{}
 	if _, err := client.GetAll(ctx,
 		datastore.NewQuery(models.KindEvent).Filter("Google.StartTime >", from).Order("Google.StartTime"),

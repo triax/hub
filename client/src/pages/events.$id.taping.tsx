@@ -118,8 +118,16 @@ function MemberTapingRow({ memberID, items }: { memberID: string; items: Taping[
       <div className="divide-y divide-gray-100">
         {items.map((t, i) => (
           <div key={i} className="flex justify-between py-1 text-sm text-gray-700">
-            <span>{t.menuItemName}</span>
-            <span className="text-gray-400">¥{t.price}</span>
+            {/* 「その他」自由記述は本文を見せる。金額は持たないので ¥0 は出さない。
+                ラベルは申請時スナップショット（menuItemName）をそのまま使う */}
+            {Taping.isNote(t) ? (
+              <span className="text-gray-600">{t.menuItemName}: {t.note}</span>
+            ) : (
+              <>
+                <span>{t.menuItemName}</span>
+                <span className="text-gray-400">¥{t.price}</span>
+              </>
+            )}
           </div>
         ))}
       </div>
