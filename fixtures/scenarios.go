@@ -11,8 +11,9 @@ import (
 // registry は名前 → scenario ビルダーのレジストリ。
 // scenario はビルダー関数として登録する（相対日付など実行時計算を含むため）。
 var registry = map[string]func(now time.Time) Scenario{
-	"default": defaultScenario,
-	"taping":  tapingScenario,
+	"default":  defaultScenario,
+	"taping":   tapingScenario,
+	"position": positionScenario,
 }
 
 // Names は登録済み scenario 名を返す（ソート済み）。
@@ -227,4 +228,54 @@ func tapingScenario(now time.Time) Scenario {
 	))
 
 	return Scenario{Name: "taping", Entities: entities}
+}
+
+// positionScenario は「Slack プロフィールのポジション変更が既回答分に反映されない」
+// （Issue #536）の回帰を固定するための最小データ。
+//
+// 本質は「Participation に残った古いポジションのスナップショットを、画面が
+// 二度と読まないこと」なので、それを送信操作なしで検証できる状態を作る:
+//
+//   - Member の現在の Slack Title は "DL"
+//   - 同じメンバーの既回答（join）が、7bad57e 以前の形式のまま Datastore に居る。
+//     すなわち ParticipationsJSONString に name / picture / title("WR") が残っている。
+//     現行の models.Participation はこれらを持たないため decode 時に捨てられるが、
+//     フロントには participations_json_str が生のまま渡るので、画面が誤って
+//     entry.title を読み戻せば "WR" セクションに出てしまう。
+//
+// default / taping とは entity が一切重ならないので、単体でも合成でも成立する。
+func positionScenario(now time.Time) Scenario {
+	const (
+		playerSlackID = "UFIXTUREPOSITION1"
+		eventID       = "fixture_event_position_01"
+		currentTitle  = "DL" // メンバーの現在のポジション（期待される表示先）
+		staleTitle    = "WR" // 回答時に保存された古いポジション（表示されてはならない）
+	)
+
+	player := &models.Member{Status: models.MSActive}
+	player.Slack.ID = playerSlackID
+	player.Slack.TeamID = "T9LHPRHA6"
+	player.Slack.Name = "fixture-position-player"
+	player.Slack.RealName = "Fixture Position Player"
+	player.Slack.Profile.RealName = "Fixture Position Player"
+	player.Slack.Profile.DisplayName = "ぽじしょん太郎"
+	player.Slack.Profile.Title = currentTitle
+
+	start := now.AddDate(0, 0, 4)
+	ev := &models.Event{}
+	ev.Google.ID = eventID
+	ev.Google.Title = "#練習 ポジション反映検証"
+	ev.Google.StartTime = start.UnixMilli()
+	ev.Google.EndTime = start.Add(3 * time.Hour).UnixMilli()
+	// 旧形式（7bad57e 以前）の Participation をそのまま再現する。
+	// 現行スキーマに無いキーを含むため、構造体ではなく生の JSON で書く。
+	ev.ParticipationsJSONString = fmt.Sprintf(
+		`{%q:{"type":"join","params":{},"name":%q,"picture":"","title":%q}}`,
+		playerSlackID, player.Slack.Profile.RealName, staleTitle,
+	)
+
+	return Scenario{Name: "position", Entities: []Entity{
+		NewEntity(MemberKey(playerSlackID), player),
+		NewEntity(EventKey(eventID), ev),
+	}}
 }
