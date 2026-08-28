@@ -90,18 +90,16 @@ export default function Layout({ children }: LayoutProps) {
                   {/* Items HIDDEN in small */}
                   <div className="hidden md:block">
                     <div className="ml-10 flex items-baseline space-x-4">
-                      {navigation.map(item => item.link == pathname ? (
-                        <Fragment key={item.label}>
-                          <a
-                            href={item.link}
-                            className="bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium"
-                          >{item.label}</a>
-                        </Fragment>
-                      ) : (
+                      {navigation.map(item => (
                         <a
                           key={item.label}
                           href={item.link}
-                          className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                          className={classnames(
+                            item.link === pathname
+                              ? "bg-gray-900 text-white"
+                              : "text-gray-300 hover:bg-gray-700 hover:text-white",
+                            "px-3 py-2 rounded-md text-sm font-medium",
+                          )}
                         >{item.label}</a>
                       ))}
                     </div>
@@ -190,12 +188,17 @@ export default function Layout({ children }: LayoutProps) {
 
             <Disclosure.Panel className="md:hidden">
               <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                {navigation.map((item, i) => i === 0 ? (
-                  <Fragment key={item.label}>
-                    <a href={item.link} className="bg-gray-900 text-white block px-3 py-2 rounded-md text-base font-medium">{item.label}</a>
-                  </Fragment>
-                ) : (
-                  <a key={item.label} href={item.link} className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">{item.label}</a>
+                {navigation.map(item => (
+                  <a
+                    key={item.label}
+                    href={item.link}
+                    className={classnames(
+                      item.link === pathname
+                        ? "bg-gray-900 text-white"
+                        : "text-gray-300 hover:bg-gray-700 hover:text-white",
+                      "block px-3 py-2 rounded-md text-base font-medium",
+                    )}
+                  >{item.label}</a>
                 ))}
               </div>
               <div className="pt-4 pb-3 border-t border-gray-700">
