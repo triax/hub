@@ -28,7 +28,7 @@ function classnames(...classes) {
 function Loading({isLoading}) {
   if (!isLoading) return <></>;
   return (
-    <div className="fixed w-full h-full bg-black bg-opacity-60 flex justify-center items-center space-x-2">
+    <div className="fixed w-full h-full z-30 bg-black bg-opacity-60 flex justify-center items-center space-x-2">
       <RefreshIcon color="white" className="w-10 h-10 animate-spin" />
       <span className="text-white text-xl">Loading...</span>
     </div>
@@ -69,7 +69,7 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div>
       <Loading isLoading={isLoading} />
-      <Disclosure as="nav" className="bg-gray-800">
+      <Disclosure as="nav" className="relative z-40 bg-gray-800">
         {({open}) => (
           <>
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">

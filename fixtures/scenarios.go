@@ -14,6 +14,7 @@ var registry = map[string]func(now time.Time) Scenario{
 	"default":  defaultScenario,
 	"taping":   tapingScenario,
 	"position": positionScenario,
+	"equips":   equipsScenario,
 }
 
 // Names は登録済み scenario 名を返す（ソート済み）。
@@ -228,6 +229,34 @@ func tapingScenario(now time.Time) Scenario {
 	))
 
 	return Scenario{Name: "taping", Entities: entities}
+}
+
+// equipsScenario は備品一覧・回収報告（/equips, /equips/report）の「1件以上ある」
+// ケースの回帰確認に使う最小データ（#636 AC-4）。
+//
+// #636 の本質的な受け入れ条件は「Equip が 0 件でも壊れないこと」であり、この
+// scenario は 0 件を回避する対処ではなく、0 件修正が 1 件以上のケースを壊していない
+// ことを確認するための検証用 fixture（Issue #636「修正提案 4」で明示的に許容されている）。
+// SEED_SCENARIOS のデフォルト（default,taping）には含めない。
+//
+// default / taping とは entity が重ならない。
+func equipsScenario(now time.Time) Scenario {
+	entities := []Entity{
+		NewEntity(EquipKey(9001), &models.Equip{
+			Name:        "フィクスチャ用ヘルメット",
+			ForPractice: true,
+			ForGame:     true,
+			StorageType: models.StorageTypeTakeHome,
+		}),
+		NewEntity(EquipKey(9002), &models.Equip{
+			Name:        "フィクスチャ用タックリングダミー",
+			ForPractice: true,
+			ForGame:     false,
+			StorageType: models.StorageTypeWarehouse,
+		}),
+	}
+	_ = now // 相対日付を持たないため未使用（他 scenario とシグネチャを揃えるための引数）
+	return Scenario{Name: "equips", Entities: entities}
 }
 
 // positionScenario は「Slack プロフィールのポジション変更が既回答分に反映されない」
