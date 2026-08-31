@@ -64,6 +64,14 @@ var kindRules = map[string]kindRule{
 			return nil
 		},
 	},
+	models.KindHPProfile: {
+		required: func(v interface{}) error {
+			if _, ok := v.(*models.MemberHPProfile); !ok {
+				return typeErr(models.KindHPProfile, v)
+			}
+			return nil
+		},
+	},
 	models.KindEquip: {
 		required: func(v interface{}) error {
 			e, ok := v.(*models.Equip)

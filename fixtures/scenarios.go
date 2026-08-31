@@ -3,6 +3,7 @@ package fixtures
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/triax/hub/server/models"
@@ -11,10 +12,11 @@ import (
 // registry は名前 → scenario ビルダーのレジストリ。
 // scenario はビルダー関数として登録する（相対日付など実行時計算を含むため）。
 var registry = map[string]func(now time.Time) Scenario{
-	"default":  defaultScenario,
-	"taping":   tapingScenario,
-	"position": positionScenario,
-	"equips":   equipsScenario,
+	"default":   defaultScenario,
+	"taping":    tapingScenario,
+	"position":  positionScenario,
+	"equips":    equipsScenario,
+	"hpprofile": hpprofileScenario,
 }
 
 // Names は登録済み scenario 名を返す（ソート済み）。
@@ -306,5 +308,92 @@ func positionScenario(now time.Time) Scenario {
 	return Scenario{Name: "position", Entities: []Entity{
 		NewEntity(MemberKey(playerSlackID), player),
 		NewEntity(EventKey(eventID), ev),
+	}}
+}
+
+// hpprofileScenario は公開メンバー API（GET /api/1/public/members）の除外規則を
+// 実環境で検証できるようにする最小データ（Issue #643）。
+//
+// 除外規則は「未入力・全体非掲載・全項目非掲載は返さない」なので、除外される側だけ
+// でなく「返るべきメンバー」も置かないと、レスポンスが 0 件でも検証が通ってしまう
+// （空虚な PASS）。そのため 4 パターンを 1 セットで持つ:
+//
+//	filled      … 全項目入力済み。返る。position は "staff" で保存されており、
+//	              正規化されて "Staff" として返ることも同時に観測できる
+//	untouched   … Member はいるが HP プロフィール未作成。返らない
+//	hidden      … 入力済みだが hide_from_hp=true。返らない
+//	allhidden   … 入力済みだが全項目を hidden_fields で非掲載。返らない
+//
+// default / taping / position とは entity が重ならないので、単体でも合成でも成立する。
+func hpprofileScenario(now time.Time) Scenario {
+	_ = now // 相対日付を持たない（他 scenario とシグネチャを揃えるための引数）
+
+	newMember := func(slackID, realName, title string) *models.Member {
+		m := &models.Member{Status: models.MSActive}
+		m.Slack.ID = slackID
+		m.Slack.TeamID = "T9LHPRHA6"
+		m.Slack.Name = strings.ToLower(slackID)
+		m.Slack.RealName = realName
+		m.Slack.Profile.RealName = realName
+		m.Slack.Profile.DisplayName = realName
+		m.Slack.Profile.Title = title
+		return m
+	}
+
+	const (
+		filledID    = "UFIXTUREHPFILLED1"
+		untouchedID = "UFIXTUREHPEMPTY01"
+		hiddenID    = "UFIXTUREHPHIDDEN1"
+		allHiddenID = "UFIXTUREHPALLHID1"
+	)
+
+	filled := &models.MemberHPProfile{
+		DisplayName:         "HP 入力済み",
+		DisplayNameKana:     "えいちぴーにゅうりょくずみ",
+		FirstName:           "入力済み",
+		FamilyName:          "HP",
+		Height:              178,
+		Weight:              82,
+		Position:            "staff", // 未正規化のまま保存された既存データを模す
+		Hometown:            "東京都",
+		School:              "三楽大学",
+		Bio:                 "よろしくお願いします",
+		Role:                "パートリーダー",
+		Enthusiasm:          "今シーズンこそ優勝します",
+		Watchme:             "第4Qのラン",
+		Hobbies:             "映画鑑賞",
+		Favorite:            "最近はカレー",
+		WhatILikeAboutTriax: "誰でも挑戦できるところ",
+	}
+	hidden := &models.MemberHPProfile{
+		DisplayName: "全体非掲載",
+		Bio:         "この内容は公開 API に出てはならない",
+		HideFromHP:  true,
+	}
+	allHidden := &models.MemberHPProfile{
+		DisplayName: "全項目非掲載",
+		Bio:         "この内容は公開 API に出てはならない",
+		Position:    "QB",
+	}
+	for _, key := range []string{
+		"display_name", "display_name_kana", "first_name", "family_name",
+		"height", "weight", "position", "hometown", "school", "bio",
+		"role", "enthusiasm", "watchme", "hobbies", "favorite", "what_i_like_about_triax",
+		"portrait_formal", "portrait_casual",
+	} {
+		allHidden.HiddenFields = append(allHidden.HiddenFields, key)
+	}
+
+	return Scenario{Name: "hpprofile", Entities: []Entity{
+		NewEntity(MemberKey(filledID), newMember(filledID, "HP 入力済み 太郎", "staff")),
+		NewEntity(HPProfileKey(filledID), filled),
+
+		NewEntity(MemberKey(untouchedID), newMember(untouchedID, "HP 未入力 次郎", "WR/DB")),
+
+		NewEntity(MemberKey(hiddenID), newMember(hiddenID, "HP 全体非掲載 三郎", "DL")),
+		NewEntity(HPProfileKey(hiddenID), hidden),
+
+		NewEntity(MemberKey(allHiddenID), newMember(allHiddenID, "HP 全項目非掲載 四郎", "QB")),
+		NewEntity(HPProfileKey(allHiddenID), allHidden),
 	}}
 }

@@ -74,6 +74,9 @@ func UpdateHPProfile(w http.ResponseWriter, req *http.Request) {
 	// PUT ボディに含まれる値（nil でも [] でも）は常に無視して既存値を保持する。
 	input.AdditionalPhotoURLs = existing.AdditionalPhotoURLs
 
+	// position は Slack プロフィールの Title 由来の自由表記なので保存時に正規化する。
+	input.Position = models.NormalizePosition(input.Position)
+
 	if err := models.PutHPProfile(req.Context(), id, &input); err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
@@ -185,8 +188,51 @@ func uploadToGCS(ctx context.Context, objectName, mimeType string, r io.Reader) 
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketName, objectName), nil
 }
 
+// publicEntry は公開 API が返す 1 メンバー分のエントリ。
+type publicEntry struct {
+	SlackID   string                 `json:"slack_id"`
+	Name      string                 `json:"name"`
+	Number    *int                   `json:"number"`
+	HPProfile models.MemberHPProfile `json:"hp_profile"`
+}
+
+// buildPublicEntries は公開 API に載せるエントリを組み立てる。
+// profiles は members と同じ順序で対応する（models.GetMultiHPProfile の契約）。
+//
+// 除外するのは次の 3 つ:
+//   - プロフィールの取得に失敗したメンバー（nil）
+//   - 本人が全体を非掲載にしたメンバー（HideFromHP）
+//   - 公開ビューに見せる内容が何も無いメンバー（未入力、または全項目を非掲載）
+//
+// Datastore アクセスを含まない純粋関数にしてあるのは、この除外規則そのものを
+// ユニットテストで固定するため（ハンドラは Datastore クライアントを直接生成する）。
+func buildPublicEntries(members []models.Member, profiles []*models.MemberHPProfile) []publicEntry {
+	entries := make([]publicEntry, 0, len(members))
+	for i, m := range members {
+		if i >= len(profiles) {
+			break
+		}
+		profile := profiles[i]
+		if profile == nil || profile.HideFromHP {
+			continue
+		}
+		view := profile.PublicView()
+		if view.IsEmpty() {
+			continue
+		}
+		entries = append(entries, publicEntry{
+			SlackID:   m.Slack.ID,
+			Name:      m.Name(),
+			Number:    m.Number,
+			HPProfile: view,
+		})
+	}
+	return entries
+}
+
 // ListPublicMembers は認証不要の公開 API。
-// HideFromHP=false のメンバーのみ返し、HiddenFields に従ってフィールドを除外する。
+// HideFromHP=false かつ公開ビューが空でないメンバーのみ返し、
+// HiddenFields に従ってフィールドを除外する。
 func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	ctx := req.Context()
@@ -197,31 +243,10 @@ func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	type publicEntry struct {
-		SlackID   string                 `json:"slack_id"`
-		Name      string                 `json:"name"`
-		Number    *int                   `json:"number"`
-		HPProfile models.MemberHPProfile `json:"hp_profile"`
-	}
-
 	profiles, err := models.GetMultiHPProfile(ctx, members)
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
-	}
-
-	result := make([]publicEntry, 0, len(members))
-	for i, m := range members {
-		profile := profiles[i]
-		if profile == nil || profile.HideFromHP {
-			continue
-		}
-		result = append(result, publicEntry{
-			SlackID:   m.Slack.ID,
-			Name:      m.Name(),
-			Number:    m.Number,
-			HPProfile: profile.PublicView(),
-		})
 	}
 
 	// 30 分キャッシュ（外部サイト向け）
@@ -229,7 +254,9 @@ func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	render.JSON(http.StatusOK, marmoset.P{
-		"members": result,
+		"members": buildPublicEntries(members, profiles),
 		"path":    path.Clean(req.URL.Path),
+		// 外部サイトがレスポンス自体の鮮度を判断するための生成時刻。
+		"generated_at": time.Now().UTC(),
 	})
 }

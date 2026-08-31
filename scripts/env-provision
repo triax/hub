@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ID="${PROJECT_ID:-triax-football}"
 
 # 投入する fixture scenario（カンマ区切り）。mission が SEED_SCENARIOS で上書きできる。
-SEED_SCENARIOS="${SEED_SCENARIOS:-default,taping,position}"
+SEED_SCENARIOS="${SEED_SCENARIOS:-default,taping,position,hpprofile}"
 
 # --import-devdata 指定時のみ devdata（prod ダンプ）を import する。
 # デフォルトは fixtures/default を cmd/seed で投入する（概念分離）。
@@ -121,7 +121,7 @@ _setup_worktree_symlinks() {
 # per_env に列挙されたリソースは provision が管理するため、エージェントは
 # これらを理由に検証を SKIP しない。
 _manifest() {
-  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_fixtures","lifecycle":"provision (毎回、冪等)","detail":"fixtures の scenario（既定: default,taping,position／SEED_SCENARIOS で上書き可）を cmd/seed で投入（key-based upsert）。devdata import は --import-devdata 明示時のみ"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
+  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_fixtures","lifecycle":"provision (毎回、冪等)","detail":"fixtures の scenario（既定: default,taping,position,hpprofile／SEED_SCENARIOS で上書き可）を cmd/seed で投入（key-based upsert）。devdata import は --import-devdata 明示時のみ"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
 }
 
 # ------------------------------------------------------------------ doctor ---
