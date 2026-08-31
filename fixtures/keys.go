@@ -26,6 +26,11 @@ func EventKey(googleID string) *datastore.Key {
 	return datastore.NameKey(models.KindEvent, googleID, nil)
 }
 
+// HPProfileKey は Member と 1:1 対応する HP プロフィールの key（Slack ID）。
+func HPProfileKey(slackID string) *datastore.Key {
+	return datastore.NameKey(models.KindHPProfile, slackID, nil)
+}
+
 func EquipKey(id int64) *datastore.Key {
 	return datastore.IDKey(models.KindEquip, id, nil)
 }

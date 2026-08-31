@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"cloud.google.com/go/datastore"
 )
@@ -34,6 +36,16 @@ type MemberHPProfile struct {
 	School   string `json:"school"`
 	Bio      string `json:"bio"`
 
+	// テキスト情報（HP 掲載項目）
+	// 長文になりうる 3 つは Datastore のインデックス付き文字列の 1500 バイト上限を
+	// 避けるため noindex にする（検索対象にもしないため実害はない）。
+	Role                string `json:"role"`
+	Enthusiasm          string `json:"enthusiasm" datastore:",noindex"`
+	Watchme             string `json:"watchme" datastore:",noindex"`
+	Hobbies             string `json:"hobbies"`
+	Favorite            string `json:"favorite"`
+	WhatILikeAboutTriax string `json:"what_i_like_about_triax" datastore:",noindex"`
+
 	// ユーザ定義カスタムフィールド
 	CustomFields []HPCustomField `json:"custom_fields" datastore:",noindex"`
 
@@ -42,9 +54,93 @@ type MemberHPProfile struct {
 	PortraitCasualURL   string   `json:"portrait_casual_url"`
 	AdditionalPhotoURLs []string `json:"additional_photo_urls" datastore:",noindex"`
 
+	// 最終保存時刻。PutHPProfile が保存のたびに設定する（クライアント値は信用しない）。
+	// 未保存プロフィールのゼロ値は omitzero でキーごと省略され、外部消費者に
+	// ダミー日付（0001-01-01）を見せない。
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
+
 	// 掲載制御
 	HideFromHP   bool     `json:"hide_from_hp"`
 	HiddenFields []string `json:"hidden_fields" datastore:",noindex"`
+}
+
+// Positions は公開 API が返すポジションの正規形。
+var Positions = []string{"QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB", "K", "P", "Staff", "Coach"}
+
+// positionCanonical は「小文字化した表記 → 正規形」の索引。
+var positionCanonical = func() map[string]string {
+	m := make(map[string]string, len(Positions))
+	for _, p := range Positions {
+		m[strings.ToLower(p)] = p
+	}
+	return m
+}()
+
+// positionSeparators は複合表記（"WR/DB" 等）の区切り文字。
+const positionSeparators = "/／,、・ 　"
+
+// NormalizePosition は Slack プロフィールの Title 由来の自由表記を Positions の
+// 正規形へ寄せる。どの正規形にも寄せられない表記は空文字を返す。
+//
+//	"staff" → "Staff" / "WR/DB" → "WR" / "Sp" → ""
+func NormalizePosition(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if p, ok := positionCanonical[strings.ToLower(s)]; ok {
+		return p
+	}
+	// 複合表記は最初に一致したトークンを採用する。
+	// なお、フロント側にも Title を分解する箇所が複数あるが（members.tsx の
+	// 正規表現分割、events.$id.tsx の "/" 分割）、区切り文字も候補リストも
+	// それぞれ異なる。公開 API が外部に約束する正規形はここを唯一の権威とする。
+	tokens := strings.FieldsFunc(s, func(r rune) bool {
+		return strings.ContainsRune(positionSeparators, r)
+	})
+	for _, tok := range tokens {
+		if p, ok := positionCanonical[strings.ToLower(tok)]; ok {
+			return p
+		}
+	}
+	return ""
+}
+
+// hpFieldZeroers は hidden_fields のキー → 該当フィールドを空にする関数。
+// client/models/HPProfile.ts の HIDDEN_FIELD_KEYS と 1:1 で対応させること。
+var hpFieldZeroers = map[string]func(*MemberHPProfile){
+	"display_name":            func(p *MemberHPProfile) { p.DisplayName = "" },
+	"display_name_kana":       func(p *MemberHPProfile) { p.DisplayNameKana = "" },
+	"first_name":              func(p *MemberHPProfile) { p.FirstName = "" },
+	"family_name":             func(p *MemberHPProfile) { p.FamilyName = "" },
+	"height":                  func(p *MemberHPProfile) { p.Height = 0 },
+	"weight":                  func(p *MemberHPProfile) { p.Weight = 0 },
+	"position":                func(p *MemberHPProfile) { p.Position = "" },
+	"hometown":                func(p *MemberHPProfile) { p.Hometown = "" },
+	"school":                  func(p *MemberHPProfile) { p.School = "" },
+	"bio":                     func(p *MemberHPProfile) { p.Bio = "" },
+	"role":                    func(p *MemberHPProfile) { p.Role = "" },
+	"enthusiasm":              func(p *MemberHPProfile) { p.Enthusiasm = "" },
+	"watchme":                 func(p *MemberHPProfile) { p.Watchme = "" },
+	"hobbies":                 func(p *MemberHPProfile) { p.Hobbies = "" },
+	"favorite":                func(p *MemberHPProfile) { p.Favorite = "" },
+	"what_i_like_about_triax": func(p *MemberHPProfile) { p.WhatILikeAboutTriax = "" },
+	"portrait_formal":         func(p *MemberHPProfile) { p.PortraitFormalURL = "" },
+	"portrait_casual":         func(p *MemberHPProfile) { p.PortraitCasualURL = "" },
+}
+
+// IsEmpty は「掲載して見せる内容が何も無い」ことを表す。
+// 判定対象は公開コンテンツのみで、UpdatedAt / HideFromHP / HiddenFields は含めない。
+// 公開 API は PublicView() を適用した後のビューに対してこれを評価する。
+func (p MemberHPProfile) IsEmpty() bool {
+	return p.DisplayName == "" && p.DisplayNameKana == "" &&
+		p.FirstName == "" && p.FamilyName == "" &&
+		p.Height == 0 && p.Weight == 0 &&
+		p.Position == "" && p.Hometown == "" && p.School == "" && p.Bio == "" &&
+		p.Role == "" && p.Enthusiasm == "" && p.Watchme == "" &&
+		p.Hobbies == "" && p.Favorite == "" && p.WhatILikeAboutTriax == "" &&
+		p.PortraitFormalURL == "" && p.PortraitCasualURL == "" &&
+		len(p.AdditionalPhotoURLs) == 0 && len(p.CustomFields) == 0
 }
 
 // HiddenFieldSet returns HiddenFields as a lookup map.
@@ -61,52 +157,26 @@ func (p MemberHPProfile) PublicView() MemberHPProfile {
 	if p.HideFromHP {
 		return MemberHPProfile{HideFromHP: true}
 	}
-	hidden := p.HiddenFieldSet()
 	out := p
-	if hidden["display_name"] {
-		out.DisplayName = ""
-	}
-	if hidden["display_name_kana"] {
-		out.DisplayNameKana = ""
-	}
-	if hidden["first_name"] {
-		out.FirstName = ""
-	}
-	if hidden["family_name"] {
-		out.FamilyName = ""
-	}
-	if hidden["height"] {
-		out.Height = 0
-	}
-	if hidden["weight"] {
-		out.Weight = 0
-	}
-	if hidden["position"] {
-		out.Position = ""
-	}
-	if hidden["hometown"] {
-		out.Hometown = ""
-	}
-	if hidden["school"] {
-		out.School = ""
-	}
-	if hidden["bio"] {
-		out.Bio = ""
-	}
-	if hidden["portrait_formal"] {
-		out.PortraitFormalURL = ""
-	}
-	if hidden["portrait_casual"] {
-		out.PortraitCasualURL = ""
-	}
-	// カスタムフィールド: hidden=true のものを除外
-	visible := out.CustomFields[:0]
-	for _, cf := range out.CustomFields {
-		if !cf.Hidden {
-			visible = append(visible, cf)
+	for f := range p.HiddenFieldSet() {
+		if zero, ok := hpFieldZeroers[f]; ok {
+			zero(&out)
 		}
 	}
-	out.CustomFields = visible
+	// カスタムフィールド: hidden=true のものを除外。
+	// レシーバと backing array を共有しないよう新しいスライスに詰め替える
+	// （out は p の浅いコピーなので、in-place フィルタは呼び出し元を破壊する）。
+	if len(out.CustomFields) > 0 {
+		visible := make([]HPCustomField, 0, len(out.CustomFields))
+		for _, cf := range out.CustomFields {
+			if !cf.Hidden {
+				visible = append(visible, cf)
+			}
+		}
+		out.CustomFields = visible
+	}
+	// 表記ゆれの正規化。保存時にも正規化するが、未再保存の既存データを救済する。
+	out.Position = NormalizePosition(out.Position)
 	// 掲載ビューでは制御フィールド自体も隠す
 	out.HideFromHP = false
 	out.HiddenFields = nil
@@ -176,6 +246,10 @@ func PutHPProfile(ctx context.Context, slackID string, profile *MemberHPProfile)
 		return fmt.Errorf("datastore client: %w", err)
 	}
 	defer client.Close()
+
+	// 更新時刻はサーバが唯一の権威。UpdateHPProfile / UploadHPPhoto の
+	// どちらの保存経路もこの関数を通るため、ここだけで一貫して設定できる。
+	profile.UpdatedAt = time.Now().UTC()
 
 	key := datastore.NameKey(KindHPProfile, slackID, nil)
 	if _, err := client.Put(ctx, key, profile); err != nil {

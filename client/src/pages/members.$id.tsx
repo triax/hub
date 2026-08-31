@@ -5,7 +5,7 @@ import StatusBadges from "../../components/statusbadges";
 import MemberRepo from "../../repository/MemberRepo";
 import HPProfileRepo, { validatePhotoFile } from "../../repository/HPProfileRepo";
 import Member from "../../models/Member";
-import HPProfile, { CustomField, emptyHPProfile, HIDDEN_FIELD_KEYS, HiddenFieldKey } from "../../models/HPProfile";
+import HPProfile, { CustomField, emptyHPProfile, HiddenFieldKey } from "../../models/HPProfile";
 import { useAppContext } from "../context";
 
 export default function MemberView() {
@@ -118,7 +118,16 @@ const FIELD_LABELS: Record<string, string> = {
   hometown: "出身地",
   school: "出身校",
   bio: "ひとこと",
+  role: "役職",
+  enthusiasm: "意気込み",
+  watchme: "注目ポイント",
+  hobbies: "趣味",
+  favorite: "最近の推し",
+  what_i_like_about_triax: "TRIAXの好きなところ",
 };
+
+// 長文になりうる項目は textarea で入力する。
+const TEXTAREA_KEYS = new Set(["bio", "enthusiasm", "watchme", "what_i_like_about_triax"]);
 
 function HPProfileSection({
   memberId,
@@ -266,7 +275,7 @@ function HPProfileSection({
                           <p className="mt-1 text-xs text-blue-500">Slackプロフィールの Title / 役職 欄を更新してください</p>
                         )}
                       </>
-                    ) : key === "bio" ? (
+                    ) : TEXTAREA_KEYS.has(key) ? (
                       <textarea
                         className="w-full form-input border border-gray-200 bg-gray-50 rounded-md text-sm p-2"
                         rows={2}
