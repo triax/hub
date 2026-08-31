@@ -2,6 +2,8 @@ package models
 
 import (
 	"encoding/json"
+	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -162,6 +164,43 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
+// TestIsEmptyCoversEveryPublicField は、MemberHPProfile に掲載項目を足したときに
+// IsEmpty() の更新を忘れたら落ちるようにする。
+//
+// IsEmpty() は全フィールドを手で並べた && 連鎖なので、項目追加時に書き足し忘れると
+// 「中身があるのに空とみなして公開 API から落とす」という取り違えが静かに起きる。
+// 構造体のフィールドを実際に走査して、掲載内容のどれか 1 つでも埋まっていれば
+// 空ではないことを確認する。
+func TestIsEmptyCoversEveryPublicField(t *testing.T) {
+	// 掲載内容ではない制御・メタ情報（意思決定 #2 で判定対象外と決めたもの）。
+	excluded := map[string]bool{"UpdatedAt": true, "HideFromHP": true, "HiddenFields": true}
+
+	typ := reflect.TypeOf(MemberHPProfile{})
+	for i := range typ.NumField() {
+		field := typ.Field(i)
+		if excluded[field.Name] {
+			continue
+		}
+
+		var p MemberHPProfile
+		target := reflect.ValueOf(&p).Elem().Field(i)
+		switch field.Type.Kind() {
+		case reflect.String:
+			target.SetString("x")
+		case reflect.Int:
+			target.SetInt(1)
+		case reflect.Slice:
+			target.Set(reflect.MakeSlice(field.Type, 1, 1))
+		default:
+			t.Fatalf("field %s has unhandled kind %s; extend this test", field.Name, field.Type.Kind())
+		}
+
+		if p.IsEmpty() {
+			t.Errorf("IsEmpty() は %s を見ていない。掲載項目を足したら IsEmpty() にも足すこと", field.Name)
+		}
+	}
+}
+
 // TestUpdatedAtOmitZero は、未保存プロフィールで updated_at キー自体が現れず、
 // 保存済みでは RFC3339 で出ることを固定する（Issue #643 AC-7、意思決定 #3）。
 func TestUpdatedAtOmitZero(t *testing.T) {
@@ -182,22 +221,48 @@ func TestUpdatedAtOmitZero(t *testing.T) {
 	}
 }
 
-// TestHiddenFieldZeroersCoverPublicTextFields は、hidden_fields のキー集合が
-// フロント（client/models/HPProfile.ts の HIDDEN_FIELD_KEYS）と乖離していないことを
-// サーバ側から固定する。新しい掲載項目を足したら両方に足す必要がある。
-func TestHiddenFieldZeroersCoverPublicTextFields(t *testing.T) {
-	want := []string{
-		"display_name", "display_name_kana", "first_name", "family_name",
-		"height", "weight", "position", "hometown", "school", "bio",
-		"role", "enthusiasm", "watchme", "hobbies", "favorite", "what_i_like_about_triax",
-		"portrait_formal", "portrait_casual",
+// TestHiddenFieldKeysMatchFrontend は、サーバの hidden_fields 判定テーブルと
+// フロントの HIDDEN_FIELD_KEYS が一致していることを固定する。
+//
+// 非掲載トグルはフロントがキー文字列を送り、サーバがそのキーでフィールドを空にする
+// という文字列合わせの契約なので、どちらか一方にだけ項目を足すと、UI 上は非掲載に
+// できたのに公開 API には出続ける（またはその逆）という取り違えが起きる。
+// 型では守れないため、実際に TypeScript のソースを読んで突き合わせる。
+func TestHiddenFieldKeysMatchFrontend(t *testing.T) {
+	const tsPath = "../../client/models/HPProfile.ts"
+	src, err := os.ReadFile(tsPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", tsPath, err)
 	}
-	if len(hpFieldZeroers) != len(want) {
-		t.Errorf("hpFieldZeroers has %d keys, want %d", len(hpFieldZeroers), len(want))
+
+	_, rest, ok := strings.Cut(string(src), "export const HIDDEN_FIELD_KEYS = [")
+	if !ok {
+		t.Fatalf("HIDDEN_FIELD_KEYS declaration not found in %s", tsPath)
 	}
-	for _, key := range want {
+	body, _, ok := strings.Cut(rest, "]")
+	if !ok {
+		t.Fatalf("HIDDEN_FIELD_KEYS declaration is not terminated in %s", tsPath)
+	}
+
+	frontend := map[string]bool{}
+	for _, quoted := range strings.Split(body, ",") {
+		key := strings.Trim(strings.TrimSpace(quoted), `"'`)
+		if key != "" {
+			frontend[key] = true
+		}
+	}
+	if len(frontend) == 0 {
+		t.Fatalf("no keys parsed out of HIDDEN_FIELD_KEYS in %s", tsPath)
+	}
+
+	for key := range frontend {
 		if _, ok := hpFieldZeroers[key]; !ok {
-			t.Errorf("hpFieldZeroers is missing key %q", key)
+			t.Errorf("HIDDEN_FIELD_KEYS has %q but hpFieldZeroers does not (公開 API で非掲載にできない)", key)
+		}
+	}
+	for key := range hpFieldZeroers {
+		if !frontend[key] {
+			t.Errorf("hpFieldZeroers has %q but HIDDEN_FIELD_KEYS does not (UI に非掲載トグルが出ない)", key)
 		}
 	}
 }

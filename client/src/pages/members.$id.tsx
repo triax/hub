@@ -5,7 +5,7 @@ import StatusBadges from "../../components/statusbadges";
 import MemberRepo from "../../repository/MemberRepo";
 import HPProfileRepo, { validatePhotoFile } from "../../repository/HPProfileRepo";
 import Member from "../../models/Member";
-import HPProfile, { CustomField, emptyHPProfile, HIDDEN_FIELD_KEYS, HiddenFieldKey } from "../../models/HPProfile";
+import HPProfile, { CustomField, emptyHPProfile, HiddenFieldKey } from "../../models/HPProfile";
 import { useAppContext } from "../context";
 
 export default function MemberView() {

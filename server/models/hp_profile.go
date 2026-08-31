@@ -91,7 +91,10 @@ func NormalizePosition(s string) string {
 	if p, ok := positionCanonical[strings.ToLower(s)]; ok {
 		return p
 	}
-	// 複合表記は最初に一致したトークンを採用する（スケジュール画面の解釈と揃える）。
+	// 複合表記は最初に一致したトークンを採用する。
+	// なお、フロント側にも Title を分解する箇所が複数あるが（members.tsx の
+	// 正規表現分割、events.$id.tsx の "/" 分割）、区切り文字も候補リストも
+	// それぞれ異なる。公開 API が外部に約束する正規形はここを唯一の権威とする。
 	tokens := strings.FieldsFunc(s, func(r rune) bool {
 		return strings.ContainsRune(positionSeparators, r)
 	})
