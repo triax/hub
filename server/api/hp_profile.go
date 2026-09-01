@@ -230,7 +230,9 @@ func buildPublicEntries(members []models.Member, profiles []*models.MemberHPProf
 	return entries
 }
 
-// ListPublicMembers は認証不要の公開 API。
+// ListPublicMembers は外部サイト向けの公開 API。
+// ログイン認証は不要だが、ルーティング側で filters.RequirePublicAPIKey により
+// X-API-Key の提示を必須にしている（消費者の識別・失効のため）。
 // HideFromHP=false かつ公開ビューが空でないメンバーのみ返し、
 // HiddenFields に従ってフィールドを除外する。
 func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
@@ -249,9 +251,9 @@ func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// 30 分キャッシュ（外部サイト向け）
-	w.Header().Set("Cache-Control", "public, max-age=1800")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// X-API-Key で守っている口なので、中間キャッシュには一切載せない（private）。
+	// CORS ヘッダも付けない: 消費者はサーバサイドに限られ、ブラウザ JS から読ませる必要がない。
+	w.Header().Set("Cache-Control", "private")
 
 	render.JSON(http.StatusOK, marmoset.P{
 		"members": buildPublicEntries(members, profiles),

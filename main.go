@@ -94,10 +94,13 @@ func main() {
 	})
 	r.Mount("/api/1", v1)
 
-	// 認証不要の公開 API（外部 HP サイト向け、および公開フォーム）
-	r.With(filters.MaxBodySize(1<<20)).Get("/api/1/public/members", api.ListPublicMembers)
+	// 公開 API（外部 HP サイト向け）。ログイン認証は不要だが、消費者はサーバサイド
+	// （GitHub Actions のビルド等）に限られるため X-API-Key での識別を必須にする。
+	r.With(filters.MaxBodySize(1<<20), filters.RequirePublicAPIKey).
+		Get("/api/1/public/members", api.ListPublicMembers)
 
 	// 入部申請フォーム送信（認証不要）
+	// NOTE: ブラウザから直接叩く経路なので秘密を持てない。ここに API キーは付けない。
 	// NOTE: chi の Mount は /api/1/* を v1 サブルーターに転送するが、
 	// /api/1/public/* のような明示パスは先に登録することで回避できる。
 	// ここでは /api/1/public/applications に配置して競合を避ける。
