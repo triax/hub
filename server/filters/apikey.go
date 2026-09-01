@@ -13,12 +13,9 @@ import (
 const (
 	// PublicAPIKeysEnv は名前付き共有キーを保持する環境変数名。
 	// 形式は "name:key,name2:key2"（例: "homepage:xxx,instagram:yyy"）。
-	// 消費者ごとに名前を持たせることで、識別・個別失効・無停止ローテーション
-	// （新旧併記 → 消費者切替 → 旧削除）をこの 1 変数で賄う。
 	PublicAPIKeysEnv = "PUBLIC_API_KEYS"
 
 	// PublicAPIKeyHeader は公開 API のキーを受け取るリクエストヘッダ名。
-	// クエリパラメータはアクセスログや Referer 経由で漏れるため使わない。
 	PublicAPIKeyHeader = "X-API-Key"
 )
 
@@ -48,17 +45,16 @@ func parsePublicAPIKeys(s string) map[string]string {
 }
 
 // authorizePublicAPIKey は提示されたキーを全エントリと照合し、一致した消費者名を返す。
-//
-// 比較は crypto/subtle.ConstantTimeCompare を使い、一致しても走査を打ち切らない
-// （どのエントリで一致したかを応答時間から推測されないようにするため）。
-// 提示が空文字のときは、空の設定値との「一致」が起きないよう即座に拒否する。
+// 一致しても走査を打ち切らないのは、どのエントリで一致したかを応答時間から
+// 推測されないようにするため。提示が空文字なら即座に拒否する。
 func authorizePublicAPIKey(keys map[string]string, presented string) (string, bool) {
 	if presented == "" {
 		return "", false
 	}
+	presentedBytes := []byte(presented)
 	matched := ""
 	for name, key := range keys {
-		if subtle.ConstantTimeCompare([]byte(key), []byte(presented)) == 1 {
+		if subtle.ConstantTimeCompare([]byte(key), presentedBytes) == 1 {
 			matched = name
 		}
 	}
@@ -66,12 +62,19 @@ func authorizePublicAPIKey(keys map[string]string, presented string) (string, bo
 }
 
 // RequirePublicAPIKey は X-API-Key ヘッダを検証する middleware。
+// 公開 API の認可ポリシーはここに集約している:
 //
-// 全拒否既定: ヘッダ欠落・不一致・PUBLIC_API_KEYS 未設定/空 のいずれも 401 を返す。
-// 設定ミスで公開 API が静かに素通しになる状態を作らないため、
-// 「キーが無い環境では誰も通れない」側に倒している。
+//   - 受け渡しは X-API-Key ヘッダのみ。クエリパラメータはアクセスログや
+//     Referer 経由で漏れるため使わない
+//   - 照合は crypto/subtle.ConstantTimeCompare（authorizePublicAPIKey）
+//   - 全拒否既定: ヘッダ欠落・不一致・PUBLIC_API_KEYS 未設定/空 のいずれも 401。
+//     設定ミスが「静かな素通し」に化けないよう、キーが無い環境では誰も通れない側に倒す
+//   - キー値はログに出さない（成功時に記録するのは消費者名だけ）
 //
-// 環境変数は Auth（JWT_SIGNING_KEY）や RequireGAECron と同じく使用時に読む。
+// 消費者ごとに名前を持たせることで、識別・個別失効・無停止ローテーション
+// （新旧併記 → 消費者切替 → 旧削除）を PUBLIC_API_KEYS 1 変数で賄う。
+// 環境変数は Auth（JWT_SIGNING_KEY）や RequireGAECron と同じく使用時に読むため、
+// キーのローテーションは再起動なしで効く。
 func RequirePublicAPIKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		keys := parsePublicAPIKeys(os.Getenv(PublicAPIKeysEnv))

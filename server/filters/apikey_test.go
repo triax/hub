@@ -96,7 +96,6 @@ func TestAuthorizePublicAPIKey(t *testing.T) {
 		{name: "不一致", keys: keys, presented: "zzz"},
 		{name: "前方一致は通さない", keys: keys, presented: "aa"},
 		{name: "提示が空文字", keys: keys, presented: ""},
-		{name: "設定が空でも空文字は通さない", keys: map[string]string{}, presented: ""},
 		{name: "設定が空なら正しそうなキーでも拒否", keys: map[string]string{}, presented: "aaa"},
 	}
 
@@ -179,31 +178,25 @@ func TestRequirePublicAPIKey_UnauthorizedBody(t *testing.T) {
 }
 
 // TestRequirePublicAPIKey_DenyByDefault は全拒否既定を固定する（Issue #645 AC-3）。
-// PUBLIC_API_KEYS が未設定・空・不正のみのとき、どんなキーを付けても通らない。
+// PUBLIC_API_KEYS に有効なエントリが 1 つも無いとき、それらしいキーを付けても通らない。
+// （ヘッダ欠落側の 401 は TestRequirePublicAPIKey が押さえている）
 func TestRequirePublicAPIKey_DenyByDefault(t *testing.T) {
 	envs := map[string]string{
-		"空文字列":      "",
-		"区切りのみ":     ",,",
-		"コロンなしの不正値": "homepage",
-		"key が空":    "homepage:",
-	}
-	headers := map[string]string{
-		"ヘッダなし":   "",
-		"それらしいキー": "aaa",
-		"空ヘッダ":    " ",
+		"未設定と同じ空文字列": "",
+		"区切りのみ":      ",,",
+		"コロンなしの不正値":  "homepage",
+		"key が空":     "homepage:",
 	}
 
-	for envName, env := range envs {
-		for headerName, header := range headers {
-			t.Run(envName+"/"+headerName, func(t *testing.T) {
-				rec, reached := serveWithKey(t, env, header)
-				if rec.Code != http.StatusUnauthorized {
-					t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-				}
-				if reached {
-					t.Fatal("next handler must not be reached when no key is configured")
-				}
-			})
-		}
+	for name, env := range envs {
+		t.Run(name, func(t *testing.T) {
+			rec, reached := serveWithKey(t, env, "aaa")
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+			}
+			if reached {
+				t.Fatal("next handler must not be reached when no key is configured")
+			}
+		})
 	}
 }
