@@ -337,8 +337,8 @@ func TestFocus_EndToEnd(t *testing.T) {
 	if len(gpt.requests) != 1 {
 		t.Fatalf("ChatGPT calls = %d, want 1", len(gpt.requests))
 	}
-	if gpt.requests[0].Model != "gpt-4o" {
-		t.Fatalf("model = %q, want gpt-4o", gpt.requests[0].Model)
+	if gpt.requests[0].Model != chatModelFocus {
+		t.Fatalf("model = %q, want %s", gpt.requests[0].Model, chatModelFocus)
 	}
 	if len(api.posted) < 2 {
 		t.Fatalf("posted = %d, want 受付メッセージ + 要約", len(api.posted))

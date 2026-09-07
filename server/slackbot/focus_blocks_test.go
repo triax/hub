@@ -13,34 +13,42 @@ import (
 	"github.com/slack-go/slack"
 )
 
-// digestJSON は LLM が返す構造化出力（focus 3 件・sections 1 件）。
+// digestJSON は LLM が返す構造化出力。テーマ 4 件・プレー 6 件で、
+// theme_keys の分布は timing=3 / vertical=2 / call=2 / stance=1。
+// stance は件数 1 なので focus には採られない（単発は詳細側の材料）。
 const digestJSON = `{
-  "focus": [
-    {"title":"QB↔WR のタイミング","detail":"WR はブレイクを明確に、QB は早めのリリース","positions":["QB","WR"],"count":12,"plays":["プレーA","プレーB"]},
-    {"title":"縦の走り込み","detail":"足を止めず奥まで駆け抜ける","positions":["WR"],"count":8,"plays":["プレーA"]},
-    {"title":"コールの徹底","detail":"セット前に声を出して確認する","positions":[],"count":3,"plays":["プレーB"]}
+  "themes": [
+    {"key":"timing","title":"QB↔WR のタイミング","detail":"WR のブレイク 3 歩目でボールを離す","positions":["QB","WR"],
+     "quote":"Xがピタッと止まれてないのと、QBが待ちすぎ","stop":"フラット第一選択で待つ","start":"スナップ前に MOFO/MOFC を決めて入る"},
+    {"key":"vertical","title":"縦の走り込み","detail":"足を止めず奥まで駆け抜ける","positions":["WR"],
+     "quote":"3歩目で減速して縦が死んでいる","stop":"ブレイク前に減速する","start":"奥まで駆け抜けてから切る"},
+    {"key":"call","title":"セット前のコール","detail":"SF の位置を声に出して合わせる","positions":[],
+     "quote":"コールが聞こえなくて合わせられなかった","stop":"黙ってセットする","start":"SF の位置を指差して声に出す"},
+    {"key":"stance","title":"スタンスの幅","detail":"肩幅より広く構える","positions":["OL"],
+     "quote":"スタンスが狭くて割られた","stop":"狭いスタンスで構える","start":"肩幅より広く構える"}
   ],
-  "sections": [
-    {"headline":"GL Drive1","plays":[
-      {"name":"プレーA","points":["奥まで駆け抜ける","キャッチミスの原因を特定"]},
-      {"name":"プレーB","points":[]}
-    ]}
+  "plays": [
+    {"headline":"GL Drive1","name":"プレーA","theme_keys":["timing","vertical"],"positions":["QB","WR"],"issue":"リリースが 1 テンポ遅い"},
+    {"headline":"GL Drive1","name":"プレーB","theme_keys":["timing"],"positions":["QB"],"issue":"フラットを第一選択にした"},
+    {"headline":"GL Drive1","name":"プレーC","theme_keys":["vertical","call"],"positions":["WR"],"issue":"3 歩目で減速した"},
+    {"headline":"skel","name":"プレーD","theme_keys":["timing"],"positions":["QB","WR"],"issue":"ブレイク前にボールが出た"},
+    {"headline":"skel","name":"プレーE","theme_keys":["call"],"positions":[],"issue":"コールが通らなかった"},
+    {"headline":"skel","name":"プレーF","theme_keys":["stance"],"positions":["OL"],"issue":"スタンスを割られた"}
   ]
 }`
 
-func sampleDigest(t *testing.T) focusDigest {
+func sampleReport(t *testing.T) focusReport {
 	t.Helper()
-	api := focusFixture()
 	gpt := &fakeChatGPT{reply: digestJSON}
-	bot := Bot{SlackAPI: api, ChatGPT: gpt}
+	bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
 	summary, err := bot.summarize(t.Context(), testJob(), []playThread{{Parent: parentMsg("1", "x", 1)}}, nil)
 	if err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
-	if summary.Digest == nil {
-		t.Fatal("digest が decode されていない")
+	if summary.Report == nil {
+		t.Fatal("report が decode されていない")
 	}
-	return *summary.Digest
+	return *summary.Report
 }
 
 // blockText は block の map から text を掘り出す（header / section / context 用）。
@@ -59,33 +67,55 @@ func blockText(block map[string]any) string {
 	return ""
 }
 
-// AC-1: JSON を focusDigest に decode し、focus の順序・count・plays を保つ。
-func TestSummarize_DecodesDigest(t *testing.T) {
-	digest := sampleDigest(t)
-
-	if len(digest.Focus) != 3 {
-		t.Fatalf("focus = %d 件, want 3", len(digest.Focus))
+// richTextItemText は rich_text_list の i 番目の項目を、要素の text を連ねた 1 本の
+// 文字列にする（bold / plain の別は問わず「何が書かれているか」だけを見る）。
+func richTextItemText(t *testing.T, list map[string]any, i int) string {
+	t.Helper()
+	item := list["elements"].([]any)[i].(map[string]any)
+	buf := &strings.Builder{}
+	for _, e := range item["elements"].([]any) {
+		s, _ := e.(map[string]any)["text"].(string)
+		buf.WriteString(s)
 	}
-	wantTitles := []string{"QB↔WR のタイミング", "縦の走り込み", "コールの徹底"}
+	return buf.String()
+}
+
+// #658 AC-1: JSON を focusDigest に decode し、rankThemes が件数順の focus を組む。
+// count は theme_keys の実数で、LLM の自己申告ではない。
+func TestSummarize_DecodesReport(t *testing.T) {
+	report := sampleReport(t)
+
+	if len(report.Focus) != 3 {
+		t.Fatalf("focus = %d 件, want 3（件数 1 の stance は除外）", len(report.Focus))
+	}
+	wantTitles := []string{"QB↔WR のタイミング", "縦の走り込み", "セット前のコール"}
+	wantCounts := []int{3, 2, 2}
 	for i, want := range wantTitles {
-		if got := digest.Focus[i].Title; got != want {
-			t.Fatalf("focus[%d].Title = %q, want %q（順序が保たれていない）", i, got, want)
+		if got := report.Focus[i].Title; got != want {
+			t.Fatalf("focus[%d].Title = %q, want %q（件数順に並んでいない）", i, got, want)
+		}
+		if got := report.Focus[i].Count; got != wantCounts[i] {
+			t.Fatalf("focus[%d].Count = %d, want %d（theme_keys の実数）", i, got, wantCounts[i])
 		}
 	}
-	if got := digest.Focus[0].Count; got != 12 {
-		t.Fatalf("focus[0].Count = %d, want 12", got)
+	if got := strings.Join(report.Focus[0].Plays, ","); got != "プレーA,プレーB,プレーD" {
+		t.Fatalf("focus[0].Plays = %q, want 代表プレー（入力順）", got)
 	}
-	if got := strings.Join(digest.Focus[0].Plays, ","); got != "プレーA,プレーB" {
-		t.Fatalf("focus[0].Plays = %q", got)
-	}
-	if got := strings.Join(digest.Focus[0].Positions, ","); got != "QB,WR" {
+	if got := strings.Join(report.Focus[0].Positions, ","); got != "QB,WR" {
 		t.Fatalf("focus[0].Positions = %q", got)
 	}
-	if len(digest.Sections) != 1 || digest.Sections[0].Headline != "GL Drive1" {
-		t.Fatalf("sections = %+v, want GL Drive1 の 1 件", digest.Sections)
+	if report.Focus[0].Quote == "" || report.Focus[0].Stop == "" || report.Focus[0].Start == "" {
+		t.Fatalf("focus[0] に quote / stop / start が乗っていない: %+v", report.Focus[0])
 	}
-	if len(digest.Sections[0].Plays) != 2 || digest.Sections[0].Plays[0].Name != "プレーA" {
-		t.Fatalf("sections[0].Plays = %+v", digest.Sections[0].Plays)
+	if len(report.Plays) != 6 || report.Plays[0].Name != "プレーA" {
+		t.Fatalf("plays = %+v, want 入力順の 6 件", report.Plays)
+	}
+	// 集計は #659 のチャートが読む。件数 1 のテーマも Stats には残る。
+	if len(report.Stats.Themes) != 4 || report.Stats.Themes[0].Count != 3 {
+		t.Fatalf("Stats.Themes = %+v, want 4 件（件数降順）", report.Stats.Themes)
+	}
+	if got := strings.Join(report.Stats.Headlines, ","); got != "GL Drive1,skel" {
+		t.Fatalf("Stats.Headlines = %q, want 初出順", got)
 	}
 }
 
@@ -107,8 +137,8 @@ func TestSummarize_BrokenJSONFallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("壊れた JSON が error になっている: %v", err)
 		}
-		if summary.Digest != nil {
-			t.Fatalf("壊れた JSON なのに digest が返っている: %+v", summary.Digest)
+		if summary.Report != nil {
+			t.Fatalf("壊れた JSON なのに report が返っている: %+v", summary.Report)
 		}
 		if summary.Text != "*プレーA* 縦の走り込みを揃える。" {
 			t.Fatalf("平文フォールバックの本文が失われている: %q", summary.Text)
@@ -119,14 +149,14 @@ func TestSummarize_BrokenJSONFallback(t *testing.T) {
 	})
 
 	t.Run("focus 0 件も平文フォールバック", func(t *testing.T) {
-		gpt := &fakeChatGPT{reply: `{"focus":[],"sections":[]}`}
+		gpt := &fakeChatGPT{reply: `{"themes":[],"plays":[]}`}
 		bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
 		summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
 		if err != nil {
 			t.Fatalf("summarize: %v", err)
 		}
-		if summary.Digest != nil {
-			t.Fatal("focus 0 件で digest を返している（空の rich_text_list は invalid_blocks になる）")
+		if summary.Report != nil {
+			t.Fatal("focus 0 件で report を返している（空の rich_text_list は invalid_blocks になる）")
 		}
 	})
 }
@@ -174,6 +204,16 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	if n := len(list["elements"].([]any)); n != 3 {
 		t.Fatalf("リスト項目 = %d, want 3（focus 件数）", n)
 	}
+	// #658 AC-6: 引用行・やめる/やる 行が入り、件数は導出値（theme_keys の実数）。
+	item := richTextItemText(t, list, 0)
+	for _, want := range []string{
+		"やめる: フラット第一選択で待つ → やる: スナップ前に MOFO/MOFC を決めて入る",
+		"対象: QB, WR ／ 3 プレー ／ 「Xがピタッと止まれてないのと、QBが待ちすぎ」",
+	} {
+		if !strings.Contains(item, want) {
+			t.Fatalf("focus 1 点目に %q が無い:\n%s", want, item)
+		}
+	}
 
 	// 詳細は同じスレッドに broadcast 無しで続く。
 	for i, p := range api.posted[2:] {
@@ -187,22 +227,22 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 			t.Fatalf("詳細 posted[%d] の text フォールバックが空", i+2)
 		}
 	}
-	if got := strings.Join(api.posted[2].BlockTypes(), ","); got != "section,rich_text" {
-		t.Fatalf("詳細の blocks = %q, want section,rich_text", got)
+	// 詳細は見出しごとに section + rich_text。digestJSON は見出し 2 つぶん。
+	if got := strings.Join(api.posted[2].BlockTypes(), ","); got != "section,rich_text,section,rich_text" {
+		t.Fatalf("詳細の blocks = %q, want 見出し 2 つぶんの section,rich_text", got)
 	}
 }
 
 // AC-4: 詳細は見出し境界で分割され、1 通あたり 50 blocks 以下に収まる。
 func TestDetailMessages_SplitAndLimits(t *testing.T) {
 	t.Run("見出し境界で分割", func(t *testing.T) {
-		digest := focusDigest{}
+		report := focusReport{}
 		for i := 0; i < 30; i++ { // 1 見出し = section + rich_text の 2 ブロック
-			digest.Sections = append(digest.Sections, focusSection{
-				Headline: fmt.Sprintf("見出し%02d", i),
-				Plays:    []focusPlay{{Name: "プレー", Points: []string{"反省"}}},
+			report.Plays = append(report.Plays, focusPlay{
+				Headline: fmt.Sprintf("見出し%02d", i), Name: "プレー", Issue: "反省",
 			})
 		}
-		msgs := detailMessages(digest)
+		msgs := detailMessages(report)
 		if len(msgs) != 2 {
 			t.Fatalf("msgs = %d, want 2（60 ブロックが 50 で割れる）", len(msgs))
 		}
@@ -222,9 +262,9 @@ func TestDetailMessages_SplitAndLimits(t *testing.T) {
 	t.Run("1 見出しが上限を超えるならプレー単位で割る", func(t *testing.T) {
 		plays := make([]focusPlay, 0, focusMaxListItems*focusMaxBlocksPerMessage)
 		for i := 0; i < focusMaxListItems*focusMaxBlocksPerMessage; i++ {
-			plays = append(plays, focusPlay{Name: fmt.Sprintf("プレー%04d", i)})
+			plays = append(plays, focusPlay{Headline: "巨大な見出し", Name: fmt.Sprintf("プレー%04d", i)})
 		}
-		msgs := detailMessages(focusDigest{Sections: []focusSection{{Headline: "巨大な見出し", Plays: plays}}})
+		msgs := detailMessages(focusReport{Plays: plays})
 		if len(msgs) < 2 {
 			t.Fatalf("msgs = %d, want 2 以上（分割されていない）", len(msgs))
 		}
@@ -240,9 +280,7 @@ func TestDetailMessages_SplitAndLimits(t *testing.T) {
 
 	t.Run("見出しは 3,000 文字・タイトルは 150 文字で切り詰める", func(t *testing.T) {
 		long := strings.Repeat("あ", 4000)
-		msgs := detailMessages(focusDigest{Sections: []focusSection{{
-			Headline: long, Plays: []focusPlay{{Name: "プレー"}},
-		}}})
+		msgs := detailMessages(focusReport{Plays: []focusPlay{{Headline: long, Name: "プレー"}}})
 		section := msgs[0].Blocks[0].(*slack.SectionBlock)
 		if n := utf8.RuneCountInString(section.Text.Text); n > focusSectionRuneLimit {
 			t.Fatalf("section text = %d 文字, want <= %d", n, focusSectionRuneLimit)
@@ -253,9 +291,7 @@ func TestDetailMessages_SplitAndLimits(t *testing.T) {
 	})
 
 	t.Run("見出しが空でも 1 通にまとまる", func(t *testing.T) {
-		msgs := detailMessages(focusDigest{Sections: []focusSection{{
-			Plays: []focusPlay{{Name: "プレー", Points: []string{"反省"}}},
-		}}})
+		msgs := detailMessages(focusReport{Plays: []focusPlay{{Name: "プレー", Issue: "反省"}}})
 		if len(msgs) != 1 || len(msgs[0].Blocks) != 2 {
 			t.Fatalf("msgs = %+v, want section + rich_text の 1 通", msgs)
 		}
@@ -269,7 +305,9 @@ func TestPostFocusMessages_ThreadOnly(t *testing.T) {
 	job := testJob()
 	job.ThreadOnly = true
 
-	msgs := focusMessages(job, nil, time.Now(), focusDigest{Focus: []focusItem{{Title: "t"}}})
+	msgs := focusMessages(job, nil, time.Now(), focusReport{
+		Focus: []rankedTheme{{focusTheme: focusTheme{Title: "t"}}},
+	})
 	if err := bot.postFocusMessages(job, msgs); err != nil {
 		t.Fatalf("postFocusMessages: %v", err)
 	}
@@ -307,13 +345,36 @@ func TestRenderThreads_NoKindLabels(t *testing.T) {
 	}
 }
 
-// AC-6: 対象が少ないときは focus を 1〜3 点に絞る指示をプロンプトに入れる。
-func TestFocusSystemPrompt_FewTargets(t *testing.T) {
-	if !strings.Contains(focusSystemPrompt(true), "1〜3 点") {
-		t.Fatal("few=true のプロンプトに「1〜3 点」が無い")
+// #658 AC-4: プロンプトに禁止語・引用・対比・具体性の指示が入り、
+// 集計を LLM に頼む文言（件数を数えろ・繰り返しを優先しろ）が残っていない。
+func TestFocusSystemPrompt_Sharpness(t *testing.T) {
+	prompt := focusSystemPrompt(false)
+	for _, want := range []string{
+		"意識する／徹底する／自信を持つ／コミュニケーション／連携／集中",
+		"原文から 20〜40 文字をそのまま抜く",
+		"stop にやめる行動、start に代わりに行う行動を、それぞれ 1 文で",
+		"症状ではなく原因で切る",
+		"issue はそのプレーで指摘された事実を 1 文で",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("プロンプトに %q が無い:\n%s", want, prompt)
+		}
 	}
-	if !strings.Contains(focusSystemPrompt(false), "3〜5 点") {
-		t.Fatal("few=false のプロンプトに「3〜5 点」が無い")
+	// 順位と件数は Hub 側（rankThemes）の仕事。LLM に数えさせる指示を残さない。
+	for _, ng := range []string{"count に根拠となったプレー数", "繰り返し出ている指摘を優先"} {
+		if strings.Contains(prompt, ng) {
+			t.Fatalf("集計を LLM に頼む指示が残っている: %q", ng)
+		}
+	}
+}
+
+// AC-6: 対象が少ないときはテーマ数を絞る指示をプロンプトに入れる。
+func TestFocusSystemPrompt_FewTargets(t *testing.T) {
+	if !strings.Contains(focusSystemPrompt(true), "最大 3 個") {
+		t.Fatal("few=true のプロンプトに「最大 3 個」が無い")
+	}
+	if !strings.Contains(focusSystemPrompt(false), "3〜7 個") {
+		t.Fatal("few=false のプロンプトに「3〜7 個」が無い")
 	}
 
 	play := func(ts string) playThread {
@@ -344,15 +405,15 @@ func TestFocusSystemPrompt_FewTargets(t *testing.T) {
 	if _, err := bot.summarize(t.Context(), testJob(), few, nil); err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
-	if got := gpt.requests[0].System[0]; !strings.Contains(got, "1〜3 点") {
-		t.Fatalf("対象が少ないのにプロンプトが 1〜3 点になっていない:\n%s", got)
+	if got := gpt.requests[0].System[0]; !strings.Contains(got, "最大 3 個") {
+		t.Fatalf("対象が少ないのにプロンプトが 最大 3 個 になっていない:\n%s", got)
 	}
 }
 
-// AC-4: focusDigestSchema は Structured Outputs（strict）の制約を満たす。
+// AC-4: focusReportSchema は Structured Outputs（strict）の制約を満たす。
 // すべての object に additionalProperties:false があり、required が
 // properties のキー集合と一致すること（strict では省略可能なフィールドを作れない）。
-func TestFocusDigestSchema_Strict(t *testing.T) {
+func TestFocusReportSchema_Strict(t *testing.T) {
 	var walk func(path string, node map[string]any)
 	walk = func(path string, node map[string]any) {
 		switch node["type"] {
@@ -391,11 +452,11 @@ func TestFocusDigestSchema_Strict(t *testing.T) {
 			t.Fatalf("%s: 未知の type %v", path, node["type"])
 		}
 	}
-	walk("focus_digest", focusDigestSchema)
+	walk("focus_report", focusReportSchema)
 
 	// focusDigest（Go 側の型）とキーが対応していること。
-	props := focusDigestSchema["properties"].(map[string]any)
-	for _, key := range []string{"focus", "sections"} {
+	props := focusReportSchema["properties"].(map[string]any)
+	for _, key := range []string{"themes", "plays"} {
 		if _, ok := props[key]; !ok {
 			t.Fatalf("schema に %q が無い", key)
 		}
@@ -413,8 +474,8 @@ func TestSummarize_UsesStructuredOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
-	if summary.Digest == nil || len(summary.Digest.Focus) != 3 {
-		t.Fatalf("digest が decode されていない: %+v", summary)
+	if summary.Report == nil || len(summary.Report.Focus) != 3 {
+		t.Fatalf("report が decode されていない: %+v", summary)
 	}
 	if len(gpt.requests) != 1 {
 		t.Fatalf("ChatGPT calls = %d, want 1", len(gpt.requests))
@@ -426,11 +487,11 @@ func TestSummarize_UsesStructuredOutputs(t *testing.T) {
 	if req.Schema == nil {
 		t.Fatal("Schema が nil（Structured Outputs になっていない）")
 	}
-	if req.Schema.Name != focusDigestSchemaName {
-		t.Fatalf("Schema.Name = %q, want %s", req.Schema.Name, focusDigestSchemaName)
+	if req.Schema.Name != focusReportSchemaName {
+		t.Fatalf("Schema.Name = %q, want %s", req.Schema.Name, focusReportSchemaName)
 	}
-	if !reflect.DeepEqual(req.Schema.Schema, focusDigestSchema) {
-		t.Fatal("Schema.Schema が focusDigestSchema でない")
+	if !reflect.DeepEqual(req.Schema.Schema, focusReportSchema) {
+		t.Fatal("Schema.Schema が focusReportSchema でない")
 	}
 	if len(req.System) != 1 || req.User == "" {
 		t.Fatalf("System/User が期待どおりでない: %+v", req)

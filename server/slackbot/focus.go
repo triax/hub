@@ -70,44 +70,39 @@ type playThread struct {
 // 受付メッセージの件数見積り用。プレーか見出しかの判定そのものは要約 LLM に委ねる。
 func (t playThread) IsHeadline() bool { return len(t.Replies) == 0 }
 
-// focusDigest は要約 LLM に返させる構造化出力。Focus がチャンネルにも出す
-// 「この期間の focus」、Sections がスレッド内に続けるプレー別の詳細。
+// focusDigest は要約 LLM に返させる構造化出力。Themes が focus の候補、
+// Plays が「どのプレーがどのテーマに該当するか」。焦点の選定と件数の集計は
+// LLM に数えさせず Hub 側（focus_rank.go）で行うので、ここには数字を持たせない。
 type focusDigest struct {
-	Focus    []focusItem    `json:"focus"`
-	Sections []focusSection `json:"sections"`
+	Themes []focusTheme `json:"themes"`
+	Plays  []focusPlay  `json:"plays"`
 }
 
-// focusItem は focus 1 点。Count は根拠になったプレー数、Plays は代表プレー名。
-type focusItem struct {
+// focusTheme は focus の候補 1 件。Key は Plays から参照するための識別子。
+type focusTheme struct {
+	Key       string   `json:"key"`
 	Title     string   `json:"title"`
 	Detail    string   `json:"detail"`
 	Positions []string `json:"positions"`
-	Count     int      `json:"count"`
-	// Plays は 1 通目には描かない（3〜5 点を短く保つため）。LLM に「根拠のプレーを挙げろ」と
-	// 課すことで Count の裏取りをさせる狙いで受け取っている。
-	// stellar:debt(scope) 受け取るだけで描画していない。upgrade: 詳細スレッドで focus と
-	// プレーを相互リンクするか、不要なら prompt ごと落とす
-	Plays []string `json:"plays"`
+	// Quote は反省スレッドの原文からの短い引用（読み手が原文にあたれるようにする）。
+	Quote string `json:"quote"`
+	// Stop / Start は「やめる行動 → 代わりに行う行動」の対比。
+	Stop  string `json:"stop"`
+	Start string `json:"start"`
 }
 
-// focusSection は見出し（ドリルやシリーズの区切り）とその配下のプレー。
-type focusSection struct {
-	Headline string      `json:"headline"`
-	Plays    []focusPlay `json:"plays"`
-}
-
+// focusPlay は 1 プレーの指摘。ThemeKeys が focusTheme.Key への参照で、
+// これを数えて focus の順位・件数を導出する。
 type focusPlay struct {
-	Name   string   `json:"name"`
-	Points []string `json:"points"`
+	Headline  string   `json:"headline"`
+	Name      string   `json:"name"`
+	ThemeKeys []string `json:"theme_keys"`
+	Positions []string `json:"positions"`
+	Issue     string   `json:"issue"`
 }
 
-// valid は Block Kit で描けるだけの中身があるかを返す。focus が 0 件のまま
-// ordered list を組むと空の rich_text_list になり Slack に invalid_blocks で
-// 弾かれるので、その場合は平文フォールバックに倒す。
-func (d focusDigest) valid() bool { return len(d.Focus) > 0 }
-
-// focusDigestSchemaName は Structured Outputs に渡す schema 名。
-const focusDigestSchemaName = "focus_digest"
+// focusReportSchemaName は Structured Outputs に渡す schema 名。
+const focusReportSchemaName = "focus_report"
 
 // strictObject は Structured Outputs（strict）が要求する形の object schema を組む。
 // strict では省略可能なフィールドを作れないため、required は常に properties の
@@ -133,29 +128,31 @@ func arrayOf(items map[string]any) map[string]any {
 	return map[string]any{"type": "array", "items": items}
 }
 
-// focusDigestSchema は focusDigest の JSON Schema。focusDigest の json タグと
-// 1:1 で対応させる。
-var focusDigestSchema = strictObject(map[string]any{
-	"focus": arrayOf(strictObject(map[string]any{
+// focusReportSchema は focusDigest の JSON Schema。focusDigest の json タグと
+// 1:1 で対応させる。件数（count）は Hub 側で数えるので schema には持たせない。
+var focusReportSchema = strictObject(map[string]any{
+	"themes": arrayOf(strictObject(map[string]any{
+		"key":       stringField(),
 		"title":     stringField(),
 		"detail":    stringField(),
 		"positions": arrayOf(stringField()),
-		"count":     map[string]any{"type": "integer"},
-		"plays":     arrayOf(stringField()),
+		"quote":     stringField(),
+		"stop":      stringField(),
+		"start":     stringField(),
 	})),
-	"sections": arrayOf(strictObject(map[string]any{
-		"headline": stringField(),
-		"plays": arrayOf(strictObject(map[string]any{
-			"name":   stringField(),
-			"points": arrayOf(stringField()),
-		})),
+	"plays": arrayOf(strictObject(map[string]any{
+		"headline":   stringField(),
+		"name":       stringField(),
+		"theme_keys": arrayOf(stringField()),
+		"positions":  arrayOf(stringField()),
+		"issue":      stringField(),
 	})),
 })
 
-// focusSummary は要約の結果。Digest が nil のときは構造化に失敗しており、
+// focusSummary は要約の結果。Report が nil のときは構造化に失敗しており、
 // Text（LLM の生出力）をそのまま平文で投稿する。
 type focusSummary struct {
-	Digest *focusDigest
+	Report *focusReport
 	Text   string
 }
 
@@ -337,8 +334,8 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 		return err
 	}
 
-	if summary.Digest != nil {
-		if err := bot.postFocusMessages(job, focusMessages(job, threads, now, *summary.Digest)); err != nil {
+	if summary.Report != nil {
+		if err := bot.postFocusMessages(job, focusMessages(job, threads, now, *summary.Report)); err != nil {
 			return err
 		}
 	} else {
@@ -554,28 +551,44 @@ func callSlack(fn func() error) error {
 
 // ------------------------------------------------------------------ 要約 ---
 
-// focusSystemPrompt は要約の指示。few は「対象が少ない」ことを表し、focus の点数を絞る。
-// 出力の「形」は focusDigestSchema（Structured Outputs / strict）が縛るので、
-// ここには「中身」の指示だけを書く。
+// focusSystemPrompt は要約の指示。few は「対象が少ない」ことを表し、テーマ数を絞る。
+// 出力の「形」は focusReportSchema（Structured Outputs / strict）が縛るので、
+// ここには「中身」の指示だけを書く。順位付けと件数の集計は focus_rank.go の仕事なので、
+// 「繰り返しを優先しろ」「件数を数えろ」の類は一切書かない（数字が実データでなくなるため）。
 func focusSystemPrompt(few bool) string {
-	count := "3〜5 点"
+	themes := "3〜7 個"
 	if few {
-		count = "1〜3 点"
+		themes = "最大 3 個"
 	}
 	return `あなたはアメリカンフットボールチームのコーチ補佐です。
 入力は Slack に投稿された「練習の投稿とその反省スレッド」です。
 [投稿] 行が投稿本文、[投稿・返信なし] 行は返信の付いていない投稿、その下の "- 名前: 本文" が反省の書き込みです。
 
-- focus はこのチャンネルが次の練習で意識すべき点を ` + count + ` に絞る
-- 複数のプレーで繰り返し出ている指摘を優先し、count に根拠となったプレー数、plays に代表的なプレー名を最大 3 件入れる
-- title は 1 行の見出し、detail は「次の練習で何を意識するか」が分かる 1〜2 行
-- positions には関係するポジション（QB, WR, OL など）を入れる。特定できなければ空配列
-- sections はプレー別の詳細。headline はドリルやシリーズの区切り（例: "8/29 skel"）、plays の name は投稿されたプレー名をそのまま使う
-- 区切りとなる見出しが見当たらない場合は headline を空文字にした section を 1 つだけ作る
-- @channel や @here を含む告知、「ナイスオフェンス！！」のような感想はプレーとして扱わず sections に含めない
-- 返信の無いプレー投稿は points を空配列にして sections に残す
-- 入力の並び順を保つ
-- 値の文字列に Slack の装飾記号（* や _）を入れない`
+# 全体の方針
+- 一般論を書かない。読んだ人が次の練習で何を変えるかを決められる具体性まで踏み込む。
+- 次の語は、直後に具体的な動作（誰が・どのプレーで・何を）が続かない限り使わない: 意識する／徹底する／自信を持つ／コミュニケーション／連携／集中
+- 良い／悪い のような評価語ではなく、観察された事実と、その原因を書く。
+- 値の文字列に Slack の装飾記号（* や _）を入れない。
+
+# themes（課題のテーマ）
+- 反省スレッド全体から読み取れる課題のテーマを ` + themes + ` 挙げる。
+- テーマは症状ではなく原因で切る（"キャッチミス" ではなく "ブレイク前に減速してタイミングがずれる"）。
+- key はテーマを識別する短い英小文字のスラッグ（例: "qb_release_timing"）。plays から参照するので一意にする。
+- title は 1 行の見出し。誰が・どのプレーで・何が起きているかが分かる形にする。
+- detail は原因と対処が分かる 1〜2 行。
+- positions には関係するポジション（QB, WR, OL など）を入れる。特定できなければ空配列。
+- quote には反省スレッドの原文から 20〜40 文字をそのまま抜く（要約しない・言い換えない）。
+- stop にやめる行動、start に代わりに行う行動を、それぞれ 1 文で書く。
+
+# plays（プレー別の指摘）
+- 入力に現れたプレー投稿を、入力の並び順のまま 1 件ずつ挙げる。
+- name は投稿されたプレー名をそのまま使う。
+- headline は直前の区切り投稿（ドリルやシリーズの見出し。例: "8/29 skel"）。区切りが無ければ空文字。
+- theme_keys にはそのプレーが該当する themes の key を入れる。該当が無ければ空配列。
+- issue はそのプレーで指摘された事実を 1 文で。評価語（良い／悪い）は書かない。
+- positions にはそのプレーで指摘の対象になったポジションを入れる。特定できなければ空配列。
+- @channel や @here を含む告知、「ナイスオフェンス！！」のような感想はプレーとして扱わず plays に含めない。
+- 返信の無いプレー投稿は issue を空文字にして plays に残す。`
 }
 
 // focusFewTargets は「対象が少ない」入力かどうかを返す。スレッド単体要約、または
@@ -589,11 +602,14 @@ func focusFewTargets(job focusJob, threads []playThread) bool {
 }
 
 // summarize は全スレッドを 1 プロンプトにまとめて 1 回だけ ChatGPT を呼ぶ。
-// 返答は Structured Outputs（focusDigestSchema）で JSON に縛るが、それでも
+// 返答は Structured Outputs（focusReportSchema）で JSON に縛るが、それでも
 // parse できないときは失敗させず、生のテキストを平文フォールバックとして返す。
+// LLM の出力は候補（themes / plays）でしかなく、focus の選定・件数・統計は
+// rankThemes が実データから導く。
 func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread, resolve func(string) string) (focusSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
-	prompt := focusSystemPrompt(focusFewTargets(job, threads))
+	few := focusFewTargets(job, threads)
+	prompt := focusSystemPrompt(few)
 	parts := make([]string, 0, len(groups))
 	digest := focusDigest{}
 	structured := true // 1 塊でも parse に失敗したら平文フォールバックに倒す
@@ -602,7 +618,7 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 			Model:  chatModelFocus,
 			System: []string{prompt},
 			User:   renderThreads(group, resolve),
-			Schema: &ChatJSONSchema{Name: focusDigestSchemaName, Schema: focusDigestSchema},
+			Schema: &ChatJSONSchema{Name: focusReportSchemaName, Schema: focusReportSchema},
 		})
 		if err != nil {
 			return focusSummary{}, err
@@ -618,18 +634,21 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 			structured = false
 			continue
 		}
-		digest.Focus = append(digest.Focus, part.Focus...)
-		digest.Sections = append(digest.Sections, part.Sections...)
+		digest.Themes = append(digest.Themes, part.Themes...)
+		digest.Plays = append(digest.Plays, part.Plays...)
 	}
 	summary := focusSummary{Text: strings.Join(parts, "\n\n")}
 	if !structured {
 		return summary, nil
 	}
-	if !digest.valid() {
+	report := rankThemes(digest, few)
+	// focus が 0 件のまま ordered list を組むと空の rich_text_list になり
+	// Slack に invalid_blocks で弾かれるので、平文フォールバックに倒す。
+	if len(report.Focus) == 0 {
 		log.Printf("[focus] digest has no focus points, falling back to plain text")
 		return summary, nil
 	}
-	summary.Digest = &digest
+	summary.Report = &report
 	return summary, nil
 }
 

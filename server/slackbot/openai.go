@@ -9,11 +9,11 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 )
 
-// 使うモデルはここに集約する。focus は要約の質が要るので gpt-4o、
+// 使うモデルはここに集約する。focus は推論の質が結果に直結するので gpt-5-mini、
 // 翻訳と echo は短文なので mini で足りる。SDK の定数から起こすことで、
 // モデル名の打ち間違いと SDK 側のリネームをコンパイル時に検出する。
 const (
-	chatModelFocus = string(shared.ChatModelGPT4o)
+	chatModelFocus = string(shared.ChatModelGPT5Mini)
 	chatModelLight = string(shared.ChatModelGPT4oMini)
 )
 
