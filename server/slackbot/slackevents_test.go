@@ -224,3 +224,22 @@ func TestOnMessage_Translate(t *testing.T) {
 		t.Fatalf("翻訳が相方チャンネルへ投稿されていない: %+v", api.posted)
 	}
 }
+
+// LLM が使えない環境では翻訳を諦めるだけで、投稿もパニックもしない。
+func TestOnMessage_WithoutChatGPT(t *testing.T) {
+	api := newFakeSlackAPI()
+	api.channelInfo = &slack.Channel{GroupConversation: slack.GroupConversation{
+		Conversation: slack.Conversation{ID: "C1"}, Name: "team",
+	}}
+	api.conversations = []slack.Channel{{GroupConversation: slack.GroupConversation{
+		Conversation: slack.Conversation{ID: "C2"}, Name: "team_fr",
+	}}}
+	bot := Bot{SlackAPI: api}
+
+	bot.onMessage(httptest.NewRequest(http.MethodPost, "/slack/events", nil), httptest.NewRecorder(),
+		Payload{Event: map[string]any{"type": "message", "text": "おはよう", "channel": "C1", "ts": "100.000000"}})
+
+	if len(api.posted) != 0 {
+		t.Fatalf("ChatGPT が無いのに投稿している: %+v", api.posted)
+	}
+}

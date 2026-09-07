@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,5 +44,14 @@ func TestTranslate(t *testing.T) {
 	}
 	if got["text"] != "Good morning" {
 		t.Fatalf("response_url に返した本文 = %q, want Good morning", got["text"])
+	}
+}
+
+// LLM が使えない環境では ErrNoChatGPT を返す（nil 参照で落ちない）。
+func TestTranslate_WithoutChatGPT(t *testing.T) {
+	bot := Bot{SlackAPI: newFakeSlackAPI()}
+	err := bot.Translate(t.Context(), slack.InteractionCallback{}, "en")
+	if !errors.Is(err, ErrNoChatGPT) {
+		t.Fatalf("err = %v, want ErrNoChatGPT", err)
 	}
 }

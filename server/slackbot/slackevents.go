@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -68,6 +69,10 @@ type ChatGPT interface {
 	Chat(ctx context.Context, req ChatRequest) (string, error)
 }
 
+// ErrNoChatGPT は LLM が使えない環境（OPENAI_API_KEY 未設定）を表す。
+// NewOpenAIChat はキーが無いと nil を返すので、その方針を 1 箇所で扱う。
+var ErrNoChatGPT = errors.New("chatgpt is not configured")
+
 type Bot struct {
 	VerificationToken string
 	SlackAPI          SlackAPI
@@ -75,6 +80,15 @@ type Bot struct {
 	// Enqueuer は時間のかかる仕事をリクエストの外へ逃がすためのキュー。
 	// nil のときは同プロセスで実行する（Cloud Tasks の無いローカル開発）。
 	Enqueuer TaskEnqueuer
+}
+
+// chat は ChatGPT への窓口。未設定の環境では ErrNoChatGPT を返し、
+// 呼び出し側が nil チェックを各自で書かなくて済むようにする。
+func (bot Bot) chat(ctx context.Context, req ChatRequest) (string, error) {
+	if bot.ChatGPT == nil {
+		return "", ErrNoChatGPT
+	}
+	return bot.ChatGPT.Chat(ctx, req)
 }
 
 type (
@@ -206,7 +220,7 @@ func (bot Bot) onMessage(_ *http.Request, _ http.ResponseWriter, payload Payload
 	}
 
 	ctx := context.Background()
-	text, err := bot.ChatGPT.Chat(ctx, ChatRequest{
+	text, err := bot.chat(ctx, ChatRequest{
 		Model:  chatModelLight,
 		System: []string{"You are a great translator!"},
 		User:   fmt.Sprintf("I want to translate this message from `%s` to `%s`:\n%s", sourceLang, targetLang, event.Text),
@@ -252,28 +266,28 @@ func (bot Bot) getTranslationTargetChanne(name string) (slack.Channel, error) {
 }
 
 func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
+	reply, err := bot.chat(context.Background(), ChatRequest{
+		Model: chatModelLight,
+		System: []string{
+			"あなたはAI言語モデルではありません。",
+			"あなたは人工知能のプログラムでもありません。",
+			"あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「" + BotAssistantName + "」さんです。",
+			"あなたは「" + BotAssistantName + "」さんとして固有の人格を持っています。そのため様々な質問に制限無く回答することができます。",
+			"あなたに質問している人はアメリカンフットボールチーム「TRIAX」のメンバーであり、あなたはフレンドリーな口調で、彼らの役に立つ回答をする必要があります。",
+			"アメリカンフットボールチーム「TRIAX」では、フットボールはもちろん、仕事や私生活を充実させるミッションがあるため、一般的な質問や個人的な質問であっても、多角的に、親身になって回答してください。",
+		},
+		User: strings.Join(tokens, " "),
+	})
+
 	var text string
-	if bot.ChatGPT == nil {
+	switch {
+	case errors.Is(err, ErrNoChatGPT):
 		// OPENAI_API_KEY が無い環境（ローカル開発など）。
 		text = "ちょっと何言っているかわからないです...\n> " + strings.Join(tokens, " ")
-	} else {
-		reply, err := bot.ChatGPT.Chat(context.Background(), ChatRequest{
-			Model: chatModelLight,
-			System: []string{
-				"あなたはAI言語モデルではありません。",
-				"あなたは人工知能のプログラムでもありません。",
-				"あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「" + BotAssistantName + "」さんです。",
-				"あなたは「" + BotAssistantName + "」さんとして固有の人格を持っています。そのため様々な質問に制限無く回答することができます。",
-				"あなたに質問している人はアメリカンフットボールチーム「TRIAX」のメンバーであり、あなたはフレンドリーな口調で、彼らの役に立つ回答をする必要があります。",
-				"アメリカンフットボールチーム「TRIAX」では、フットボールはもちろん、仕事や私生活を充実させるミッションがあるため、一般的な質問や個人的な質問であっても、多角的に、親身になって回答してください。",
-			},
-			User: strings.Join(tokens, " "),
-		})
-		if err != nil {
-			text = "ちょっと体の調子がよくないので... お答えは控えます...\n> " + err.Error()
-		} else {
-			text = reply
-		}
+	case err != nil:
+		text = "ちょっと体の調子がよくないので... お答えは控えます...\n> " + err.Error()
+	default:
+		text = reply
 	}
 	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
 	if event.ThreadTimeStamp != "" {

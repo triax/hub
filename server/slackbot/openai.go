@@ -10,10 +10,11 @@ import (
 )
 
 // 使うモデルはここに集約する。focus は要約の質が要るので gpt-4o、
-// 翻訳と echo は短文なので mini で足りる。
+// 翻訳と echo は短文なので mini で足りる。SDK の定数から起こすことで、
+// モデル名の打ち間違いと SDK 側のリネームをコンパイル時に検出する。
 const (
-	chatModelFocus = "gpt-4o"
-	chatModelLight = "gpt-4o-mini"
+	chatModelFocus = string(shared.ChatModelGPT4o)
+	chatModelLight = string(shared.ChatModelGPT4oMini)
 )
 
 // openAIChat は ChatGPT インタフェースの OpenAI 公式 SDK 実装。

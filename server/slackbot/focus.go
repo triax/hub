@@ -109,54 +109,48 @@ func (d focusDigest) valid() bool { return len(d.Focus) > 0 }
 // focusDigestSchemaName は Structured Outputs に渡す schema 名。
 const focusDigestSchemaName = "focus_digest"
 
-// focusDigestSchema は focusDigest の JSON Schema。strict モードの制約により、
-// すべての object に additionalProperties:false を置き、required に全 property を
-// 列挙する（省略可能なフィールドは作れない）。focusDigest の json タグと 1:1 で対応させる。
-var focusDigestSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"focus": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":     map[string]any{"type": "string"},
-					"detail":    map[string]any{"type": "string"},
-					"positions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"count":     map[string]any{"type": "integer"},
-					"plays":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-				},
-				"required":             []any{"title", "detail", "positions", "count", "plays"},
-				"additionalProperties": false,
-			},
-		},
-		"sections": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"headline": map[string]any{"type": "string"},
-					"plays": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"name":   map[string]any{"type": "string"},
-								"points": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-							},
-							"required":             []any{"name", "points"},
-							"additionalProperties": false,
-						},
-					},
-				},
-				"required":             []any{"headline", "plays"},
-				"additionalProperties": false,
-			},
-		},
-	},
-	"required":             []any{"focus", "sections"},
-	"additionalProperties": false,
+// strictObject は Structured Outputs（strict）が要求する形の object schema を組む。
+// strict では省略可能なフィールドを作れないため、required は常に properties の
+// 全キーになる。ここで導出することで、property を足したときの書き漏れを防ぐ。
+func strictObject(properties map[string]any) map[string]any {
+	required := make([]any, 0, len(properties))
+	for name := range properties {
+		required = append(required, name)
+	}
+	sort.Slice(required, func(i, j int) bool { return required[i].(string) < required[j].(string) })
+	return map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"required":             required,
+		"additionalProperties": false,
+	}
 }
+
+// stringField / arrayOf は schema の読みやすさのための小さな組み立て子。
+func stringField() map[string]any { return map[string]any{"type": "string"} }
+
+func arrayOf(items map[string]any) map[string]any {
+	return map[string]any{"type": "array", "items": items}
+}
+
+// focusDigestSchema は focusDigest の JSON Schema。focusDigest の json タグと
+// 1:1 で対応させる。
+var focusDigestSchema = strictObject(map[string]any{
+	"focus": arrayOf(strictObject(map[string]any{
+		"title":     stringField(),
+		"detail":    stringField(),
+		"positions": arrayOf(stringField()),
+		"count":     map[string]any{"type": "integer"},
+		"plays":     arrayOf(stringField()),
+	})),
+	"sections": arrayOf(strictObject(map[string]any{
+		"headline": stringField(),
+		"plays": arrayOf(strictObject(map[string]any{
+			"name":   stringField(),
+			"points": arrayOf(stringField()),
+		})),
+	})),
+})
 
 // focusSummary は要約の結果。Digest が nil のときは構造化に失敗しており、
 // Text（LLM の生出力）をそのまま平文で投稿する。
