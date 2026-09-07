@@ -22,6 +22,15 @@ var (
 	tpl = marmoset.LoadViews("client/dest")
 )
 
+// focusEnqueuer は GAE 上でのみ Cloud Tasks を使う。
+// ローカルでは nil を返し、slackbot 側が同プロセス実行へフォールバックする。
+func focusEnqueuer() slackbot.TaskEnqueuer {
+	if os.Getenv("GAE_APPLICATION") == "" {
+		return nil
+	}
+	return slackbot.CloudTasksEnqueuer{}
+}
+
 func init() {
 	if os.Getenv("GAE_APPLICATION") == "" {
 		if _, err := appyaml.Load("secrets.local.yaml"); err != nil {
@@ -126,6 +135,8 @@ func main() {
 		VerificationToken: os.Getenv("SLACK_BOT_EVENTS_VERIFICATION_TOKEN"),
 		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
 		ChatGPT:           openaigo.NewClient(os.Getenv("OPENAI_API_KEY")),
+		// ローカル開発には Cloud Tasks が無いので Enqueuer を渡さない（同プロセス実行に落ちる）。
+		Enqueuer: focusEnqueuer(),
 	}
 	r.With(smallBody).Post("/slack/events", bot.Webhook)
 	r.With(smallBody).Post("/slack/shortcuts", bot.Shortcuts)
@@ -168,6 +179,7 @@ func main() {
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReportAfterEvent)
 	cron.Get("/equips/scan-unreported", tasks.EquipsScanUnreported)
 	cron.Get("/condition/form", tasks.ConditionFrom)
+	cron.Post("/focus", bot.FocusTask) // slackbot.FocusTaskURI（Cloud Tasks から POST）
 	r.Mount("/tasks", cron)
 
 	r.NotFound(controllers.NotFound)
