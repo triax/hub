@@ -27,13 +27,20 @@ type focusMessage struct {
 }
 
 // focusMessages は 1 通目（チャンネルにも出す focus の digest）と、
-// スレッド内に続けるプレー別詳細を組み立てる。
+// スレッド内に続けるチャート 1 通を組み立てる。プレー別の一覧は
+// `focus 12d full` のときだけチャートの後に続ける（既定では出さない）。
 func focusMessages(job focusJob, threads []playThread, now time.Time, report focusReport) []focusMessage {
 	msgs := []focusMessage{{
 		Text:   digestFallbackText(job, report, now),
 		Blocks: digestBlocks(job, threads, now, report),
 	}}
-	return append(msgs, detailMessages(report)...)
+	if chart, ok := focusChartMessage(report); ok {
+		msgs = append(msgs, chart)
+	}
+	if job.Full {
+		msgs = append(msgs, detailMessages(report)...)
+	}
+	return msgs
 }
 
 // digestBlocks は 1 通目。header（期間）→ context（件数）→ 番号付きの focus →
@@ -52,7 +59,20 @@ func digestBlocks(job focusJob, threads []playThread, now time.Time, report focu
 			slack.NewRichTextList(slack.RTEListOrdered, 0, items...)),
 		slack.NewDividerBlock(),
 		slack.NewContextBlock("focus_guide", slack.NewTextBlockObject(
-			slack.MarkdownType, "▼ プレー別の詳細はこのスレッド内", false, false)),
+			slack.MarkdownType, digestGuide(job, report), false, false)),
+	}
+}
+
+// digestGuide はスレッドに何が続くかの案内。既定はチャート 1 通で、
+// プレー別の一覧は `full` を付けたときだけ続く。
+func digestGuide(job focusJob, report focusReport) string {
+	switch {
+	case job.Full:
+		return "▼ 内訳のチャートとプレー別の詳細はこのスレッド内"
+	case !report.Stats.empty():
+		return "▼ 内訳のチャートはこのスレッド内（プレー別の一覧は `full` を付けて再実行）"
+	default:
+		return "▼ プレー別の一覧は `full` を付けて再実行"
 	}
 }
 

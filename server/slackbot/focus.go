@@ -58,6 +58,8 @@ type focusJob struct {
 	ThreadTS   string `json:"thread_ts"`
 	Oldest     int64  `json:"oldest"`
 	ThreadOnly bool   `json:"thread_only"`
+	// Full は `focus 12d full` の指定。プレー別の一覧をチャートの後に続ける。
+	Full bool `json:"full"`
 }
 
 // playThread は「1 プレー（または見出し）の親投稿」と、その反省スレッドの返信。
@@ -160,8 +162,11 @@ type focusSummary struct {
 
 // newFocusJob は `focus` 以降のトークンから仕事の単位を組み立てる。
 // スレッド内メンションかつ引数なしのときは、そのスレッド 1 本だけを対象にする。
+// `full` は期間指定と独立に解釈するので、`focus full`（スレッド内）も
+// `focus 12d full` も期待どおりに読める。
 func newFocusJob(args []string, now time.Time, channel, mentionTS, threadTS string) (focusJob, error) {
-	job := focusJob{Channel: channel, MentionTS: mentionTS, ThreadTS: threadTS}
+	args, full := takeFocusFullFlag(args)
+	job := focusJob{Channel: channel, MentionTS: mentionTS, ThreadTS: threadTS, Full: full}
 	if len(args) == 0 && threadTS != "" {
 		job.ThreadOnly = true
 		return job, nil
@@ -172,6 +177,20 @@ func newFocusJob(args []string, now time.Time, channel, mentionTS, threadTS stri
 	}
 	job.Oldest = since.Unix()
 	return job, nil
+}
+
+// takeFocusFullFlag は `full` トークンを引数列から抜き取る。位置は問わない。
+func takeFocusFullFlag(args []string) ([]string, bool) {
+	kept := make([]string, 0, len(args))
+	full := false
+	for _, arg := range args {
+		if strings.EqualFold(strings.TrimSpace(arg), "full") {
+			full = true
+			continue
+		}
+		kept = append(kept, arg)
+	}
+	return kept, full
 }
 
 // parseFocusSince は `8/8` / `2026-08-08` / `12d` / 未指定 を解釈し、

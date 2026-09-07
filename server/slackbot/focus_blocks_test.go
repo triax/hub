@@ -215,22 +215,65 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 		}
 	}
 
-	// 詳細は同じスレッドに broadcast 無しで続く。
+	// 続きは同じスレッドに broadcast 無しで出る。
 	for i, p := range api.posted[2:] {
 		if p.Broadcast() != "" {
-			t.Fatalf("詳細 posted[%d] に reply_broadcast が付いている", i+2)
+			t.Fatalf("posted[%d] に reply_broadcast が付いている", i+2)
 		}
 		if p.ThreadTS() != testMentionTS {
-			t.Fatalf("詳細 posted[%d] がスレッド外に出ている: %q", i+2, p.ThreadTS())
+			t.Fatalf("posted[%d] がスレッド外に出ている: %q", i+2, p.ThreadTS())
 		}
 		if p.Text() == "" {
-			t.Fatalf("詳細 posted[%d] の text フォールバックが空", i+2)
+			t.Fatalf("posted[%d] の text フォールバックが空", i+2)
 		}
 	}
-	// 詳細は見出しごとに section + rich_text。digestJSON は見出し 2 つぶん。
-	if got := strings.Join(api.posted[2].BlockTypes(), ","); got != "section,rich_text,section,rich_text" {
-		t.Fatalf("詳細の blocks = %q, want 見出し 2 つぶんの section,rich_text", got)
+}
+
+// #659 AC-6: 既定では summary の直後にチャート 1 通だけが続き、プレー別の一覧は出ない。
+// `full` を付けたときだけチャートの後に一覧が続く。
+func TestFocus_ChartAndDetails(t *testing.T) {
+	run := func(t *testing.T, full bool) []sentMessage {
+		t.Helper()
+		api := focusFixture()
+		bot := Bot{SlackAPI: api, ChatGPT: &fakeChatGPT{reply: digestJSON}}
+		job := testJob()
+		job.Full = full
+		if err := bot.runFocus(t.Context(), job); err != nil {
+			t.Fatalf("runFocus: %v", err)
+		}
+		return api.posted[1:] // posted[0] は受付メッセージ
 	}
+
+	t.Run("既定はチャートのみ", func(t *testing.T) {
+		posted := run(t, false)
+		if len(posted) != 2 {
+			t.Fatalf("posted = %d, want 2（summary + チャート）", len(posted))
+		}
+		if got := strings.Join(posted[1].BlockTypes(), ","); got != "data_visualization,data_visualization" {
+			t.Fatalf("チャート通の blocks = %q, want data_visualization × 2", got)
+		}
+		charts := posted[1].Blocks()
+		if got := charts[0]["chart"].(map[string]any)["type"]; got != "pie" {
+			t.Fatalf("1 個目の chart.type = %v, want pie", got)
+		}
+		if got := charts[1]["chart"].(map[string]any)["type"]; got != "bar" {
+			t.Fatalf("2 個目の chart.type = %v, want bar", got)
+		}
+		if !strings.HasPrefix(posted[1].Text(), "課題の内訳: ") {
+			t.Fatalf("チャート通の text = %q, want `課題の内訳: …`", posted[1].Text())
+		}
+	})
+
+	t.Run("full ならチャートの後に一覧が続く", func(t *testing.T) {
+		posted := run(t, true)
+		if len(posted) != 3 {
+			t.Fatalf("posted = %d, want 3（summary + チャート + 一覧）", len(posted))
+		}
+		// 一覧は見出しごとに section + rich_text。digestJSON は見出し 2 つぶん。
+		if got := strings.Join(posted[2].BlockTypes(), ","); got != "section,rich_text,section,rich_text" {
+			t.Fatalf("一覧の blocks = %q, want 見出し 2 つぶんの section,rich_text", got)
+		}
+	})
 }
 
 // AC-4: 詳細は見出し境界で分割され、1 通あたり 50 blocks 以下に収まる。

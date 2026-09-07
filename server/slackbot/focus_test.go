@@ -1,6 +1,7 @@
 package slackbot
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -243,6 +244,60 @@ func TestCollectThreads_ThreadOnly(t *testing.T) {
 	if got := joined(texts(threads[0].Replies)); got != "反省X" {
 		t.Fatalf("Replies = %q, want 反省X（親とメンションを除く）", got)
 	}
+}
+
+// #659 AC-6: `full` は期間指定と独立に解釈する。
+func TestNewFocusJob_Full(t *testing.T) {
+	now := time.Date(2026, 9, 7, 13, 45, 0, 0, server.ServiceLocation)
+	want12d := time.Date(2026, 8, 26, 0, 0, 0, 0, server.ServiceLocation).Unix()
+
+	cases := []struct {
+		name       string
+		args       []string
+		threadTS   string
+		wantFull   bool
+		wantThread bool
+		wantOldest int64
+	}{
+		{"full なし", []string{"12d"}, "", false, false, want12d},
+		{"期間 + full", []string{"12d", "full"}, "", true, false, want12d},
+		{"full + 期間（順不同）", []string{"full", "12d"}, "", true, false, want12d},
+		{"大文字も拾う", []string{"12d", "FULL"}, "", true, false, want12d},
+		{"引数が full だけなら期間は既定", []string{"full"}, "", true, false, want12d},
+		{"スレッド内の full は ThreadOnly のまま", []string{"full"}, "50.000000", true, true, 0},
+		{"スレッド内で引数なし", nil, "50.000000", false, true, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			job, err := newFocusJob(c.args, now, "C1", testMentionTS, c.threadTS)
+			if err != nil {
+				t.Fatalf("newFocusJob(%v): %v", c.args, err)
+			}
+			if job.Full != c.wantFull {
+				t.Fatalf("Full = %v, want %v", job.Full, c.wantFull)
+			}
+			if job.ThreadOnly != c.wantThread {
+				t.Fatalf("ThreadOnly = %v, want %v", job.ThreadOnly, c.wantThread)
+			}
+			if job.Oldest != c.wantOldest {
+				t.Fatalf("Oldest = %d, want %d", job.Oldest, c.wantOldest)
+			}
+		})
+	}
+
+	// Cloud Tasks の payload を跨いでも落ちない（Webhook → ワーカーは JSON 越し）。
+	if !strings.Contains(mustMarshal(t, focusJob{Full: true}), `"full":true`) {
+		t.Fatal("focusJob の JSON に full が乗っていない（ワーカーに伝わらない）")
+	}
+}
+
+func mustMarshal(t *testing.T, v any) string {
+	t.Helper()
+	buf, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(buf)
 }
 
 // AC-4: 12,000 文字の要約が 3,500 文字以下のチャンクに、行を割らずに分割される。
