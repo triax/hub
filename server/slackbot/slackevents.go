@@ -42,6 +42,9 @@ type SlackAPI interface {
 	GetConversationInfo(input *slack.GetConversationInfoInput) (*slack.Channel, error)
 	GetConversationReplies(params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
 	OpenConversation(params *slack.OpenConversationParameters) (*slack.Channel, bool, bool, error)
+	AddReaction(name string, item slack.ItemRef) error
+	RemoveReaction(name string, item slack.ItemRef) error
+	UpdateMessage(channelID, timestamp string, options ...slack.MsgOption) (string, string, string, error)
 }
 
 // This interface represents *openaigo.Client.
@@ -53,6 +56,9 @@ type Bot struct {
 	VerificationToken string
 	SlackAPI          SlackAPI
 	ChatGPT           ChatGPT
+	// Enqueuer は時間のかかる仕事をリクエストの外へ逃がすためのキュー。
+	// nil のときは同プロセスで実行する（Cloud Tasks の無いローカル開発）。
+	Enqueuer TaskEnqueuer
 }
 
 type (
@@ -64,6 +70,14 @@ type (
 )
 
 func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
+
+	// Slack は 3 秒以内に応答が無いと同じイベントを再送する。再送を処理すると
+	// 要約や翻訳が二重に投稿されるので、200 を返して黙って捨てる。
+	if req.Header.Get("X-Slack-Retry-Num") != "" {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+		return
+	}
 
 	payload := Payload{}
 	defer req.Body.Close()
@@ -120,6 +134,8 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 		bot.onMentionEquipCheck(req, w, event)
 	case "予報":
 		bot.onMentionAmesh(req, w, event)
+	case "focus": // プレー反省スレッドの期間指定 AI 要約
+		bot.onMentionFocus(event, tokens[1:])
 	case "HUB_WEBPAGE_BASE_URL":
 		bot.onEnvDumpSafe(req, w, event, "HUB_WEBPAGE_BASE_URL")
 	case "HUB_CONDITIONING_CHECK_SHEET_URL":
