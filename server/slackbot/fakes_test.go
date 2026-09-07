@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )
@@ -105,6 +104,11 @@ type fakeSlackAPI struct {
 	repliesIndex  map[string]int
 	repliesParams []slack.GetConversationRepliesParameters
 
+	// conversations.list が返すチャンネル（翻訳先の解決に使う）
+	conversations []slack.Channel
+	// conversations.info が返すチャンネル（翻訳元の名前を決める）
+	channelInfo *slack.Channel
+
 	posted   []sentMessage
 	updated  []sentMessage
 	added    []string
@@ -186,34 +190,36 @@ func (f *fakeSlackAPI) GetConversationReplies(params *slack.GetConversationRepli
 
 // 以下は本テストでは使わないが SlackAPI interface を満たすために必要。
 func (f *fakeSlackAPI) GetUsers(...slack.GetUsersOption) ([]slack.User, error) { return nil, nil }
-func (f *fakeSlackAPI) GetUserInfo(string) (*slack.User, error)                { return nil, nil }
+func (f *fakeSlackAPI) GetUserInfo(string) (*slack.User, error)                { return &slack.User{}, nil }
 func (f *fakeSlackAPI) GetReactions(slack.ItemRef, slack.GetReactionsParameters) (slack.ReactedItem, error) {
 	return slack.ReactedItem{}, nil
 }
 func (f *fakeSlackAPI) GetConversations(*slack.GetConversationsParameters) ([]slack.Channel, string, error) {
-	return nil, "", nil
+	return f.conversations, "", nil
 }
+
 func (f *fakeSlackAPI) GetConversationInfo(*slack.GetConversationInfoInput) (*slack.Channel, error) {
-	return nil, nil
+	if f.channelInfo == nil {
+		return nil, fmt.Errorf("channel not found")
+	}
+	return f.channelInfo, nil
 }
 func (f *fakeSlackAPI) OpenConversation(*slack.OpenConversationParameters) (*slack.Channel, bool, bool, error) {
 	return nil, false, false, nil
 }
 
 type fakeChatGPT struct {
-	requests []openaigo.ChatRequest
+	requests []ChatRequest
 	reply    string
 	err      error
 }
 
-func (f *fakeChatGPT) Chat(_ context.Context, req openaigo.ChatRequest) (openaigo.ChatCompletionResponse, error) {
+func (f *fakeChatGPT) Chat(_ context.Context, req ChatRequest) (string, error) {
 	f.requests = append(f.requests, req)
 	if f.err != nil {
-		return openaigo.ChatCompletionResponse{}, f.err
+		return "", f.err
 	}
-	return openaigo.ChatCompletionResponse{
-		Choices: []openaigo.Choice{{Message: openaigo.Message{Role: "assistant", Content: f.reply}}},
-	}, nil
+	return f.reply, nil
 }
 
 type fakeEnqueuer struct {

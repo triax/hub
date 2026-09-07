@@ -7,7 +7,6 @@ import (
 
 	"github.com/otiai10/appyaml"
 	"github.com/otiai10/marmoset"
-	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/api"
 	"github.com/triax/hub/server/controllers"
@@ -140,7 +139,7 @@ func main() {
 	bot := slackbot.Bot{
 		VerificationToken: os.Getenv("SLACK_BOT_EVENTS_VERIFICATION_TOKEN"),
 		SlackAPI:          slack.New(os.Getenv("SLACK_BOT_USER_OAUTH_TOKEN")),
-		ChatGPT:           openaigo.NewClient(os.Getenv("OPENAI_API_KEY")),
+		ChatGPT:           slackbot.NewOpenAIChat(os.Getenv("OPENAI_API_KEY")),
 		// ローカル開発には Cloud Tasks が無いので Enqueuer を渡さない（同プロセス実行に落ちる）。
 		Enqueuer: focusEnqueuer(),
 	}

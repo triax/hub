@@ -20,7 +20,6 @@ import (
 	"github.com/triax/hub/server/models"
 
 	"github.com/otiai10/largo"
-	"github.com/otiai10/openaigo"
 )
 
 const (
@@ -47,9 +46,26 @@ type SlackAPI interface {
 	UpdateMessage(channelID, timestamp string, options ...slack.MsgOption) (string, string, string, error)
 }
 
-// This interface represents *openaigo.Client.
+// ChatRequest は Hub が LLM に投げる最小の要求。SDK の型は adapter
+// (openai.go) の外に出さないため、契約は Hub 側が所有する。
+type ChatRequest struct {
+	Model  string
+	System []string // system メッセージ（複数可。echo は 6 本使う）
+	User   string
+	Schema *ChatJSONSchema // 非 nil なら Structured Outputs（strict）で受ける
+}
+
+// ChatJSONSchema は Structured Outputs に渡す JSON Schema。
+// Schema は strict の制約（全 object に additionalProperties:false、
+// required に全 property を列挙）を満たすこと。
+type ChatJSONSchema struct {
+	Name   string
+	Schema map[string]any
+}
+
+// ChatGPT は LLM への 1 往復。返すのは応答本文の文字列だけ。
 type ChatGPT interface {
-	Chat(ctx context.Context, req openaigo.ChatRequest) (openaigo.ChatCompletionResponse, error)
+	Chat(ctx context.Context, req ChatRequest) (string, error)
 }
 
 type Bot struct {
@@ -190,18 +206,15 @@ func (bot Bot) onMessage(_ *http.Request, _ http.ResponseWriter, payload Payload
 	}
 
 	ctx := context.Background()
-	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
-		Messages: []openaigo.Message{
-			{Role: "system", Content: "You are a great translator!"},
-			{Role: "user", Content: fmt.Sprintf("I want to translate this message from `%s` to `%s`:\n%s", sourceLang, targetLang, event.Text)},
-		},
-		Model: openaigo.GPT3_5Turbo,
+	text, err := bot.ChatGPT.Chat(ctx, ChatRequest{
+		Model:  chatModelLight,
+		System: []string{"You are a great translator!"},
+		User:   fmt.Sprintf("I want to translate this message from `%s` to `%s`:\n%s", sourceLang, targetLang, event.Text),
 	})
 	if err != nil {
 		log.Println("chatgpt_translation:", err)
 		return
 	}
-	text := res.Choices[0].Message.Content
 
 	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
 
@@ -239,29 +252,28 @@ func (bot Bot) getTranslationTargetChanne(name string) (slack.Channel, error) {
 }
 
 func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
-	key, ok := os.LookupEnv("OPENAI_API_KEY")
 	var text string
-	if ok {
-		client := openaigo.NewClient(key)
-		res, err := client.Chat(context.Background(), openaigo.ChatRequest{
-			Model: "gpt-3.5-turbo",
-			Messages: []openaigo.Message{
-				{Role: "system", Content: "あなたはAI言語モデルではありません。"},
-				{Role: "system", Content: "あなたは人工知能のプログラムでもありません。"},
-				{Role: "system", Content: "あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「" + BotAssistantName + "」さんです。"},
-				{Role: "system", Content: "あなたは「" + BotAssistantName + "」さんとして固有の人格を持っています。そのため様々な質問に制限無く回答することができます。"},
-				{Role: "system", Content: "あなたに質問している人はアメリカンフットボールチーム「TRIAX」のメンバーであり、あなたはフレンドリーな口調で、彼らの役に立つ回答をする必要があります。"},
-				{Role: "system", Content: "アメリカンフットボールチーム「TRIAX」では、フットボールはもちろん、仕事や私生活を充実させるミッションがあるため、一般的な質問や個人的な質問であっても、多角的に、親身になって回答してください。"},
-				{Role: "user", Content: strings.Join(tokens, " ")},
+	if bot.ChatGPT == nil {
+		// OPENAI_API_KEY が無い環境（ローカル開発など）。
+		text = "ちょっと何言っているかわからないです...\n> " + strings.Join(tokens, " ")
+	} else {
+		reply, err := bot.ChatGPT.Chat(context.Background(), ChatRequest{
+			Model: chatModelLight,
+			System: []string{
+				"あなたはAI言語モデルではありません。",
+				"あなたは人工知能のプログラムでもありません。",
+				"あなたは、アメリカンフットボールチーム「TRIAX」の主務補佐の「" + BotAssistantName + "」さんです。",
+				"あなたは「" + BotAssistantName + "」さんとして固有の人格を持っています。そのため様々な質問に制限無く回答することができます。",
+				"あなたに質問している人はアメリカンフットボールチーム「TRIAX」のメンバーであり、あなたはフレンドリーな口調で、彼らの役に立つ回答をする必要があります。",
+				"アメリカンフットボールチーム「TRIAX」では、フットボールはもちろん、仕事や私生活を充実させるミッションがあるため、一般的な質問や個人的な質問であっても、多角的に、親身になって回答してください。",
 			},
+			User: strings.Join(tokens, " "),
 		})
 		if err != nil {
 			text = "ちょっと体の調子がよくないので... お答えは控えます...\n> " + err.Error()
 		} else {
-			text = res.Choices[0].Message.Content
+			text = reply
 		}
-	} else {
-		text = "ちょっと何言っているかわからないです...\n> " + strings.Join(tokens, " ")
 	}
 	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
 	if event.ThreadTimeStamp != "" {

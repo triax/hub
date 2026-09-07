@@ -15,7 +15,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/otiai10/marmoset"
-	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/triax/hub/server"
@@ -106,6 +105,58 @@ type focusPlay struct {
 // ordered list を組むと空の rich_text_list になり Slack に invalid_blocks で
 // 弾かれるので、その場合は平文フォールバックに倒す。
 func (d focusDigest) valid() bool { return len(d.Focus) > 0 }
+
+// focusDigestSchemaName は Structured Outputs に渡す schema 名。
+const focusDigestSchemaName = "focus_digest"
+
+// focusDigestSchema は focusDigest の JSON Schema。strict モードの制約により、
+// すべての object に additionalProperties:false を置き、required に全 property を
+// 列挙する（省略可能なフィールドは作れない）。focusDigest の json タグと 1:1 で対応させる。
+var focusDigestSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"focus": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":     map[string]any{"type": "string"},
+					"detail":    map[string]any{"type": "string"},
+					"positions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"count":     map[string]any{"type": "integer"},
+					"plays":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+				"required":             []any{"title", "detail", "positions", "count", "plays"},
+				"additionalProperties": false,
+			},
+		},
+		"sections": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"headline": map[string]any{"type": "string"},
+					"plays": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name":   map[string]any{"type": "string"},
+								"points": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+							},
+							"required":             []any{"name", "points"},
+							"additionalProperties": false,
+						},
+					},
+				},
+				"required":             []any{"headline", "plays"},
+				"additionalProperties": false,
+			},
+		},
+	},
+	"required":             []any{"focus", "sections"},
+	"additionalProperties": false,
+}
 
 // focusSummary は要約の結果。Digest が nil のときは構造化に失敗しており、
 // Text（LLM の生出力）をそのまま平文で投稿する。
@@ -509,9 +560,8 @@ func callSlack(fn func() error) error {
 // ------------------------------------------------------------------ 要約 ---
 
 // focusSystemPrompt は要約の指示。few は「対象が少ない」ことを表し、focus の点数を絞る。
-//
-// stellar:debt(dep) openaigo v1.7.0 に response_format が無くプロンプト指示で JSON を強制。
-// upgrade: JSON mode 対応版へ更新
+// 出力の「形」は focusDigestSchema（Structured Outputs / strict）が縛るので、
+// ここには「中身」の指示だけを書く。
 func focusSystemPrompt(few bool) string {
 	count := "3〜5 点"
 	if few {
@@ -520,10 +570,6 @@ func focusSystemPrompt(few bool) string {
 	return `あなたはアメリカンフットボールチームのコーチ補佐です。
 入力は Slack に投稿された「練習の投稿とその反省スレッド」です。
 [投稿] 行が投稿本文、[投稿・返信なし] 行は返信の付いていない投稿、その下の "- 名前: 本文" が反省の書き込みです。
-
-次の JSON だけを返してください（前後に説明文やコードフェンスを付けない）:
-{"focus":[{"title":"","detail":"","positions":[],"count":0,"plays":[]}],
- "sections":[{"headline":"","plays":[{"name":"","points":[]}]}]}
 
 - focus はこのチャンネルが次の練習で意識すべき点を ` + count + ` に絞る
 - 複数のプレーで繰り返し出ている指摘を優先し、count に根拠となったプレー数、plays に代表的なプレー名を最大 3 件入れる
@@ -548,8 +594,8 @@ func focusFewTargets(job focusJob, threads []playThread) bool {
 }
 
 // summarize は全スレッドを 1 プロンプトにまとめて 1 回だけ ChatGPT を呼ぶ。
-// 返答は JSON（focusDigest）を期待するが、parse できないときは失敗させず
-// 生のテキストを平文フォールバックとして返す。
+// 返答は Structured Outputs（focusDigestSchema）で JSON に縛るが、それでも
+// parse できないときは失敗させず、生のテキストを平文フォールバックとして返す。
 func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread, resolve func(string) string) (focusSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
 	prompt := focusSystemPrompt(focusFewTargets(job, threads))
@@ -557,27 +603,23 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	digest := focusDigest{}
 	structured := true // 1 塊でも parse に失敗したら平文フォールバックに倒す
 	for _, group := range groups {
-		res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
-			Model: openaigo.GPT4o,
-			Messages: []openaigo.Message{
-				{Role: "system", Content: prompt},
-				{Role: "user", Content: renderThreads(group, resolve)},
-			},
+		reply, err := bot.ChatGPT.Chat(ctx, ChatRequest{
+			Model:  chatModelFocus,
+			System: []string{prompt},
+			User:   renderThreads(group, resolve),
+			Schema: &ChatJSONSchema{Name: focusDigestSchemaName, Schema: focusDigestSchema},
 		})
 		if err != nil {
 			return focusSummary{}, err
 		}
-		if len(res.Choices) == 0 {
-			return focusSummary{}, fmt.Errorf("要約が返ってきませんでした")
-		}
-		content := strings.TrimSpace(res.Choices[0].Message.Content)
+		content := strings.TrimSpace(reply)
 		parts = append(parts, content)
 		if !structured {
 			continue // 平文フォールバックが確定済み。残りは Text を組むためだけに読む
 		}
 		part := focusDigest{}
-		if err := json.Unmarshal([]byte(stripCodeFence(content)), &part); err != nil {
-			log.Printf("[focus] digest parse failed, falling back to plain text: %v", err)
+		if err := json.Unmarshal([]byte(content), &part); err != nil {
+			log.Printf("[focus] structured output を受け取れませんでした, falling back to plain text: %v", err)
 			structured = false
 			continue
 		}
@@ -594,23 +636,6 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	}
 	summary.Digest = &digest
 	return summary, nil
-}
-
-// stripCodeFence は ```json … ``` のコードフェンスを剥がす。
-// openaigo に response_format が無いので、フェンス付きで返ってくることがある。
-func stripCodeFence(s string) string {
-	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "```") {
-		return s
-	}
-	s = strings.TrimPrefix(s, "```")
-	if i := strings.LastIndex(s, "```"); i >= 0 {
-		s = s[:i]
-	}
-	if i := strings.IndexAny(s, "{["); i >= 0 {
-		s = s[i:] // ``` の直後に付く言語名（json 等）を落とす
-	}
-	return strings.TrimSpace(s)
 }
 
 // splitThreadsForPrompt は入力が文脈長に収まる限り 1 塊のまま返す。
