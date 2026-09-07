@@ -171,3 +171,36 @@ func TestBuildFocusStats(t *testing.T) {
 		t.Fatal("空の集計が empty 判定になっていない")
 	}
 }
+
+// #661 AC-2: LLM が挙げた「やる」「やめる」は、空文字と重複を落として各 2 件に
+// 切り詰める（件数は Structured Outputs の strict schema では縛れない）。
+// do が 0 件でも focus からは外さない。
+func TestNormalizeTheme_TrimsActions(t *testing.T) {
+	theme := normalizeTheme(focusTheme{
+		Key:  "timing",
+		Do:   []string{" ブレイク 3 歩目で離す ", "", "ブレイク 3 歩目で離す", "MOFO/MOFC を先に決める", "フラットは最後に読む"},
+		Dont: []string{"   "},
+	})
+	if got := strings.Join(theme.Do, "|"); got != "ブレイク 3 歩目で離す|MOFO/MOFC を先に決める" {
+		t.Fatalf("Do = %q, want 空文字・重複を除いた先頭 %d 件", got, focusMaxActions)
+	}
+	if len(theme.Dont) != 0 {
+		t.Fatalf("Dont = %+v, want 空（空白だけの要素は落とす）", theme.Dont)
+	}
+
+	// rankThemes 経由でも同じで、do 0 件のテーマが focus から消えない。
+	d := focusDigest{
+		Themes: []focusTheme{{Key: "a", Title: "A", Do: []string{"やること", "", "やること"}, Dont: nil}},
+		Plays:  []focusPlay{{Name: "1", ThemeKeys: []string{"a"}}, {Name: "2", ThemeKeys: []string{"a"}}},
+	}
+	focus := rankThemes(d, false).Focus
+	if len(focus) != 1 {
+		t.Fatalf("focus = %d 件, want 1", len(focus))
+	}
+	if got := strings.Join(focus[0].Do, "|"); got != "やること" {
+		t.Fatalf("focus[0].Do = %q, want 重複を除いた 1 件", got)
+	}
+	if len(focus[0].Dont) != 0 {
+		t.Fatalf("focus[0].Dont = %+v, want 空（やめるが無くても focus に残る）", focus[0].Dont)
+	}
+}
