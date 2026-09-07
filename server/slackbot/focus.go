@@ -606,11 +606,11 @@ func stripCodeFence(s string) string {
 		return s
 	}
 	s = strings.TrimPrefix(s, "```")
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[i+1:] // ``` の直後に付く言語名（json 等）を落とす
-	}
 	if i := strings.LastIndex(s, "```"); i >= 0 {
 		s = s[:i]
+	}
+	if i := strings.IndexAny(s, "{["); i >= 0 {
+		s = s[i:] // ``` の直後に付く言語名（json 等）を落とす
 	}
 	return strings.TrimSpace(s)
 }
@@ -767,36 +767,28 @@ func splitLongLine(line string, max int) []string {
 	return out
 }
 
-// postSummary はメンションのスレッドへ要約を連投する。
-// トップレベルにも見せたいのは 1 チャンク目だけなので、broadcast はそこにしか付けない。
+// postSummary は平文フォールバック用。チャンクを 1 通ずつの focusMessage に均して
+// postFocusMessages に流す（連投・broadcast の規則を 1 箇所に閉じる）。
 func (bot Bot) postSummary(job focusJob, chunks []string) error {
-	for i, chunk := range chunks {
-		opts := []slack.MsgOption{
-			slack.MsgOptionText(chunk, false),
-			slack.MsgOptionTS(job.MentionTS),
-		}
-		if i == 0 && !job.ThreadOnly {
-			opts = append(opts, slack.MsgOptionBroadcast())
-		}
-		if err := callSlack(func() error {
-			_, _, err := bot.SlackAPI.PostMessage(job.Channel, opts...)
-			return err
-		}); err != nil {
-			return err
-		}
+	msgs := make([]focusMessage, 0, len(chunks))
+	for _, chunk := range chunks {
+		msgs = append(msgs, focusMessage{Text: chunk})
 	}
-	return nil
+	return bot.postFocusMessages(job, msgs)
 }
 
-// postFocusMessages は Block Kit で組んだ要約をメンションのスレッドへ連投する。
+// postFocusMessages は要約をメンションのスレッドへ連投する。
 // トップレベルにも見せたいのは 1 通目（focus の digest）だけなので broadcast はそこにしか
 // 付けない。blocks だけの投稿は通知・検索が空になるので Text を必ず併せて渡す。
 func (bot Bot) postFocusMessages(job focusJob, msgs []focusMessage) error {
 	for i, msg := range msgs {
 		opts := []slack.MsgOption{
 			slack.MsgOptionText(msg.Text, false),
-			slack.MsgOptionBlocks(msg.Blocks...),
 			slack.MsgOptionTS(job.MentionTS),
+		}
+		if len(msg.Blocks) > 0 {
+			// 空スライスで呼ぶと blocks=[] を送って既存 blocks を消す挙動になるので渡さない。
+			opts = append(opts, slack.MsgOptionBlocks(msg.Blocks...))
 		}
 		if i == 0 && !job.ThreadOnly {
 			opts = append(opts, slack.MsgOptionBroadcast())

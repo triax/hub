@@ -106,6 +106,18 @@ func TestSummarize_CodeFenceAndBrokenJSON(t *testing.T) {
 		}
 	})
 
+	t.Run("改行の無いコードフェンス", func(t *testing.T) {
+		gpt := &fakeChatGPT{reply: "```json " + strings.Join(strings.Fields(digestJSON), " ") + " ```"}
+		bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
+		summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
+		if err != nil {
+			t.Fatalf("summarize: %v", err)
+		}
+		if summary.Digest == nil || len(summary.Digest.Focus) != 3 {
+			t.Fatalf("1 行のフェンス付き JSON が decode されていない: %+v", summary)
+		}
+	})
+
 	t.Run("壊れた JSON は平文フォールバック", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		restore := log.Writer()
