@@ -67,7 +67,7 @@ func (c *openAIChat) Chat(ctx context.Context, req ChatRequest) (string, error) 
 		return "", err
 	}
 	if len(res.Choices) == 0 {
-		return "", fmt.Errorf("要約が返ってきませんでした")
+		return "", fmt.Errorf("応答が返ってきませんでした")
 	}
 	if refusal := res.Choices[0].Message.Refusal; refusal != "" {
 		return "", fmt.Errorf("モデルが応答を拒否しました: %s", refusal)

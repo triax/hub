@@ -597,7 +597,7 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	digest := focusDigest{}
 	structured := true // 1 塊でも parse に失敗したら平文フォールバックに倒す
 	for _, group := range groups {
-		reply, err := bot.ChatGPT.Chat(ctx, ChatRequest{
+		reply, err := bot.chat(ctx, ChatRequest{
 			Model:  chatModelFocus,
 			System: []string{prompt},
 			User:   renderThreads(group, resolve),
