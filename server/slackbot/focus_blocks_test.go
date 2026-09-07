@@ -16,16 +16,25 @@ import (
 // digestJSON は LLM が返す構造化出力。テーマ 4 件・プレー 6 件で、
 // theme_keys の分布は timing=3 / vertical=2 / call=2 / stance=1。
 // stance は件数 1 なので focus には採られない（単発は詳細側の材料）。
+//
+// do / dont は正規化と描画の分岐を 1 つの入力で踏めるように散らしてある:
+// timing は do / dont とも 3 件（空文字・重複入り。2 件に切り詰まる）、
+// vertical は dont が空（「やめる」を省く）、call は do が空（「やる」を省く）。
 const digestJSON = `{
   "themes": [
-    {"key":"timing","title":"QB↔WR のタイミング","detail":"WR のブレイク 3 歩目でボールを離す","positions":["QB","WR"],
-     "quote":"Xがピタッと止まれてないのと、QBが待ちすぎ","stop":"フラット第一選択で待つ","start":"スナップ前に MOFO/MOFC を決めて入る"},
-    {"key":"vertical","title":"縦の走り込み","detail":"足を止めず奥まで駆け抜ける","positions":["WR"],
-     "quote":"3歩目で減速して縦が死んでいる","stop":"ブレイク前に減速する","start":"奥まで駆け抜けてから切る"},
-    {"key":"call","title":"セット前のコール","detail":"SF の位置を声に出して合わせる","positions":[],
-     "quote":"コールが聞こえなくて合わせられなかった","stop":"黙ってセットする","start":"SF の位置を指差して声に出す"},
-    {"key":"stance","title":"スタンスの幅","detail":"肩幅より広く構える","positions":["OL"],
-     "quote":"スタンスが狭くて割られた","stop":"狭いスタンスで構える","start":"肩幅より広く構える"}
+    {"key":"timing","title":"QB↔WR のタイミング","summary":"スナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。","positions":["QB","WR"],
+     "quote":"Xがピタッと止まれてないのと、QBが待ちすぎ",
+     "do":["ブレイク 3 歩目でボールを離す","  ","ブレイク 3 歩目でボールを離す","スナップ前に SF の目線で MOFO/MOFC を決める","フラットは最後に読む"],
+     "dont":["フラットを第一選択にして待つ","","投げ急いでリズムを崩す","ブレイク後に投げ先を決める"]},
+    {"key":"vertical","title":"縦の走り込み","summary":"3 歩目で減速して縦が死に、SF を釣れていない。","positions":["WR"],
+     "quote":"3歩目で減速して縦が死んでいる",
+     "do":["奥まで駆け抜けてから切る","縦の 5 歩目まで減速しない"],"dont":[]},
+    {"key":"call","title":"セット前のコール","summary":"SF の位置を声に出しておらず、コールが後ろまで届いていない。","positions":[],
+     "quote":"コールが聞こえなくて合わせられなかった",
+     "do":[],"dont":["黙ってセットする"]},
+    {"key":"stance","title":"スタンスの幅","summary":"スタンスが狭く、内側を割られている。","positions":["OL"],
+     "quote":"スタンスが狭くて割られた",
+     "do":["肩幅より広く構える"],"dont":["狭いスタンスで構える"]}
   ],
   "plays": [
     {"headline":"GL Drive1","name":"プレーA","theme_keys":["timing","vertical"],"positions":["QB","WR"],"issue":"リリースが 1 テンポ遅い"},
@@ -67,17 +76,55 @@ func blockText(block map[string]any) string {
 	return ""
 }
 
-// richTextItemText は rich_text_list の i 番目の項目を、要素の text を連ねた 1 本の
-// 文字列にする（bold / plain の別は問わず「何が書かれているか」だけを見る）。
-func richTextItemText(t *testing.T, list map[string]any, i int) string {
+// richTextElements は rich_text ブロック直下の要素（section / list）を取り出す。
+func richTextElements(t *testing.T, block map[string]any) []map[string]any {
 	t.Helper()
-	item := list["elements"].([]any)[i].(map[string]any)
+	elements := []map[string]any{}
+	for _, e := range block["elements"].([]any) {
+		elements = append(elements, e.(map[string]any))
+	}
+	return elements
+}
+
+// richTextElementTypes は要素の type 列（`rich_text_section,rich_text_list,…`）。
+func richTextElementTypes(elements []map[string]any) []string {
+	types := []string{}
+	for _, e := range elements {
+		s, _ := e["type"].(string)
+		types = append(types, s)
+	}
+	return types
+}
+
+// sectionText は rich_text_section の text を連ねた 1 本の文字列。
+// boldFirst は先頭要素が太字かどうか（見出し・ラベルの検査用）。
+func sectionText(section map[string]any) string {
 	buf := &strings.Builder{}
-	for _, e := range item["elements"].([]any) {
+	for _, e := range section["elements"].([]any) {
 		s, _ := e.(map[string]any)["text"].(string)
 		buf.WriteString(s)
 	}
 	return buf.String()
+}
+
+func boldFirst(section map[string]any) bool {
+	first, ok := section["elements"].([]any)[0].(map[string]any)
+	if !ok {
+		return false
+	}
+	style, ok := first["style"].(map[string]any)
+	if !ok {
+		return false
+	}
+	bold, _ := style["bold"].(bool)
+	return bold
+}
+
+// richTextItemText は rich_text_list の i 番目の項目を、要素の text を連ねた 1 本の
+// 文字列にする（bold / plain の別は問わず「何が書かれているか」だけを見る）。
+func richTextItemText(t *testing.T, list map[string]any, i int) string {
+	t.Helper()
+	return sectionText(list["elements"].([]any)[i].(map[string]any))
 }
 
 // #658 AC-1: JSON を focusDigest に decode し、rankThemes が件数順の focus を組む。
@@ -104,8 +151,19 @@ func TestSummarize_DecodesReport(t *testing.T) {
 	if got := strings.Join(report.Focus[0].Positions, ","); got != "QB,WR" {
 		t.Fatalf("focus[0].Positions = %q", got)
 	}
-	if report.Focus[0].Quote == "" || report.Focus[0].Stop == "" || report.Focus[0].Start == "" {
-		t.Fatalf("focus[0] に quote / stop / start が乗っていない: %+v", report.Focus[0])
+	if report.Focus[0].Quote == "" || report.Focus[0].Summary == "" {
+		t.Fatalf("focus[0] に quote / summary が乗っていない: %+v", report.Focus[0])
+	}
+	// #661 AC-2: do / dont は空文字と重複を落として各 2 件に切り詰まる。
+	if got := strings.Join(report.Focus[0].Do, "|"); got != "ブレイク 3 歩目でボールを離す|スナップ前に SF の目線で MOFO/MOFC を決める" {
+		t.Fatalf("focus[0].Do = %q, want 空文字・重複を除いた先頭 2 件", got)
+	}
+	if got := strings.Join(report.Focus[0].Dont, "|"); got != "フラットを第一選択にして待つ|投げ急いでリズムを崩す" {
+		t.Fatalf("focus[0].Dont = %q, want 空文字を除いた先頭 2 件", got)
+	}
+	// do が 0 件のテーマ（call）も focus から外さない。
+	if len(report.Focus[2].Do) != 0 || len(report.Focus[2].Dont) != 1 {
+		t.Fatalf("focus[2] = %+v, want do 0 件・dont 1 件のまま focus に残る", report.Focus[2])
 	}
 	if len(report.Plays) != 6 || report.Plays[0].Name != "プレーA" {
 		t.Fatalf("plays = %+v, want 入力順の 6 件", report.Plays)
@@ -161,8 +219,8 @@ func TestSummarize_BrokenJSONFallback(t *testing.T) {
 	})
 }
 
-// AC-3: 1 通目は header → context → rich_text(ordered) → divider → context の
-// 5 ブロックで、チャンネルにも出す（reply_broadcast=true）。text は空にしない。
+// #661 AC-3: 1 通目は header → context → focus 件数ぶんの rich_text → divider →
+// context で、チャンネルにも出す（reply_broadcast=true）。text は空にしない。
 func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	api := focusFixture()
 	gpt := &fakeChatGPT{reply: digestJSON}
@@ -176,8 +234,9 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	}
 
 	digest := api.posted[1] // posted[0] は受付メッセージ
-	if got := strings.Join(digest.BlockTypes(), ","); got != "header,context,rich_text,divider,context" {
-		t.Fatalf("1 通目の blocks = %q, want header,context,rich_text,divider,context", got)
+	// focus は 3 件（timing / vertical / call）なので rich_text も 3 ブロック。
+	if got := strings.Join(digest.BlockTypes(), ","); got != "header,context,rich_text,rich_text,rich_text,divider,context" {
+		t.Fatalf("1 通目の blocks = %q, want header,context,rich_text×3,divider,context", got)
 	}
 	if got := digest.Broadcast(); got != "true" {
 		t.Fatalf("1 通目の reply_broadcast = %q, want true", got)
@@ -197,21 +256,69 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 		t.Fatalf("context の件数メタが期待どおりでない: %q", got)
 	}
 
-	list := blocks[2]["elements"].([]any)[0].(map[string]any)
-	if list["type"] != "rich_text_list" || list["style"] != "ordered" {
-		t.Fatalf("focus が番号付きリストになっていない: %+v", list)
+	// 1 点目（timing）: 概要 → やる（2 件）→ やめる（2 件）→ 補足行 の階層。
+	first := richTextElements(t, blocks[2])
+	wantTypes := "rich_text_section,rich_text_section,rich_text_list,rich_text_section,rich_text_list,rich_text_section"
+	if got := strings.Join(richTextElementTypes(first), ","); got != wantTypes {
+		t.Fatalf("focus 1 点目の要素列 = %q, want %q", got, wantTypes)
 	}
-	if n := len(list["elements"].([]any)); n != 3 {
-		t.Fatalf("リスト項目 = %d, want 3（focus 件数）", n)
+	if got := sectionText(first[0]); got != "1. QB↔WR のタイミング\nスナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。" {
+		t.Fatalf("見出し＋概要 = %q", got)
 	}
-	// #658 AC-6: 引用行・やめる/やる 行が入り、件数は導出値（theme_keys の実数）。
-	item := richTextItemText(t, list, 0)
-	for _, want := range []string{
-		"やめる: フラット第一選択で待つ → やる: スナップ前に MOFO/MOFC を決めて入る",
-		"対象: QB, WR ／ 3 プレー ／ 「Xがピタッと止まれてないのと、QBが待ちすぎ」",
+	if !boldFirst(first[0]) {
+		t.Fatalf("見出しが太字になっていない: %+v", first[0])
+	}
+	// ラベルと、その直後に来る段下げ bullet（rich_text は入れ子のリストを持てないので
+	// 段下げは list の indent で表す）。並びを見るので順序のある表で回す。
+	for _, c := range []struct {
+		at    int // ラベルの位置。list はその次
+		label string
+		items []string
+	}{
+		{1, "やる", []string{"ブレイク 3 歩目でボールを離す", "スナップ前に SF の目線で MOFO/MOFC を決める"}},
+		{3, "やめる", []string{"フラットを第一選択にして待つ", "投げ急いでリズムを崩す"}},
 	} {
-		if !strings.Contains(item, want) {
-			t.Fatalf("focus 1 点目に %q が無い:\n%s", want, item)
+		if got := sectionText(first[c.at]); got != c.label {
+			t.Fatalf("elements[%d] = %q, want %q", c.at, got, c.label)
+		}
+		if !boldFirst(first[c.at]) {
+			t.Fatalf("ラベル %q が太字になっていない", c.label)
+		}
+		list := first[c.at+1]
+		if list["style"] != "bullet" || list["indent"] != float64(1) {
+			t.Fatalf("%s の list = style %v / indent %v, want bullet / 1", c.label, list["style"], list["indent"])
+		}
+		if n := len(list["elements"].([]any)); n != len(c.items) {
+			t.Fatalf("%s の項目 = %d 件, want %d 件", c.label, n, len(c.items))
+		}
+		for i, want := range c.items {
+			if got := richTextItemText(t, list, i); got != want {
+				t.Fatalf("%s[%d] = %q, want %q", c.label, i, got, want)
+			}
+		}
+	}
+	// #658 AC-6: 補足行の引用と件数（件数は導出値＝theme_keys の実数）は残す。
+	if got := sectionText(first[5]); got != "対象: QB, WR ／ 3 プレー ／ 「Xがピタッと止まれてないのと、QBが待ちすぎ」" {
+		t.Fatalf("補足行 = %q", got)
+	}
+
+	// #661 AC-4: dont が空なら「やめる」が、do が空なら「やる」が、ラベルごと消える。
+	// どちらも「概要 → ラベル ＋ list 1 組 → 補足行」の 4 要素に縮む。
+	oneAction := "rich_text_section,rich_text_section,rich_text_list,rich_text_section"
+	for _, c := range []struct {
+		at    int    // blocks の位置
+		name  string // 落ちるほうのラベル
+		label string // 残るほうのラベル
+	}{
+		{3, "やめる", "やる"},
+		{4, "やる", "やめる"},
+	} {
+		elements := richTextElements(t, blocks[c.at])
+		if got := strings.Join(richTextElementTypes(elements), ","); got != oneAction {
+			t.Fatalf("blocks[%d] = %q, want %q の section と list が無い", c.at, got, c.name)
+		}
+		if got := sectionText(elements[1]); got != c.label {
+			t.Fatalf("blocks[%d] の 2 要素目 = %q, want %q", c.at, got, c.label)
 		}
 	}
 
@@ -226,6 +333,25 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 		if p.Text() == "" {
 			t.Fatalf("posted[%d] の text フォールバックが空", i+2)
 		}
+	}
+}
+
+// #661: 1 通目のブロック数は「固定 4 ＋ focus 件数」。focusDigestFixedBlocks の
+// 手勘定が digestBlocks の実装からずれたら（context を 1 つ足した等）ここで落ちる。
+func TestFocus_DigestBlocks_MaxThemes(t *testing.T) {
+	report := focusReport{}
+	for i := 0; i < focusMaxThemes; i++ {
+		report.Focus = append(report.Focus, rankedTheme{
+			focusTheme: focusTheme{Title: "テーマ", Do: []string{"やる"}, Dont: []string{"やめる"}},
+			Count:      1,
+		})
+	}
+	blocks := digestBlocks(testJob(), nil, time.Now(), report)
+	if got := len(blocks) - len(report.Focus); got != focusDigestFixedBlocks {
+		t.Fatalf("focus 以外のブロック = %d, want %d（focusDigestFixedBlocks とずれている）", got, focusDigestFixedBlocks)
+	}
+	if len(blocks) > focusMaxBlocksPerMessage {
+		t.Fatalf("1 通目 = %d blocks, want <= %d", len(blocks), focusMaxBlocksPerMessage)
 	}
 }
 
@@ -399,7 +525,10 @@ func TestFocusSystemPrompt_Sharpness(t *testing.T) {
 	for _, want := range []string{
 		"意識する／徹底する／自信を持つ／コミュニケーション／連携／集中",
 		"原文から 20〜40 文字をそのまま抜く",
-		"stop にやめる行動、start に代わりに行う行動を、それぞれ 1 文で",
+		// #661: やる／やめる は概要の下に階層で並べるので、指示も 3 本に分かれる。
+		"summary は何が起きていて何が原因かを 1〜2 文で書く",
+		"do には次の練習でやることを動作で 1〜2 件",
+		"dont にはやめることを 0〜2 件。無ければ空配列にする",
 		"症状ではなく原因で切る",
 		"issue はそのプレーで指摘された事実を 1 文で",
 	} {
@@ -408,7 +537,8 @@ func TestFocusSystemPrompt_Sharpness(t *testing.T) {
 		}
 	}
 	// 順位と件数は Hub 側（rankThemes）の仕事。LLM に数えさせる指示を残さない。
-	for _, ng := range []string{"count に根拠となったプレー数", "繰り返し出ている指摘を優先"} {
+	// stop / start は #661 で do / dont に置き換わったので、語ごと残さない。
+	for _, ng := range []string{"count に根拠となったプレー数", "繰り返し出ている指摘を優先", "stop", "start", "detail"} {
 		if strings.Contains(prompt, ng) {
 			t.Fatalf("集計を LLM に頼む指示が残っている: %q", ng)
 		}
@@ -506,6 +636,24 @@ func TestFocusReportSchema_Strict(t *testing.T) {
 	for _, key := range []string{"themes", "plays"} {
 		if _, ok := props[key]; !ok {
 			t.Fatalf("schema に %q が無い", key)
+		}
+	}
+
+	// #661 AC-1: themes は summary / do / dont を持ち、detail / stop / start は持たない。
+	theme := props["themes"].(map[string]any)["items"].(map[string]any)
+	themeProps := theme["properties"].(map[string]any)
+	for _, key := range []string{"key", "title", "summary", "do", "dont", "positions", "quote"} {
+		if _, ok := themeProps[key]; !ok {
+			t.Fatalf("themes に %q が無い", key)
+		}
+	}
+	if len(themeProps) != 7 {
+		t.Fatalf("themes の properties = %v, want 7 件（detail / stop / start は消えている）", themeProps)
+	}
+	for _, key := range []string{"do", "dont"} {
+		field := themeProps[key].(map[string]any)
+		if field["type"] != "array" || field["items"].(map[string]any)["type"] != "string" {
+			t.Fatalf("themes.%s = %+v, want array of string", key, field)
 		}
 	}
 }

@@ -81,16 +81,20 @@ type focusDigest struct {
 }
 
 // focusTheme は focus の候補 1 件。Key は Plays から参照するための識別子。
+// 中身は「概要（Summary）→ やる（Do）→ やめる（Dont）」の階層で、
+// そのまま 1 通目の描画（focus_blocks.go）の段組みになる。
 type focusTheme struct {
-	Key       string   `json:"key"`
-	Title     string   `json:"title"`
-	Detail    string   `json:"detail"`
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	// Summary は何が起きていて何が原因かの 1〜2 文。
+	Summary string `json:"summary"`
+	// Do は次の練習でやること（1〜2 件）、Dont はやめること（0〜2 件）。
+	// 件数の上限は schema では縛れないので normalizeTheme が切り詰める。
+	Do        []string `json:"do"`
+	Dont      []string `json:"dont"`
 	Positions []string `json:"positions"`
 	// Quote は反省スレッドの原文からの短い引用（読み手が原文にあたれるようにする）。
 	Quote string `json:"quote"`
-	// Stop / Start は「やめる行動 → 代わりに行う行動」の対比。
-	Stop  string `json:"stop"`
-	Start string `json:"start"`
 }
 
 // focusPlay は 1 プレーの指摘。ThemeKeys が focusTheme.Key への参照で、
@@ -134,13 +138,15 @@ func arrayOf(items map[string]any) map[string]any {
 // 1:1 で対応させる。件数（count）は Hub 側で数えるので schema には持たせない。
 var focusReportSchema = strictObject(map[string]any{
 	"themes": arrayOf(strictObject(map[string]any{
-		"key":       stringField(),
-		"title":     stringField(),
-		"detail":    stringField(),
+		"key":     stringField(),
+		"title":   stringField(),
+		"summary": stringField(),
+		// do / dont の件数は strict schema（minItems / maxItems 非対応）では縛れないので、
+		// プロンプトで頼み、normalizeTheme で切り詰める。dont は空配列を許す。
+		"do":        arrayOf(stringField()),
+		"dont":      arrayOf(stringField()),
 		"positions": arrayOf(stringField()),
 		"quote":     stringField(),
-		"stop":      stringField(),
-		"start":     stringField(),
 	})),
 	"plays": arrayOf(strictObject(map[string]any{
 		"headline":   stringField(),
@@ -594,10 +600,11 @@ func focusSystemPrompt(few bool) string {
 - テーマは症状ではなく原因で切る（"キャッチミス" ではなく "ブレイク前に減速してタイミングがずれる"）。
 - key はテーマを識別する短い英小文字のスラッグ（例: "qb_release_timing"）。plays から参照するので一意にする。
 - title は 1 行の見出し。誰が・どのプレーで・何が起きているかが分かる形にする。
-- detail は原因と対処が分かる 1〜2 行。
+- summary は何が起きていて何が原因かを 1〜2 文で書く。
+- do には次の練習でやることを動作で 1〜2 件。誰が・どのプレーで・何を、まで書く。
+- dont にはやめることを 0〜2 件。無ければ空配列にする（無理に書かない）。
 - positions には関係するポジション（QB, WR, OL など）を入れる。特定できなければ空配列。
 - quote には反省スレッドの原文から 20〜40 文字をそのまま抜く（要約しない・言い換えない）。
-- stop にやめる行動、start に代わりに行う行動を、それぞれ 1 文で書く。
 
 # plays（プレー別の指摘）
 - 入力に現れたプレー投稿を、入力の並び順のまま 1 件ずつ挙げる。
@@ -661,8 +668,8 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 		return summary, nil
 	}
 	report := rankThemes(digest, few)
-	// focus が 0 件のまま ordered list を組むと空の rich_text_list になり
-	// Slack に invalid_blocks で弾かれるので、平文フォールバックに倒す。
+	// focus が 0 件だと 1 通目に見出しと案内しか残らず読み手に何も渡らないので、
+	// LLM の生出力をそのまま見せる平文フォールバックに倒す。
 	if len(report.Focus) == 0 {
 		log.Printf("[focus] digest has no focus points, falling back to plain text")
 		return summary, nil

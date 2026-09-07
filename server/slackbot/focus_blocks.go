@@ -17,7 +17,22 @@ const (
 	focusSectionRuneLimit    = 3000
 	// 1 つの rich_text_list に詰めるプレー数。ブロック数上限の内側に収めるための安全域。
 	focusMaxListItems = 25
+	// 1 通目の focus 1 点あたりの文字数。読み飛ばされない長さに抑える
+	// （Block Kit の上限より手前で切る意図的な制約）。
+	focusSummaryRuneLimit = 300
+	focusActionRuneLimit  = 120
 )
+
+// focusDigestFixedBlocks は 1 通目の focus 以外のブロック数（header・context・
+// divider・context）。digestBlocks の容量計算と下の上限チェックが同じ数を見るように、
+// マジックナンバーをここ 1 箇所に置く。
+const focusDigestFixedBlocks = 4
+
+// 1 通目は「固定 4 ブロック + focus 件数ぶんの rich_text」。focus の上限を増やしたときに
+// ブロック数上限を静かに越えないよう、関係をコンパイル時に縛る
+// （focusMaxThemes を増やしたらここで落ちる。実測での番人は
+// TestFocus_DigestBlocks_MaxThemes）。
+const _ = uint(focusMaxBlocksPerMessage - focusDigestFixedBlocks - focusMaxThemes)
 
 // focusMessage は Slack へ 1 通として投稿する単位。
 // Text は通知・検索用のフォールバック（blocks だけだと通知プレビューが空になる）。
@@ -43,24 +58,25 @@ func focusMessages(job focusJob, threads []playThread, now time.Time, report foc
 	return msgs
 }
 
-// digestBlocks は 1 通目。header（期間）→ context（件数）→ 番号付きの focus →
-// divider → context（詳細への案内）の 5 ブロック固定。
+// digestBlocks は 1 通目。header（期間）→ context（件数）→ focus 1 点 = 1 ブロック →
+// divider → context（詳細への案内）。番号は title に含めるので ordered list は使わない
+// （rich_text は入れ子のリストを持てず、段下げは list の indent で表すため）。
 func digestBlocks(job focusJob, threads []playThread, now time.Time, report focusReport) []slack.Block {
-	items := make([]slack.RichTextElement, 0, len(report.Focus))
-	for _, f := range report.Focus {
-		items = append(items, slack.NewRichTextSection(focusItemElements(f)...))
-	}
-	return []slack.Block{
+	blocks := make([]slack.Block, 0, focusDigestFixedBlocks+len(report.Focus))
+	blocks = append(blocks,
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(digestTitle(job, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("focus_meta", slack.NewTextBlockObject(
 			slack.MarkdownType, digestMeta(job, threads), false, false)),
-		slack.NewRichTextBlock("focus_points",
-			slack.NewRichTextList(slack.RTEListOrdered, 0, items...)),
+	)
+	for i, f := range report.Focus {
+		blocks = append(blocks, focusItemBlock(i, f))
+	}
+	return append(blocks,
 		slack.NewDividerBlock(),
 		slack.NewContextBlock("focus_guide", slack.NewTextBlockObject(
 			slack.MarkdownType, digestGuide(job, report), false, false)),
-	}
+	)
 }
 
 // digestGuide はスレッドに何が続くかの案内。既定はチャート 1 通で、
@@ -76,35 +92,41 @@ func digestGuide(job focusJob, report focusReport) string {
 	}
 }
 
-// focusItemElements は focus 1 点を 1 リスト項目に組む。
-// 太字のタイトル ＋ ` — ` 詳細 ＋ 改行 ＋ `やめる: … → やる: …` ＋ 改行 ＋
-// `対象: QB, WR ／ 12 プレー ／ 「引用」`。
-func focusItemElements(f rankedTheme) []slack.RichTextSectionElement {
-	elements := []slack.RichTextSectionElement{boldElement(f.Title)}
-	if detail := strings.TrimSpace(f.Detail); detail != "" {
-		elements = append(elements, plainElement(" — "+detail))
+// focusItemBlock は focus 1 点を 1 つの rich_text ブロックに組む。要素の並びは
+// 「太字の `N. タイトル` ＋ 改行 ＋ 概要」→「太字の やる ＋ 段下げ bullet」→
+// 「太字の やめる ＋ 段下げ bullet」→「対象・件数・引用の補足行」。
+// 「やる」「やめる」は該当が無ければラベルごと省く（空の rich_text_list は
+// Slack に invalid_blocks で弾かれるため、省略は見た目の都合だけではない）。
+func focusItemBlock(i int, f rankedTheme) slack.Block {
+	title := boldElement(fmt.Sprintf("%d. %s", i+1, strings.TrimSpace(f.Title)))
+	head := []slack.RichTextSectionElement{title}
+	if summary := strings.TrimSpace(f.Summary); summary != "" {
+		head = append(head, plainElement("\n"+truncateRunes(summary, focusSummaryRuneLimit)))
 	}
-	if action := focusItemAction(f); action != "" {
-		elements = append(elements, plainElement("\n"+action))
-	}
+
+	elements := []slack.RichTextElement{slack.NewRichTextSection(head...)}
+	elements = append(elements, focusActionElements("やる", f.Do)...)
+	elements = append(elements, focusActionElements("やめる", f.Dont)...)
 	if meta := focusItemMeta(f); meta != "" {
-		elements = append(elements, plainElement("\n"+meta))
+		elements = append(elements, slack.NewRichTextSection(plainElement(meta)))
 	}
-	return elements
+	return slack.NewRichTextBlock(fmt.Sprintf("focus_item_%d", i+1), elements...)
 }
 
-// focusItemAction は「やめること → やること」の対比行。片方しか無ければその片方だけ出す。
-func focusItemAction(f rankedTheme) string {
-	stop, start := strings.TrimSpace(f.Stop), strings.TrimSpace(f.Start)
-	switch {
-	case stop != "" && start != "":
-		return "やめる: " + stop + " → やる: " + start
-	case stop != "":
-		return "やめる: " + stop
-	case start != "":
-		return "やる: " + start
+// focusActionElements は「やる」「やめる」の 1 段（太字のラベル ＋ 段下げした bullet）。
+// 該当が無ければ空を返し、呼び出し側でラベルごと消える。
+func focusActionElements(label string, actions []string) []slack.RichTextElement {
+	if len(actions) == 0 {
+		return nil
 	}
-	return ""
+	items := make([]slack.RichTextElement, 0, len(actions))
+	for _, a := range actions {
+		items = append(items, slack.NewRichTextSection(plainElement(truncateRunes(a, focusActionRuneLimit))))
+	}
+	return []slack.RichTextElement{
+		slack.NewRichTextSection(boldElement(label)),
+		slack.NewRichTextList(slack.RTEListBullet, 1, items...),
+	}
 }
 
 // boldElement / plainElement はリスト項目の要素。text の上限は要素ごとに掛かるので、
