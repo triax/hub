@@ -268,29 +268,32 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	if !boldFirst(first[0]) {
 		t.Fatalf("見出しが太字になっていない: %+v", first[0])
 	}
-	for at, want := range map[int]string{1: "やる", 3: "やめる"} {
-		if got := sectionText(first[at]); got != want {
-			t.Fatalf("elements[%d] = %q, want %q", at, got, want)
-		}
-		if !boldFirst(first[at]) {
-			t.Fatalf("ラベル %q が太字になっていない", want)
-		}
-	}
-	// 段下げは list の indent で表す（rich_text は入れ子のリストを持てない）。
-	for at, want := range map[int][]string{
-		2: {"ブレイク 3 歩目でボールを離す", "スナップ前に SF の目線で MOFO/MOFC を決める"},
-		4: {"フラットを第一選択にして待つ", "投げ急いでリズムを崩す"},
+	// ラベルと、その直後に来る段下げ bullet（rich_text は入れ子のリストを持てないので
+	// 段下げは list の indent で表す）。並びを見るので順序のある表で回す。
+	for _, c := range []struct {
+		at    int // ラベルの位置。list はその次
+		label string
+		items []string
+	}{
+		{1, "やる", []string{"ブレイク 3 歩目でボールを離す", "スナップ前に SF の目線で MOFO/MOFC を決める"}},
+		{3, "やめる", []string{"フラットを第一選択にして待つ", "投げ急いでリズムを崩す"}},
 	} {
-		list := first[at]
+		if got := sectionText(first[c.at]); got != c.label {
+			t.Fatalf("elements[%d] = %q, want %q", c.at, got, c.label)
+		}
+		if !boldFirst(first[c.at]) {
+			t.Fatalf("ラベル %q が太字になっていない", c.label)
+		}
+		list := first[c.at+1]
 		if list["style"] != "bullet" || list["indent"] != float64(1) {
-			t.Fatalf("elements[%d] = style %v / indent %v, want bullet / 1", at, list["style"], list["indent"])
+			t.Fatalf("%s の list = style %v / indent %v, want bullet / 1", c.label, list["style"], list["indent"])
 		}
-		if n := len(list["elements"].([]any)); n != len(want) {
-			t.Fatalf("elements[%d] の項目 = %d 件, want %d 件", at, n, len(want))
+		if n := len(list["elements"].([]any)); n != len(c.items) {
+			t.Fatalf("%s の項目 = %d 件, want %d 件", c.label, n, len(c.items))
 		}
-		for i, w := range want {
-			if got := richTextItemText(t, list, i); got != w {
-				t.Fatalf("elements[%d][%d] = %q, want %q", at, i, got, w)
+		for i, want := range c.items {
+			if got := richTextItemText(t, list, i); got != want {
+				t.Fatalf("%s[%d] = %q, want %q", c.label, i, got, want)
 			}
 		}
 	}
@@ -300,16 +303,23 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	}
 
 	// #661 AC-4: dont が空なら「やめる」が、do が空なら「やる」が、ラベルごと消える。
-	vertical := richTextElementTypes(richTextElements(t, blocks[3]))
-	if got := strings.Join(vertical, ","); got != "rich_text_section,rich_text_section,rich_text_list,rich_text_section" {
-		t.Fatalf("dont が空のテーマ = %q, want やめる の section と list が無い", got)
-	}
-	call := richTextElements(t, blocks[4])
-	if got := strings.Join(richTextElementTypes(call), ","); got != "rich_text_section,rich_text_section,rich_text_list,rich_text_section" {
-		t.Fatalf("do が空のテーマ = %q, want やる の section と list が無い", got)
-	}
-	if got := sectionText(call[1]); got != "やめる" {
-		t.Fatalf("do が空のテーマの 2 要素目 = %q, want やめる", got)
+	// どちらも「概要 → ラベル ＋ list 1 組 → 補足行」の 4 要素に縮む。
+	oneAction := "rich_text_section,rich_text_section,rich_text_list,rich_text_section"
+	for _, c := range []struct {
+		at    int    // blocks の位置
+		name  string // 落ちるほうのラベル
+		label string // 残るほうのラベル
+	}{
+		{3, "やめる", "やる"},
+		{4, "やる", "やめる"},
+	} {
+		elements := richTextElements(t, blocks[c.at])
+		if got := strings.Join(richTextElementTypes(elements), ","); got != oneAction {
+			t.Fatalf("blocks[%d] = %q, want %q の section と list が無い", c.at, got, c.name)
+		}
+		if got := sectionText(elements[1]); got != c.label {
+			t.Fatalf("blocks[%d] の 2 要素目 = %q, want %q", c.at, got, c.label)
+		}
 	}
 
 	// 続きは同じスレッドに broadcast 無しで出る。
@@ -323,6 +333,25 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 		if p.Text() == "" {
 			t.Fatalf("posted[%d] の text フォールバックが空", i+2)
 		}
+	}
+}
+
+// #661: 1 通目のブロック数は「固定 4 ＋ focus 件数」。focusDigestFixedBlocks の
+// 手勘定が digestBlocks の実装からずれたら（context を 1 つ足した等）ここで落ちる。
+func TestFocus_DigestBlocks_MaxThemes(t *testing.T) {
+	report := focusReport{}
+	for i := 0; i < focusMaxThemes; i++ {
+		report.Focus = append(report.Focus, rankedTheme{
+			focusTheme: focusTheme{Title: "テーマ", Do: []string{"やる"}, Dont: []string{"やめる"}},
+			Count:      1,
+		})
+	}
+	blocks := digestBlocks(testJob(), nil, time.Now(), report)
+	if got := len(blocks) - len(report.Focus); got != focusDigestFixedBlocks {
+		t.Fatalf("focus 以外のブロック = %d, want %d（focusDigestFixedBlocks とずれている）", got, focusDigestFixedBlocks)
+	}
+	if len(blocks) > focusMaxBlocksPerMessage {
+		t.Fatalf("1 通目 = %d blocks, want <= %d", len(blocks), focusMaxBlocksPerMessage)
 	}
 }
 

@@ -23,10 +23,16 @@ const (
 	focusActionRuneLimit  = 120
 )
 
-// 1 通目は「header + context + focus 件数ぶんの rich_text + divider + context」。
-// focus の上限を増やしたときにブロック数上限を静かに越えないよう、関係を
-// コンパイル時に縛る（focusMaxThemes を増やしたらここで落ちる）。
-const _ = uint(focusMaxBlocksPerMessage - 4 - focusMaxThemes)
+// focusDigestFixedBlocks は 1 通目の focus 以外のブロック数（header・context・
+// divider・context）。digestBlocks の容量計算と下の上限チェックが同じ数を見るように、
+// マジックナンバーをここ 1 箇所に置く。
+const focusDigestFixedBlocks = 4
+
+// 1 通目は「固定 4 ブロック + focus 件数ぶんの rich_text」。focus の上限を増やしたときに
+// ブロック数上限を静かに越えないよう、関係をコンパイル時に縛る
+// （focusMaxThemes を増やしたらここで落ちる。実測での番人は
+// TestFocus_DigestBlocks_MaxThemes）。
+const _ = uint(focusMaxBlocksPerMessage - focusDigestFixedBlocks - focusMaxThemes)
 
 // focusMessage は Slack へ 1 通として投稿する単位。
 // Text は通知・検索用のフォールバック（blocks だけだと通知プレビューが空になる）。
@@ -56,12 +62,13 @@ func focusMessages(job focusJob, threads []playThread, now time.Time, report foc
 // divider → context（詳細への案内）。番号は title に含めるので ordered list は使わない
 // （rich_text は入れ子のリストを持てず、段下げは list の indent で表すため）。
 func digestBlocks(job focusJob, threads []playThread, now time.Time, report focusReport) []slack.Block {
-	blocks := []slack.Block{
+	blocks := make([]slack.Block, 0, focusDigestFixedBlocks+len(report.Focus))
+	blocks = append(blocks,
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(digestTitle(job, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("focus_meta", slack.NewTextBlockObject(
 			slack.MarkdownType, digestMeta(job, threads), false, false)),
-	}
+	)
 	for i, f := range report.Focus {
 		blocks = append(blocks, focusItemBlock(i, f))
 	}
