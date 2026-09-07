@@ -110,8 +110,9 @@ func TestCollectThreads_HeadlineClassification(t *testing.T) {
 		t.Fatal("返信 0 件の親が見出しと判定されていない")
 	}
 
+	// 要約入力ではプレー／見出しを断定せず「返信なし」という事実だけを渡す（#653 AC-5）。
 	rendered := renderThreads(threads, nil)
-	wantSequence := []string{"[プレー] プレーA", "[見出し] GL Drive1", "[プレー] プレーB"}
+	wantSequence := []string{"[投稿] プレーA", "[投稿・返信なし] GL Drive1", "[投稿] プレーB"}
 	pos := -1
 	for _, want := range wantSequence {
 		at := strings.Index(rendered, want)
