@@ -37,6 +37,9 @@ const (
 	// これは約 60,000 トークンに相当する。超えたときだけスレッド単位に分割する。
 	focusPromptRuneBudget = 120000
 
+	// 返信の付いた投稿がこれ未満（またはスレッド単体要約）なら focus を 1〜3 点に絞る。
+	focusFewTargetsThreshold = 5
+
 	focusReactionWorking = "eyes"
 	focusReactionDone    = "white_check_mark"
 
@@ -65,7 +68,51 @@ type playThread struct {
 }
 
 // IsHeadline は返信の無い親投稿（`GL Drive1` のような区切り）かどうかを返す。
+// 受付メッセージの件数見積り用。プレーか見出しかの判定そのものは要約 LLM に委ねる。
 func (t playThread) IsHeadline() bool { return len(t.Replies) == 0 }
+
+// focusDigest は要約 LLM に返させる構造化出力。Focus がチャンネルにも出す
+// 「この期間の focus」、Sections がスレッド内に続けるプレー別の詳細。
+type focusDigest struct {
+	Focus    []focusItem    `json:"focus"`
+	Sections []focusSection `json:"sections"`
+}
+
+// focusItem は focus 1 点。Count は根拠になったプレー数、Plays は代表プレー名。
+type focusItem struct {
+	Title     string   `json:"title"`
+	Detail    string   `json:"detail"`
+	Positions []string `json:"positions"`
+	Count     int      `json:"count"`
+	// Plays は 1 通目には描かない（3〜5 点を短く保つため）。LLM に「根拠のプレーを挙げろ」と
+	// 課すことで Count の裏取りをさせる狙いで受け取っている。
+	// stellar:debt(scope) 受け取るだけで描画していない。upgrade: 詳細スレッドで focus と
+	// プレーを相互リンクするか、不要なら prompt ごと落とす
+	Plays []string `json:"plays"`
+}
+
+// focusSection は見出し（ドリルやシリーズの区切り）とその配下のプレー。
+type focusSection struct {
+	Headline string      `json:"headline"`
+	Plays    []focusPlay `json:"plays"`
+}
+
+type focusPlay struct {
+	Name   string   `json:"name"`
+	Points []string `json:"points"`
+}
+
+// valid は Block Kit で描けるだけの中身があるかを返す。focus が 0 件のまま
+// ordered list を組むと空の rich_text_list になり Slack に invalid_blocks で
+// 弾かれるので、その場合は平文フォールバックに倒す。
+func (d focusDigest) valid() bool { return len(d.Focus) > 0 }
+
+// focusSummary は要約の結果。Digest が nil のときは構造化に失敗しており、
+// Text（LLM の生出力）をそのまま平文で投稿する。
+type focusSummary struct {
+	Digest *focusDigest
+	Text   string
+}
 
 // ---------------------------------------------------------------- 引数解釈 ---
 
@@ -240,14 +287,21 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 		return bot.replyToMention(job, focusEmptyMessage)
 	}
 
-	summary, err := bot.summarize(ctx, threads, resolve)
+	summary, err := bot.summarize(ctx, job, threads, resolve)
 	if err != nil {
 		return err
 	}
 
-	chunks := chunkLines(focusHeader(job, threads, now)+"\n\n"+summary, focusChunkSize)
-	if err := bot.postSummary(job, chunks); err != nil {
-		return err
+	if summary.Digest != nil {
+		if err := bot.postFocusMessages(job, focusMessages(job, threads, now, *summary.Digest)); err != nil {
+			return err
+		}
+	} else {
+		// 構造化に失敗したときは黙って諦めず、従来どおり平文で投稿する。
+		chunks := chunkLines(focusHeader(job, threads, now)+"\n\n"+summary.Text, focusChunkSize)
+		if err := bot.postSummary(job, chunks); err != nil {
+			return err
+		}
 	}
 
 	if statusTS != "" {
@@ -454,43 +508,113 @@ func callSlack(fn func() error) error {
 
 // ------------------------------------------------------------------ 要約 ---
 
-const focusSystemPrompt = `あなたはアメリカンフットボールチームのコーチ補佐です。
-入力は Slack に投稿された「プレーごとの反省スレッド」です。
-[プレー] 行がプレー名、その下の "- 名前: 本文" が反省の書き込み、[見出し] 行はドリルやシリーズの区切りです。
+// focusSystemPrompt は要約の指示。few は「対象が少ない」ことを表し、focus の点数を絞る。
+//
+// stellar:debt(dep) openaigo v1.7.0 に response_format が無くプロンプト指示で JSON を強制。
+// upgrade: JSON mode 対応版へ更新
+func focusSystemPrompt(few bool) string {
+	count := "3〜5 点"
+	if few {
+		count = "1〜3 点"
+	}
+	return `あなたはアメリカンフットボールチームのコーチ補佐です。
+入力は Slack に投稿された「練習の投稿とその反省スレッド」です。
+[投稿] 行が投稿本文、[投稿・返信なし] 行は返信の付いていない投稿、その下の "- 名前: 本文" が反省の書き込みです。
 
-次のルールで要約してください:
-- プレーごとに 1〜3 行で、次の練習で意識することが分かるように書く
-- [見出し] 行は区切りとしてそのまま残す
-- プレー名は書き換えず、投稿されたとおりに記載する
+次の JSON だけを返してください（前後に説明文やコードフェンスを付けない）:
+{"focus":[{"title":"","detail":"","positions":[],"count":0,"plays":[]}],
+ "sections":[{"headline":"","plays":[{"name":"","points":[]}]}]}
+
+- focus はこのチャンネルが次の練習で意識すべき点を ` + count + ` に絞る
+- 複数のプレーで繰り返し出ている指摘を優先し、count に根拠となったプレー数、plays に代表的なプレー名を最大 3 件入れる
+- title は 1 行の見出し、detail は「次の練習で何を意識するか」が分かる 1〜2 行
+- positions には関係するポジション（QB, WR, OL など）を入れる。特定できなければ空配列
+- sections はプレー別の詳細。headline はドリルやシリーズの区切り（例: "8/29 skel"）、plays の name は投稿されたプレー名をそのまま使う
+- 区切りとなる見出しが見当たらない場合は headline を空文字にした section を 1 つだけ作る
+- @channel や @here を含む告知、「ナイスオフェンス！！」のような感想はプレーとして扱わず sections に含めない
+- 返信の無いプレー投稿は points を空配列にして sections に残す
 - 入力の並び順を保つ
-- 最後に「共通課題」として、全体を通して繰り返し出ている問題を最大 3 点あげる
-- Slack に投稿するので mrkdwn（*太字* など）で読みやすく整える`
+- 値の文字列に Slack の装飾記号（* や _）を入れない`
+}
+
+// focusFewTargets は「対象が少ない」入力かどうかを返す。スレッド単体要約、または
+// 返信の付いた投稿が focusFewTargetsThreshold 件未満のとき true。
+func focusFewTargets(job focusJob, threads []playThread) bool {
+	if job.ThreadOnly {
+		return true
+	}
+	plays, _, _ := countThreadKinds(threads)
+	return plays < focusFewTargetsThreshold
+}
 
 // summarize は全スレッドを 1 プロンプトにまとめて 1 回だけ ChatGPT を呼ぶ。
-func (bot Bot) summarize(ctx context.Context, threads []playThread, resolve func(string) string) (string, error) {
+// 返答は JSON（focusDigest）を期待するが、parse できないときは失敗させず
+// 生のテキストを平文フォールバックとして返す。
+func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread, resolve func(string) string) (focusSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
+	prompt := focusSystemPrompt(focusFewTargets(job, threads))
 	parts := make([]string, 0, len(groups))
+	digest := focusDigest{}
+	structured := true // 1 塊でも parse に失敗したら平文フォールバックに倒す
 	for _, group := range groups {
 		res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
 			Model: openaigo.GPT4o,
 			Messages: []openaigo.Message{
-				{Role: "system", Content: focusSystemPrompt},
+				{Role: "system", Content: prompt},
 				{Role: "user", Content: renderThreads(group, resolve)},
 			},
 		})
 		if err != nil {
-			return "", err
+			return focusSummary{}, err
 		}
 		if len(res.Choices) == 0 {
-			return "", fmt.Errorf("要約が返ってきませんでした")
+			return focusSummary{}, fmt.Errorf("要約が返ってきませんでした")
 		}
-		parts = append(parts, strings.TrimSpace(res.Choices[0].Message.Content))
+		content := strings.TrimSpace(res.Choices[0].Message.Content)
+		parts = append(parts, content)
+		if !structured {
+			continue // 平文フォールバックが確定済み。残りは Text を組むためだけに読む
+		}
+		part := focusDigest{}
+		if err := json.Unmarshal([]byte(stripCodeFence(content)), &part); err != nil {
+			log.Printf("[focus] digest parse failed, falling back to plain text: %v", err)
+			structured = false
+			continue
+		}
+		digest.Focus = append(digest.Focus, part.Focus...)
+		digest.Sections = append(digest.Sections, part.Sections...)
 	}
-	return strings.Join(parts, "\n\n"), nil
+	summary := focusSummary{Text: strings.Join(parts, "\n\n")}
+	if !structured {
+		return summary, nil
+	}
+	if !digest.valid() {
+		log.Printf("[focus] digest has no focus points, falling back to plain text")
+		return summary, nil
+	}
+	summary.Digest = &digest
+	return summary, nil
+}
+
+// stripCodeFence は ```json … ``` のコードフェンスを剥がす。
+// openaigo に response_format が無いので、フェンス付きで返ってくることがある。
+func stripCodeFence(s string) string {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	s = strings.TrimPrefix(s, "```")
+	if i := strings.LastIndex(s, "```"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.IndexAny(s, "{["); i >= 0 {
+		s = s[i:] // ``` の直後に付く言語名（json 等）を落とす
+	}
+	return strings.TrimSpace(s)
 }
 
 // splitThreadsForPrompt は入力が文脈長に収まる限り 1 塊のまま返す。
-// stellar:debt(scope) 分割時は共通課題が塊ごとに出る。upgrade: 2 段目 reduce
+// stellar:debt(scope) 分割時は focus が塊ごとに出て 3〜5 点に収束しない。upgrade: 2 段目 reduce
 func splitThreadsForPrompt(threads []playThread, budget int) [][]playThread {
 	sizes := make([]int, len(threads))
 	total := 0
@@ -528,15 +652,17 @@ func threadRuneCount(t playThread) int {
 }
 
 // renderThreads はプロンプトに渡す平文へ整形する。`<@Uxxxx>` は表示名に置換する。
+// プレーか見出しかを Hub 側で断定せず、「返信が無い」という事実だけを伝えて判定は
+// LLM に委ねる（返信の有無だけで告知がプレーに、返信 0 のプレーが見出しに化けるため）。
 func renderThreads(threads []playThread, resolve func(string) string) string {
 	buf := &strings.Builder{}
 	for _, t := range threads {
 		text := resolveMentions(strings.TrimSpace(t.Parent.Text), resolve)
-		if t.IsHeadline() {
-			fmt.Fprintf(buf, "\n[見出し] %s\n", text)
+		if len(t.Replies) == 0 {
+			fmt.Fprintf(buf, "\n[投稿・返信なし] %s\n", text)
 			continue
 		}
-		fmt.Fprintf(buf, "\n[プレー] %s\n", text)
+		fmt.Fprintf(buf, "\n[投稿] %s\n", text)
 		for _, r := range t.Replies {
 			body := strings.TrimSpace(resolveMentions(r.Text, resolve))
 			if body == "" {
@@ -639,13 +765,28 @@ func splitLongLine(line string, max int) []string {
 	return out
 }
 
-// postSummary はメンションのスレッドへ要約を連投する。
-// トップレベルにも見せたいのは 1 チャンク目だけなので、broadcast はそこにしか付けない。
+// postSummary は平文フォールバック用。チャンクを 1 通ずつの focusMessage に均して
+// postFocusMessages に流す（連投・broadcast の規則を 1 箇所に閉じる）。
 func (bot Bot) postSummary(job focusJob, chunks []string) error {
-	for i, chunk := range chunks {
+	msgs := make([]focusMessage, 0, len(chunks))
+	for _, chunk := range chunks {
+		msgs = append(msgs, focusMessage{Text: chunk})
+	}
+	return bot.postFocusMessages(job, msgs)
+}
+
+// postFocusMessages は要約をメンションのスレッドへ連投する。
+// トップレベルにも見せたいのは 1 通目（focus の digest）だけなので broadcast はそこにしか
+// 付けない。blocks だけの投稿は通知・検索が空になるので Text を必ず併せて渡す。
+func (bot Bot) postFocusMessages(job focusJob, msgs []focusMessage) error {
+	for i, msg := range msgs {
 		opts := []slack.MsgOption{
-			slack.MsgOptionText(chunk, false),
+			slack.MsgOptionText(msg.Text, false),
 			slack.MsgOptionTS(job.MentionTS),
+		}
+		if len(msg.Blocks) > 0 {
+			// 空スライスで呼ぶと blocks=[] を送って既存 blocks を消す挙動になるので渡さない。
+			opts = append(opts, slack.MsgOptionBlocks(msg.Blocks...))
 		}
 		if i == 0 && !job.ThreadOnly {
 			opts = append(opts, slack.MsgOptionBroadcast())

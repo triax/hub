@@ -2,7 +2,10 @@ package slackbot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -25,13 +28,68 @@ func (s sentMessage) Text() string      { return s.Values.Get("text") }
 func (s sentMessage) ThreadTS() string  { return s.Values.Get("thread_ts") }
 func (s sentMessage) Broadcast() string { return s.Values.Get("reply_broadcast") }
 
-// applyMsgOptions は MsgOption を実際に適用し、Slack へ送られる値を覗く。
-func applyMsgOptions(channel string, options ...slack.MsgOption) url.Values {
-	_, values, err := slack.UnsafeApplyMsgOptions("token", channel, "http://localhost/", options...)
-	if err != nil {
+// Blocks は blocks パラメータ（JSON 文字列）を素の map に戻す。
+// Block Kit の構造（種類・並び・件数）をそのまま検査するため、型は付けない。
+func (s sentMessage) Blocks() []map[string]any {
+	raw := s.Values.Get("blocks")
+	if raw == "" {
+		return nil
+	}
+	blocks := []map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
 		panic(err)
 	}
-	return values
+	return blocks
+}
+
+// BlockTypes は blocks の並びを type だけの列にする（`header,context,…`）。
+func (s sentMessage) BlockTypes() []string {
+	types := []string{}
+	for _, b := range s.Blocks() {
+		t, _ := b["type"].(string)
+		types = append(types, t)
+	}
+	return types
+}
+
+// 捕捉用のサーバとクライアントはテストバイナリで 1 組だけ立てる（メッセージごとに
+// listener を張ると投稿数ぶんソケットを作ることになる）。捕捉した値はチャネルで
+// 受け渡し、送信側とハンドラの間の同期も兼ねる。
+var (
+	captureOnce   sync.Once
+	captureClient *slack.Client
+	captureForm   = make(chan url.Values, 1)
+	captureMu     sync.Mutex
+)
+
+// applyMsgOptions は MsgOption を実際に適用し、Slack へ送られる値を覗く。
+//
+// slack.UnsafeApplyMsgOptions は sendConfig.values しか返さず、blocks は
+// formSender が組み立てる段階で初めて values に載る（chat.go の
+// formSender.BuildRequestContext）。MsgOption の引数型は unexported なので
+// テストから直接組み立てることもできない。そこで localhost の httptest サーバへ
+// 実クライアントで 1 回 POST し、送信フォームをそのまま覗く。
+// 外部通信は発生しない（同一プロセス内のループバックのみ）。
+func applyMsgOptions(channel string, options ...slack.MsgOption) url.Values {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
+	captureOnce.Do(func() {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := r.ParseForm(); err != nil {
+				panic(err)
+			}
+			captureForm <- r.PostForm
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"ok":true,"channel":"C1","ts":"1.000000"}`)
+		}))
+		captureClient = slack.New("token", slack.OptionAPIURL(srv.URL+"/"))
+	})
+
+	if _, _, err := captureClient.PostMessage(channel, options...); err != nil {
+		panic(err)
+	}
+	return <-captureForm
 }
 
 type fakeSlackAPI struct {
