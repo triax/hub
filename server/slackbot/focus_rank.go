@@ -1,6 +1,10 @@
 package slackbot
 
-import "sort"
+import (
+	"slices"
+	"sort"
+	"strings"
+)
 
 // 焦点として採るテーマ数の上限。few（対象が少ない入力）はさらに絞る。
 const (
@@ -120,7 +124,7 @@ func countThemeKeys(d focusDigest) map[string]int {
 func samplePlays(plays []focusPlay, key string) []string {
 	names := make([]string, 0, focusMaxSamplePlays)
 	for _, play := range plays {
-		if play.Name == "" || !containsString(play.ThemeKeys, key) {
+		if play.Name == "" || !slices.Contains(play.ThemeKeys, key) {
 			continue
 		}
 		names = append(names, play.Name)
@@ -147,10 +151,7 @@ func buildFocusStats(d focusDigest, order []int, counts map[string]int) focusSta
 	positions := map[string]int{}
 	positionOrder := []string{}
 	for _, play := range d.Plays {
-		headline := play.Headline
-		if headline == "" {
-			headline = focusUnknownHeadline
-		}
+		headline := focusHeadlineLabel(play.Headline)
 		if _, seen := stats.HeadlinePositions[headline]; !seen {
 			stats.HeadlinePositions[headline] = map[string]int{}
 			stats.Headlines = append(stats.Headlines, headline)
@@ -165,6 +166,16 @@ func buildFocusStats(d focusDigest, order []int, counts map[string]int) focusSta
 	}
 	stats.Positions = sortedCounts(positionOrder, positions)
 	return stats
+}
+
+// focusHeadlineLabel は 1 プレーが属する見出しの表示名。空欄の寄せ先を 1 箇所に
+// 閉じることで、チャートの x 軸（buildFocusStats）と詳細の見出し（groupPlaysByHeadline）が
+// 同じ区切りを指すことを保証する。
+func focusHeadlineLabel(headline string) string {
+	if h := strings.TrimSpace(headline); h != "" {
+		return h
+	}
+	return focusUnknownHeadline
 }
 
 // playPositions は 1 プレーのポジション（重複除去・空なら「不明」）を返す。
@@ -200,13 +211,4 @@ func uniqueStrings(values []string) []string {
 		kept = append(kept, v)
 	}
 	return kept
-}
-
-func containsString(values []string, want string) bool {
-	for _, v := range values {
-		if v == want {
-			return true
-		}
-	}
-	return false
 }

@@ -20,6 +20,11 @@ const (
 	focusChartOtherLabel   = "その他"
 )
 
+// pie は focus に採られたテーマを 1 つ残らず描き、残りを「その他」の 1 枠に畳む。
+// それが成り立つのは focus の上限がセグメント上限の内側にあるときだけなので、
+// 定数どうしの関係をコンパイル時に縛る（focusMaxThemes を増やしたらここで落ちる）。
+const _ = uint(focusChartMaxSegments - 1 - focusMaxThemes)
+
 // focusChartMessage は集計（focusStats）を pie / bar の 1 通に組む。
 // 集計が空（平文フォールバック経路）なら false を返し、チャートを出さない。
 func focusChartMessage(report focusReport) (focusMessage, bool) {
@@ -53,8 +58,8 @@ func themeSegments(report focusReport) []slack.DataVisualizationSegment {
 	focused := make(map[string]struct{}, len(report.Focus))
 	segments := make([]slack.DataVisualizationSegment, 0, focusChartMaxSegments)
 	for _, f := range report.Focus {
-		if f.Count <= 0 || len(segments) >= focusChartMaxSegments-1 {
-			break
+		if f.Count <= 0 {
+			break // Focus は件数降順。0 件が出たら以降も 0 件
 		}
 		focused[f.Key] = struct{}{}
 		segments = append(segments, slack.NewDataVisualizationSegment(

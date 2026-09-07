@@ -170,18 +170,18 @@ type focusSection struct {
 	Plays    []focusPlay
 }
 
-// groupPlaysByHeadline は plays を見出しの初出順にまとめる。見出しは
-// LLM の出力をそのまま使い、空文字はそのまま空の section にする
-// （sectionBlockGroups が「プレー別の詳細」に置き換える）。
+// groupPlaysByHeadline は plays を見出しの初出順にまとめる。見出しの表示名は
+// focusHeadlineLabel が決める（チャートの x 軸と同じ区切りになる）。
 func groupPlaysByHeadline(plays []focusPlay) []focusSection {
 	sections := []focusSection{}
 	index := map[string]int{}
 	for _, play := range plays {
-		at, seen := index[play.Headline]
+		headline := focusHeadlineLabel(play.Headline)
+		at, seen := index[headline]
 		if !seen {
 			at = len(sections)
-			index[play.Headline] = at
-			sections = append(sections, focusSection{Headline: play.Headline})
+			index[headline] = at
+			sections = append(sections, focusSection{Headline: headline})
 		}
 		sections[at].Plays = append(sections[at].Plays, play)
 	}
@@ -216,10 +216,7 @@ func detailMessages(report focusReport) []focusMessage {
 // 組む。プレーが多い見出しは focusMaxListItems ごとにリストを分け、それでも
 // focusMaxBlocksPerMessage を超えるなら「（続き）」を付けて複数の塊に割る。
 func sectionBlockGroups(section focusSection) []focusMessage {
-	headline := strings.TrimSpace(section.Headline)
-	if headline == "" {
-		headline = "プレー別の詳細"
-	}
+	headline := section.Headline // groupPlaysByHeadline が空欄を寄せ済み
 
 	lists := []slack.Block{}
 	for i := 0; i < len(section.Plays); i += focusMaxListItems {

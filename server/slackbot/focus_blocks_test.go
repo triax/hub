@@ -333,8 +333,12 @@ func TestDetailMessages_SplitAndLimits(t *testing.T) {
 		}
 	})
 
+	// 見出しの空欄はチャートの x 軸と同じ「その他」に寄せる（寄せ先は focusHeadlineLabel が 1 箇所で決める）。
 	t.Run("見出しが空でも 1 通にまとまる", func(t *testing.T) {
 		msgs := detailMessages(focusReport{Plays: []focusPlay{{Name: "プレー", Issue: "反省"}}})
+		if got := msgs[0].Text; got != focusUnknownHeadline {
+			t.Fatalf("空の見出し = %q, want %q（チャートの x 軸と揃える）", got, focusUnknownHeadline)
+		}
 		if len(msgs) != 1 || len(msgs[0].Blocks) != 2 {
 			t.Fatalf("msgs = %+v, want section + rich_text の 1 通", msgs)
 		}

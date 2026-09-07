@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -202,7 +203,7 @@ func TestFocusChartMessage_Truncation(t *testing.T) {
 	validateChartBlocks(t, msg) // ラベル 20 文字超なら Validate が落ちる
 
 	bar := msg.Blocks[1].(*slack.DataVisualizationBlock).Chart.(*slack.DataVisualizationBarChart)
-	if !containsString(bar.AxisConfig.Categories, focusUnknownHeadline) {
+	if !slices.Contains(bar.AxisConfig.Categories, focusUnknownHeadline) {
 		t.Fatalf("空の見出しが %q に寄せられていない: %v", focusUnknownHeadline, bar.AxisConfig.Categories)
 	}
 	found := false
