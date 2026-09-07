@@ -430,3 +430,47 @@ func (bot Bot) collectChannelThreads(job focusJob) ([]playThread, error) {
 	}
 	return bot.expandThreads(job, parents, nil)
 }
+
+// 進捗の分子は「返信を取りに行ったプレー」だけで数える。見出しを混ぜると
+// 「42 プレー中 45 件…」のように分子が分母を超えてしまう（AC-10 の UX に直結）。
+func TestExpandThreads_ProgressSkipsHeadlines(t *testing.T) {
+	api := newFakeSlackAPI()
+	parents := []slack.Message{}
+	for i := 0; i < 12; i++ {
+		ts := fmt.Sprintf("%03d.000000", 100+i)
+		if i%2 == 0 { // 偶数番は見出し（返信 0 件）
+			parents = append(parents, parentMsg(ts, "見出し", 0))
+			continue
+		}
+		parents = append(parents, parentMsg(ts, "プレー", 1))
+		api.repliesPages[ts] = [][]slack.Message{{
+			parentMsg(ts, "プレー", 1), replyMsg(ts+"1", "U1", "反省"),
+		}}
+	}
+	wantPlays := 6
+
+	type call struct{ done, total int }
+	calls := []call{}
+	bot := Bot{SlackAPI: api}
+	if _, err := bot.expandThreads(testJob(), parents, func(done, total int) {
+		calls = append(calls, call{done, total})
+	}); err != nil {
+		t.Fatalf("expandThreads: %v", err)
+	}
+
+	if len(calls) == 0 {
+		t.Fatal("進捗コールバックが一度も呼ばれていない")
+	}
+	for _, c := range calls {
+		if c.total != wantPlays {
+			t.Fatalf("total = %d, want %d（分母はプレー数）", c.total, wantPlays)
+		}
+		if c.done > c.total {
+			t.Fatalf("done = %d が total = %d を超えている（見出しを数えている）", c.done, c.total)
+		}
+	}
+	// 12 親のうちプレーは 6 件なので、5 件ごとの発火は done=5 の 1 回だけ。
+	if last := calls[len(calls)-1]; last.done != focusProgressInterval {
+		t.Fatalf("最後の done = %d, want %d", last.done, focusProgressInterval)
+	}
+}

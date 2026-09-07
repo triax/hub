@@ -231,7 +231,7 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 		if err != nil {
 			return err
 		}
-		if threads, err = bot.expandThreads(job, parents, bot.progressUpdater(job, statusTS, plays)); err != nil {
+		if threads, err = bot.expandThreads(job, parents, bot.progressUpdater(job, statusTS)); err != nil {
 			return err
 		}
 	}
@@ -317,7 +317,11 @@ func (bot Bot) fetchParents(job focusJob) ([]slack.Message, error) {
 // expandThreads は返信のある親について conversations.replies を引き、プレー単位に束ねる。
 func (bot Bot) expandThreads(job focusJob, parents []slack.Message, progress func(done, total int)) ([]playThread, error) {
 	threads := make([]playThread, 0, len(parents))
-	for i, parent := range parents {
+	// 進捗は「返信を取りに行った親（＝プレー）」だけで数える。見出しは replies を
+	// 引かないので、これを混ぜると分子が分母（プレー数）を超えてしまう。
+	plays, _ := countParentKinds(parents)
+	done := 0
+	for _, parent := range parents {
 		thread := playThread{Parent: parent}
 		if parent.ReplyCount > 0 {
 			msgs, err := bot.fetchReplies(job.Channel, parent.Timestamp)
@@ -325,11 +329,12 @@ func (bot Bot) expandThreads(job focusJob, parents []slack.Message, progress fun
 				return nil, err
 			}
 			thread.Replies = filterReplies(msgs, parent.Timestamp, job.MentionTS)
+			done++
+			if progress != nil && done%focusProgressInterval == 0 {
+				progress(done, plays)
+			}
 		}
 		threads = append(threads, thread)
-		if progress != nil && (i+1)%focusProgressInterval == 0 {
-			progress(i+1, len(parents))
-		}
 	}
 	return threads, nil
 }
@@ -667,14 +672,14 @@ func (bot Bot) postStatus(job focusJob, text string) (string, error) {
 	return ts, err
 }
 
-func (bot Bot) progressUpdater(job focusJob, statusTS string, plays int) func(done, total int) {
+func (bot Bot) progressUpdater(job focusJob, statusTS string) func(done, total int) {
 	if statusTS == "" {
 		return nil
 	}
 	return func(done, total int) {
 		_ = callSlack(func() error {
 			_, _, _, err := bot.SlackAPI.UpdateMessage(job.Channel, statusTS, slack.MsgOptionText(
-				fmt.Sprintf("📝 %d プレー中 %d 件のスレッドを読みました…", plays, done), false))
+				fmt.Sprintf("📝 %d プレー中 %d 件のスレッドを読みました…", total, done), false))
 			return err
 		})
 	}
