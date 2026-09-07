@@ -3,6 +3,7 @@ package slackbot
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,9 @@ import (
 )
 
 const testMentionTS = "350.000000"
+
+// focusDonePattern は完了メッセージ末尾の所要時間（`（42 秒）` / `（1 分 42 秒）`）。
+var focusDonePattern = regexp.MustCompile(`（\d+ 秒）$|（\d+ 分( \d+ 秒)?）$`)
 
 // focusFixture は「history 2 ページ / replies 2 ページ」のチャンネルを組み立てる。
 //
@@ -345,12 +349,66 @@ func TestFocus_EndToEnd(t *testing.T) {
 	if !strings.Contains(api.posted[1].Text(), "2 プレー / 4 件の返信を要約") {
 		t.Fatalf("要約のメタ行が期待どおりでない: %q", api.posted[1].Text())
 	}
-	if len(api.updated) == 0 || api.updated[len(api.updated)-1].Text() != "✅ 完了" {
+	// #657: 完了時も期間・件数・所要時間を残す（「✅ 完了」で上書きしない）。
+	if len(api.updated) == 0 {
 		t.Fatalf("完了時に受付メッセージが更新されていない: %+v", api.updated)
+	}
+	done := api.updated[len(api.updated)-1].Text()
+	if !strings.HasPrefix(done, "✅ ") || !strings.Contains(done, "2 プレー / 4 件の反省を読みました") {
+		t.Fatalf("完了メッセージに期間・件数が残っていない: %q", done)
+	}
+	if !focusDonePattern.MatchString(done) {
+		t.Fatalf("完了メッセージに所要時間が残っていない: %q", done)
 	}
 	// 👀 は onMentionFocus（受付側）で付くので、ワーカーは外して ✅ を付けるだけ。
 	if joined(api.added) != "white_check_mark" || joined(api.removed) != "eyes" {
 		t.Fatalf("リアクションの遷移が期待どおりでない: added=%v removed=%v", api.added, api.removed)
+	}
+}
+
+// #657 AC-1 / AC-2: 完了メッセージ（meta reply の最終形）に期間・件数・所要時間が残る。
+func TestFocusDoneText(t *testing.T) {
+	now := time.Date(2026, 9, 7, 13, 45, 0, 0, server.ServiceLocation)
+	since := time.Date(2026, 8, 26, 0, 0, 0, 0, server.ServiceLocation)
+
+	// プレー 2 本（返信 3 + 1）と見出し 1 本。countThreadKinds の実数が入る。
+	threads := []playThread{
+		{Parent: parentMsg("100.000000", "プレーA", 3), Replies: []slack.Message{
+			replyMsg("101.000000", "U1", "反省1"),
+			replyMsg("102.000000", "U2", "反省2"),
+			replyMsg("103.000000", "U1", "反省3"),
+		}},
+		{Parent: parentMsg("200.000000", "GL Drive1", 0)},
+		{Parent: parentMsg("300.000000", "プレーB", 1), Replies: []slack.Message{
+			replyMsg("301.000000", "U3", "反省4"),
+		}},
+	}
+
+	channel := focusJob{Channel: "C1", MentionTS: testMentionTS, Oldest: since.Unix()}
+	threadOnly := focusJob{Channel: "C1", MentionTS: testMentionTS, ThreadOnly: true}
+
+	cases := []struct {
+		name    string
+		job     focusJob
+		elapsed time.Duration
+		want    string
+	}{
+		{"チャンネル要約・秒", channel, 42 * time.Second, "✅ 8/26〜9/7 の 2 プレー / 4 件の反省を読みました（42 秒）"},
+		{"チャンネル要約・分秒", channel, 102 * time.Second, "✅ 8/26〜9/7 の 2 プレー / 4 件の反省を読みました（1 分 42 秒）"},
+		{"チャンネル要約・丁度 2 分", channel, 120 * time.Second, "✅ 8/26〜9/7 の 2 プレー / 4 件の反省を読みました（2 分）"},
+		{"スレッド単体要約", threadOnly, 18 * time.Second, "✅ このスレッドの 4 件の返信を読みました（18 秒）"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := focusDoneText(c.job, threads, now, c.elapsed); got != c.want {
+				t.Fatalf("focusDoneText = %q, want %q", got, c.want)
+			}
+		})
+	}
+
+	// ミリ秒は秒に丸める（`0.4 秒` のような表示にしない）。
+	if got := focusElapsedLabel(1500 * time.Millisecond); got != "2 秒" {
+		t.Fatalf("focusElapsedLabel(1.5s) = %q, want 2 秒", got)
 	}
 }
 

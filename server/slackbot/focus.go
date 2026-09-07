@@ -350,9 +350,10 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 	}
 
 	if statusTS != "" {
+		done := focusDoneText(job, threads, now, time.Since(now))
 		_ = callSlack(func() error {
 			_, _, _, err := bot.SlackAPI.UpdateMessage(job.Channel, statusTS,
-				slack.MsgOptionText("✅ 完了", false))
+				slack.MsgOptionText(done, false))
 			return err
 		})
 	}
@@ -860,6 +861,33 @@ func focusRangeLabel(job focusJob, now time.Time) string {
 	from := time.Unix(job.Oldest, 0).In(server.ServiceLocation)
 	now = now.In(server.ServiceLocation)
 	return fmt.Sprintf("%d/%d〜%d/%d", int(from.Month()), from.Day(), int(now.Month()), now.Day())
+}
+
+// focusDoneText は受付メッセージ（meta reply）の最終形。「✅ 完了」で上書きすると
+// 期間・件数・所要時間が消えてスレッドを後から開いた人に何も残らないので、
+// 読んだ範囲を実数（countThreadKinds）で残す。
+func focusDoneText(job focusJob, threads []playThread, now time.Time, elapsed time.Duration) string {
+	plays, _, replies := countThreadKinds(threads)
+	if job.ThreadOnly {
+		return fmt.Sprintf("✅ このスレッドの %d 件の返信を読みました（%s）", replies, focusElapsedLabel(elapsed))
+	}
+	return fmt.Sprintf("✅ %s の %d プレー / %d 件の反省を読みました（%s）",
+		focusRangeLabel(job, now), plays, replies, focusElapsedLabel(elapsed))
+}
+
+// focusElapsedLabel は所要時間を秒に丸めて日本語にする（`42 秒` / `1 分 42 秒` / `2 分`）。
+func focusElapsedLabel(d time.Duration) string {
+	seconds := int(d.Round(time.Second).Seconds())
+	if seconds < 0 {
+		seconds = 0
+	}
+	if seconds < 60 {
+		return fmt.Sprintf("%d 秒", seconds)
+	}
+	if rest := seconds % 60; rest > 0 {
+		return fmt.Sprintf("%d 分 %d 秒", seconds/60, rest)
+	}
+	return fmt.Sprintf("%d 分", seconds/60)
 }
 
 func focusHeader(job focusJob, threads []playThread, now time.Time) string {
