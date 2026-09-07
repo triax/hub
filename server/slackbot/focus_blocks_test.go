@@ -301,6 +301,11 @@ func TestPostFocusMessages_ThreadOnly(t *testing.T) {
 			t.Fatalf("posted[%d] に reply_broadcast が付いている（スレッド単体要約）", i)
 		}
 	}
+	// ThreadOnly の header は「このスレッドの focus」（`8/26〜9/7 の focus` と違い
+	// 助詞の前に空白を置かない）。focusRangeLabel の流用で崩さないための番人。
+	if got := blockText(api.posted[0].Blocks()[0]); got != "このスレッドの focus" {
+		t.Fatalf("header = %q, want このスレッドの focus", got)
+	}
 }
 
 // AC-5: 要約入力に [見出し] / [プレー] は出さず、返信 0 の親は [投稿・返信なし] で渡す。

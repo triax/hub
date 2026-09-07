@@ -9,6 +9,16 @@ import (
 	"github.com/slack-go/slack"
 )
 
+const (
+	// Block Kit の上限。1 メッセージ 50 blocks、header の text は 150 文字、
+	// section の text は 3,000 文字（Slack Block Kit の仕様）。
+	focusMaxBlocksPerMessage = 50
+	focusHeaderRuneLimit     = 150
+	focusSectionRuneLimit    = 3000
+	// 1 つの rich_text_list に詰めるプレー数。ブロック数上限の内側に収めるための安全域。
+	focusMaxListItems = 25
+)
+
 // focusMessage は Slack へ 1 通として投稿する単位。
 // Text は通知・検索用のフォールバック（blocks だけだと通知プレビューが空になる）。
 type focusMessage struct {
@@ -49,19 +59,26 @@ func digestBlocks(job focusJob, threads []playThread, now time.Time, digest focu
 // focusItemElements は focus 1 点を 1 リスト項目に組む。
 // 太字のタイトル ＋ ` — ` 詳細 ＋ 改行 ＋ `対象: QB, WR ／ 12 プレーで指摘`。
 func focusItemElements(f focusItem) []slack.RichTextSectionElement {
-	elements := []slack.RichTextSectionElement{
-		slack.NewRichTextSectionTextElement(
-			truncateRunes(strings.TrimSpace(f.Title), focusSectionRuneLimit),
-			&slack.RichTextSectionTextStyle{Bold: true}),
-	}
+	elements := []slack.RichTextSectionElement{boldElement(f.Title)}
 	if detail := strings.TrimSpace(f.Detail); detail != "" {
-		elements = append(elements, slack.NewRichTextSectionTextElement(
-			" — "+truncateRunes(detail, focusSectionRuneLimit), nil))
+		elements = append(elements, plainElement(" — "+detail))
 	}
 	if meta := focusItemMeta(f); meta != "" {
-		elements = append(elements, slack.NewRichTextSectionTextElement("\n"+meta, nil))
+		elements = append(elements, plainElement("\n"+meta))
 	}
 	return elements
+}
+
+// boldElement / plainElement はリスト項目の要素。text の上限は要素ごとに掛かるので、
+// どちらも同じ規則（trim して rune 境界で切り詰め）を通す。
+func boldElement(s string) *slack.RichTextSectionTextElement {
+	return slack.NewRichTextSectionTextElement(
+		truncateRunes(strings.TrimSpace(s), focusSectionRuneLimit),
+		&slack.RichTextSectionTextStyle{Bold: true})
+}
+
+func plainElement(s string) *slack.RichTextSectionTextElement {
+	return slack.NewRichTextSectionTextElement(truncateRunes(s, focusSectionRuneLimit), nil)
 }
 
 func focusItemMeta(f focusItem) string {
@@ -75,6 +92,9 @@ func focusItemMeta(f focusItem) string {
 	return strings.Join(parts, " ／ ")
 }
 
+// digestTitle は 1 通目の header。focusRangeLabel をそのまま流用しないのは、
+// 日付の後ろには助詞の前に空白を置くが（`8/26〜9/7 の focus`）、
+// 「このスレッド」には置かないため（`このスレッドの focus`）。
 func digestTitle(job focusJob, now time.Time) string {
 	if job.ThreadOnly {
 		return "このスレッドの focus"
@@ -169,14 +189,9 @@ func sectionHeaderBlock(headline string) slack.Block {
 // focusPlayElements はプレー 1 件を 1 リスト項目に組む。
 // 太字のプレー名 ＋ 改行 ＋ 反省点を `・` で連ねる。
 func focusPlayElements(p focusPlay) []slack.RichTextSectionElement {
-	elements := []slack.RichTextSectionElement{
-		slack.NewRichTextSectionTextElement(
-			truncateRunes(strings.TrimSpace(p.Name), focusSectionRuneLimit),
-			&slack.RichTextSectionTextStyle{Bold: true}),
-	}
+	elements := []slack.RichTextSectionElement{boldElement(p.Name)}
 	if points := joinNonEmpty(p.Points, "・"); points != "" {
-		elements = append(elements, slack.NewRichTextSectionTextElement(
-			"\n"+truncateRunes(points, focusSectionRuneLimit), nil))
+		elements = append(elements, plainElement("\n"+points))
 	}
 	return elements
 }

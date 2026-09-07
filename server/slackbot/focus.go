@@ -37,13 +37,6 @@ const (
 	// これは約 60,000 トークンに相当する。超えたときだけスレッド単位に分割する。
 	focusPromptRuneBudget = 120000
 
-	// Block Kit の上限。1 メッセージ 50 blocks、header の text は 150 文字、
-	// section の text は 3,000 文字（Slack Block Kit の仕様）。
-	focusMaxBlocksPerMessage = 50
-	focusHeaderRuneLimit     = 150
-	focusSectionRuneLimit    = 3000
-	// 1 つの rich_text_list に詰めるプレー数。ブロック数上限の内側に収めるための安全域。
-	focusMaxListItems = 25
 	// 返信の付いた投稿がこれ未満（またはスレッド単体要約）なら focus を 1〜3 点に絞る。
 	focusFewTargetsThreshold = 5
 
@@ -91,7 +84,11 @@ type focusItem struct {
 	Detail    string   `json:"detail"`
 	Positions []string `json:"positions"`
 	Count     int      `json:"count"`
-	Plays     []string `json:"plays"`
+	// Plays は 1 通目には描かない（3〜5 点を短く保つため）。LLM に「根拠のプレーを挙げろ」と
+	// 課すことで Count の裏取りをさせる狙いで受け取っている。
+	// stellar:debt(scope) 受け取るだけで描画していない。upgrade: 詳細スレッドで focus と
+	// プレーを相互リンクするか、不要なら prompt ごと落とす
+	Plays []string `json:"plays"`
 }
 
 // focusSection は見出し（ドリルやシリーズの区切り）とその配下のプレー。
@@ -557,7 +554,8 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
 	prompt := focusSystemPrompt(focusFewTargets(job, threads))
 	parts := make([]string, 0, len(groups))
-	digest := &focusDigest{}
+	digest := focusDigest{}
+	structured := true // 1 塊でも parse に失敗したら平文フォールバックに倒す
 	for _, group := range groups {
 		res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
 			Model: openaigo.GPT4o,
@@ -574,27 +572,27 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 		}
 		content := strings.TrimSpace(res.Choices[0].Message.Content)
 		parts = append(parts, content)
-		if digest == nil {
-			continue // 既に 1 塊でも失敗しているので、以降は平文フォールバックに倒す
+		if !structured {
+			continue // 平文フォールバックが確定済み。残りは Text を組むためだけに読む
 		}
 		part := focusDigest{}
 		if err := json.Unmarshal([]byte(stripCodeFence(content)), &part); err != nil {
 			log.Printf("[focus] digest parse failed, falling back to plain text: %v", err)
-			digest = nil
+			structured = false
 			continue
 		}
 		digest.Focus = append(digest.Focus, part.Focus...)
 		digest.Sections = append(digest.Sections, part.Sections...)
 	}
 	summary := focusSummary{Text: strings.Join(parts, "\n\n")}
-	if digest == nil {
+	if !structured {
 		return summary, nil
 	}
 	if !digest.valid() {
 		log.Printf("[focus] digest has no focus points, falling back to plain text")
 		return summary, nil
 	}
-	summary.Digest = digest
+	summary.Digest = &digest
 	return summary, nil
 }
 

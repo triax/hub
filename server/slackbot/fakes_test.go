@@ -52,6 +52,16 @@ func (s sentMessage) BlockTypes() []string {
 	return types
 }
 
+// 捕捉用のサーバとクライアントはテストバイナリで 1 組だけ立てる（メッセージごとに
+// listener を張ると投稿数ぶんソケットを作ることになる）。捕捉した値はチャネルで
+// 受け渡し、送信側とハンドラの間の同期も兼ねる。
+var (
+	captureOnce   sync.Once
+	captureClient *slack.Client
+	captureForm   = make(chan url.Values, 1)
+	captureMu     sync.Mutex
+)
+
 // applyMsgOptions は MsgOption を実際に適用し、Slack へ送られる値を覗く。
 //
 // slack.UnsafeApplyMsgOptions は sendConfig.values しか返さず、blocks は
@@ -61,22 +71,25 @@ func (s sentMessage) BlockTypes() []string {
 // 実クライアントで 1 回 POST し、送信フォームをそのまま覗く。
 // 外部通信は発生しない（同一プロセス内のループバックのみ）。
 func applyMsgOptions(channel string, options ...slack.MsgOption) url.Values {
-	var captured url.Values
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			panic(err)
-		}
-		captured = r.PostForm
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"ok":true,"channel":"C1","ts":"1.000000"}`)
-	}))
-	defer srv.Close()
+	captureMu.Lock()
+	defer captureMu.Unlock()
 
-	if _, _, err := slack.New("token", slack.OptionAPIURL(srv.URL+"/")).
-		PostMessage(channel, options...); err != nil {
+	captureOnce.Do(func() {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := r.ParseForm(); err != nil {
+				panic(err)
+			}
+			captureForm <- r.PostForm
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"ok":true,"channel":"C1","ts":"1.000000"}`)
+		}))
+		captureClient = slack.New("token", slack.OptionAPIURL(srv.URL+"/"))
+	})
+
+	if _, _, err := captureClient.PostMessage(channel, options...); err != nil {
 		panic(err)
 	}
-	return captured
+	return <-captureForm
 }
 
 type fakeSlackAPI struct {
