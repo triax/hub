@@ -61,7 +61,7 @@ func TestOpenAIChat_StructuredOutputs(t *testing.T) {
 		Model:  chatModelFocus,
 		System: []string{"prompt"},
 		User:   "input",
-		Schema: &ChatJSONSchema{Name: focusDigestSchemaName, Schema: focusDigestSchema},
+		Schema: &ChatJSONSchema{Name: focusReportSchemaName, Schema: focusReportSchema},
 	})
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
@@ -72,8 +72,8 @@ func TestOpenAIChat_StructuredOutputs(t *testing.T) {
 	if !strings.Contains(stub.authz, "test-key") {
 		t.Fatalf("Authorization = %q, want Bearer test-key", stub.authz)
 	}
-	if stub.body["model"] != "gpt-4o" {
-		t.Fatalf("model = %v, want gpt-4o", stub.body["model"])
+	if stub.body["model"] != chatModelFocus {
+		t.Fatalf("model = %v, want %s", stub.body["model"], chatModelFocus)
 	}
 
 	format, ok := stub.body["response_format"].(map[string]any)
@@ -87,8 +87,8 @@ func TestOpenAIChat_StructuredOutputs(t *testing.T) {
 	if !ok {
 		t.Fatalf("json_schema が無い: %s", stub.rawBody)
 	}
-	if schema["name"] != focusDigestSchemaName {
-		t.Fatalf("json_schema.name = %v, want %s", schema["name"], focusDigestSchemaName)
+	if schema["name"] != focusReportSchemaName {
+		t.Fatalf("json_schema.name = %v, want %s", schema["name"], focusReportSchemaName)
 	}
 	if schema["strict"] != true {
 		t.Fatalf("json_schema.strict = %v, want true", schema["strict"])
@@ -96,10 +96,10 @@ func TestOpenAIChat_StructuredOutputs(t *testing.T) {
 
 	// 送った schema がそのまま届いていること（JSON 経由で正規化して比較する）。
 	want := map[string]any{}
-	raw, _ := json.Marshal(focusDigestSchema)
+	raw, _ := json.Marshal(focusReportSchema)
 	json.Unmarshal(raw, &want)
 	if !reflect.DeepEqual(schema["schema"], want) {
-		t.Fatalf("json_schema.schema が focusDigestSchema と一致しない:\n got: %v\nwant: %v", schema["schema"], want)
+		t.Fatalf("json_schema.schema が focusReportSchema と一致しない:\n got: %v\nwant: %v", schema["schema"], want)
 	}
 }
 
