@@ -1,6 +1,7 @@
 package slackbot
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -371,6 +372,25 @@ func TestFocus_NoTargets(t *testing.T) {
 }
 
 // 失敗はスレッドにそのまま返し、👀 を外す（黙って失敗しない）。
+// ChatGPT が未設定の環境でも panic せず、スレッドにエラーを返す。
+// （NewOpenAIChat はキーが無いと nil を返すので、要約もガードを通す必要がある）
+func TestFocus_WithoutChatGPT(t *testing.T) {
+	api := focusFixture()
+	bot := Bot{SlackAPI: api}
+
+	err := bot.runFocus(t.Context(), testJob())
+	if !errors.Is(err, ErrNoChatGPT) {
+		t.Fatalf("err = %v, want ErrNoChatGPT", err)
+	}
+	last := api.posted[len(api.posted)-1]
+	if !strings.Contains(last.Text(), ErrNoChatGPT.Error()) {
+		t.Fatalf("エラーがスレッドに返っていない: %q", last.Text())
+	}
+	if joined(api.removed) != "eyes" {
+		t.Fatalf("失敗時に 👀 が外れていない: %v", api.removed)
+	}
+}
+
 func TestFocus_ReportsError(t *testing.T) {
 	api := focusFixture()
 	gpt := &fakeChatGPT{err: fmt.Errorf("missing_scope")}

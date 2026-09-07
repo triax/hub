@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/otiai10/openaigo"
 	"github.com/slack-go/slack"
 	"github.com/triax/hub/server/models"
 )
@@ -128,17 +127,14 @@ func (bot Bot) Shortcuts(w http.ResponseWriter, req *http.Request) {
 // Translate method translate original message to given language by OpenAI API,
 // and post it in a thread of the original message.
 func (bot Bot) Translate(ctx context.Context, payload slack.InteractionCallback, lang string) error {
-	res, err := bot.ChatGPT.Chat(ctx, openaigo.ChatRequest{
-		Messages: []openaigo.Message{
-			{Role: "system", Content: "You are a great translator!"},
-			{Role: "user", Content: fmt.Sprintf("I want to translate this message to `%s`:\n%s", lang, payload.Message.Text)},
-		},
-		Model: openaigo.GPT3_5Turbo,
+	text, err := bot.chat(ctx, ChatRequest{
+		Model:  chatModelLight,
+		System: []string{"You are a great translator!"},
+		User:   fmt.Sprintf("I want to translate this message to `%s`:\n%s", lang, payload.Message.Text),
 	})
 	if err != nil {
-		return fmt.Errorf("chatgpt_translation: %v", err)
+		return fmt.Errorf("chatgpt_translation: %w", err)
 	}
-	text := res.Choices[0].Message.Content
 	body, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
 		return fmt.Errorf("json_marshal: %v", err)

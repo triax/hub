@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -88,35 +89,11 @@ func TestSummarize_DecodesDigest(t *testing.T) {
 	}
 }
 
-// AC-2: コードフェンス付きでも decode でき、壊れた JSON は
-// エラーにせず平文フォールバックへ倒れ、その旨が log に出る。
-func TestSummarize_CodeFenceAndBrokenJSON(t *testing.T) {
+// AC-6: structured output が読めなかったときは、エラーにせず平文フォールバックへ
+// 倒れ、その旨が log に出る（安全弁の維持）。
+func TestSummarize_BrokenJSONFallback(t *testing.T) {
 	threads := []playThread{{Parent: parentMsg("100.000000", "プレーA", 1),
 		Replies: []slack.Message{replyMsg("101.000000", "U1", "反省1")}}}
-
-	t.Run("コードフェンス付き", func(t *testing.T) {
-		gpt := &fakeChatGPT{reply: "```json\n" + digestJSON + "\n```"}
-		bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
-		summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
-		if err != nil {
-			t.Fatalf("summarize: %v", err)
-		}
-		if summary.Digest == nil || len(summary.Digest.Focus) != 3 {
-			t.Fatalf("フェンス付き JSON が decode されていない: %+v", summary)
-		}
-	})
-
-	t.Run("改行の無いコードフェンス", func(t *testing.T) {
-		gpt := &fakeChatGPT{reply: "```json " + strings.Join(strings.Fields(digestJSON), " ") + " ```"}
-		bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
-		summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
-		if err != nil {
-			t.Fatalf("summarize: %v", err)
-		}
-		if summary.Digest == nil || len(summary.Digest.Focus) != 3 {
-			t.Fatalf("1 行のフェンス付き JSON が decode されていない: %+v", summary)
-		}
-	})
 
 	t.Run("壊れた JSON は平文フォールバック", func(t *testing.T) {
 		buf := &bytes.Buffer{}
@@ -136,7 +113,7 @@ func TestSummarize_CodeFenceAndBrokenJSON(t *testing.T) {
 		if summary.Text != "*プレーA* 縦の走り込みを揃える。" {
 			t.Fatalf("平文フォールバックの本文が失われている: %q", summary.Text)
 		}
-		if !strings.Contains(buf.String(), "digest parse failed") {
+		if !strings.Contains(buf.String(), "structured output を受け取れませんでした") {
 			t.Fatalf("フォールバックが log に残っていない: %q", buf.String())
 		}
 	})
@@ -367,7 +344,95 @@ func TestFocusSystemPrompt_FewTargets(t *testing.T) {
 	if _, err := bot.summarize(t.Context(), testJob(), few, nil); err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
-	if got := gpt.requests[0].Messages[0].Content; !strings.Contains(got, "1〜3 点") {
+	if got := gpt.requests[0].System[0]; !strings.Contains(got, "1〜3 点") {
 		t.Fatalf("対象が少ないのにプロンプトが 1〜3 点になっていない:\n%s", got)
+	}
+}
+
+// AC-4: focusDigestSchema は Structured Outputs（strict）の制約を満たす。
+// すべての object に additionalProperties:false があり、required が
+// properties のキー集合と一致すること（strict では省略可能なフィールドを作れない）。
+func TestFocusDigestSchema_Strict(t *testing.T) {
+	var walk func(path string, node map[string]any)
+	walk = func(path string, node map[string]any) {
+		switch node["type"] {
+		case "object":
+			props, ok := node["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s: object に properties が無い", path)
+			}
+			if node["additionalProperties"] != false {
+				t.Fatalf("%s: additionalProperties:false が無い", path)
+			}
+			required, ok := node["required"].([]any)
+			if !ok {
+				t.Fatalf("%s: required が無い", path)
+			}
+			if len(required) != len(props) {
+				t.Fatalf("%s: required %v が properties %d 件と一致しない", path, required, len(props))
+			}
+			for _, r := range required {
+				name, _ := r.(string)
+				if _, ok := props[name]; !ok {
+					t.Fatalf("%s: required の %q が properties に無い", path, name)
+				}
+			}
+			for name, child := range props {
+				walk(path+"."+name, child.(map[string]any))
+			}
+		case "array":
+			items, ok := node["items"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s: array に items が無い", path)
+			}
+			walk(path+"[]", items)
+		case "string", "integer", "number", "boolean":
+		default:
+			t.Fatalf("%s: 未知の type %v", path, node["type"])
+		}
+	}
+	walk("focus_digest", focusDigestSchema)
+
+	// focusDigest（Go 側の型）とキーが対応していること。
+	props := focusDigestSchema["properties"].(map[string]any)
+	for _, key := range []string{"focus", "sections"} {
+		if _, ok := props[key]; !ok {
+			t.Fatalf("schema に %q が無い", key)
+		}
+	}
+}
+
+// AC-6: summarize は focus 用モデルと focus_digest schema で呼ぶ。
+func TestSummarize_UsesStructuredOutputs(t *testing.T) {
+	gpt := &fakeChatGPT{reply: digestJSON}
+	bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
+	threads := []playThread{{Parent: parentMsg("100.000000", "プレーA", 1),
+		Replies: []slack.Message{replyMsg("101.000000", "U1", "反省1")}}}
+
+	summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if summary.Digest == nil || len(summary.Digest.Focus) != 3 {
+		t.Fatalf("digest が decode されていない: %+v", summary)
+	}
+	if len(gpt.requests) != 1 {
+		t.Fatalf("ChatGPT calls = %d, want 1", len(gpt.requests))
+	}
+	req := gpt.requests[0]
+	if req.Model != chatModelFocus {
+		t.Fatalf("model = %q, want %s", req.Model, chatModelFocus)
+	}
+	if req.Schema == nil {
+		t.Fatal("Schema が nil（Structured Outputs になっていない）")
+	}
+	if req.Schema.Name != focusDigestSchemaName {
+		t.Fatalf("Schema.Name = %q, want %s", req.Schema.Name, focusDigestSchemaName)
+	}
+	if !reflect.DeepEqual(req.Schema.Schema, focusDigestSchema) {
+		t.Fatal("Schema.Schema が focusDigestSchema でない")
+	}
+	if len(req.System) != 1 || req.User == "" {
+		t.Fatalf("System/User が期待どおりでない: %+v", req)
 	}
 }
