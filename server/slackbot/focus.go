@@ -43,7 +43,11 @@ const (
 	focusEmptyMessage = "対象の投稿がありませんでした"
 )
 
-var focusMentionPattern = regexp.MustCompile(`<@([A-Za-z0-9]+)>`)
+var (
+	focusMentionPattern = regexp.MustCompile(`<@([A-Za-z0-9]+)>`)
+	focusDaysPattern    = regexp.MustCompile(`^(\d+)d$`)
+	focusMonthDayPatten = regexp.MustCompile(`^(\d{1,2})/(\d{1,2})$`)
+)
 
 // focusJob は Webhook（enqueue 側）とワーカー（/tasks/focus）の間で受け渡す仕事の単位。
 type focusJob struct {
@@ -91,7 +95,7 @@ func parseFocusSince(args []string, now time.Time) (time.Time, error) {
 	arg := strings.TrimSpace(args[0])
 
 	// Nd: N 日前から
-	if m := regexp.MustCompile(`^(\d+)d$`).FindStringSubmatch(arg); m != nil {
+	if m := focusDaysPattern.FindStringSubmatch(arg); m != nil {
 		days, _ := strconv.Atoi(m[1])
 		return startOfDay(now.AddDate(0, 0, -days)), nil
 	}
@@ -100,7 +104,7 @@ func parseFocusSince(args []string, now time.Time) (time.Time, error) {
 		return startOfDay(t), nil
 	}
 	// M/D: 今年として解釈し、未来日になるなら前年とみなす
-	if m := regexp.MustCompile(`^(\d{1,2})/(\d{1,2})$`).FindStringSubmatch(arg); m != nil {
+	if m := focusMonthDayPatten.FindStringSubmatch(arg); m != nil {
 		month, _ := strconv.Atoi(m[1])
 		day, _ := strconv.Atoi(m[2])
 		t := time.Date(now.Year(), time.Month(month), day, 0, 0, 0, 0, server.ServiceLocation)
@@ -209,7 +213,7 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 	var err error
 
 	if job.ThreadOnly {
-		if threads, err = bot.collectThreads(job, nil); err != nil {
+		if threads, err = bot.collectSingleThread(job); err != nil {
 			return err
 		}
 	} else {
@@ -258,28 +262,21 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 
 // ------------------------------------------------------------------ 収集 ---
 
-// collectThreads は対象期間の親投稿と、その全返信を古い順に集める。
-func (bot Bot) collectThreads(job focusJob, progress func(done, total int)) ([]playThread, error) {
-	if job.ThreadOnly {
-		// history は呼ばず、指定スレッドの返信だけを取る。
-		msgs, err := bot.fetchReplies(job.Channel, job.ThreadTS)
-		if err != nil {
-			return nil, err
-		}
-		if len(msgs) == 0 {
-			return nil, nil
-		}
-		parent := msgs[0]
-		return []playThread{{
-			Parent:  parent,
-			Replies: filterReplies(msgs, parent.Timestamp, job.MentionTS),
-		}}, nil
-	}
-	parents, err := bot.fetchParents(job)
+// collectSingleThread はスレッド内メンション用。history は呼ばず、
+// 指定スレッドの返信だけを取って 1 本の playThread にまとめる。
+func (bot Bot) collectSingleThread(job focusJob) ([]playThread, error) {
+	msgs, err := bot.fetchReplies(job.Channel, job.ThreadTS)
 	if err != nil {
 		return nil, err
 	}
-	return bot.expandThreads(job, parents, progress)
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	parent := msgs[0]
+	return []playThread{{
+		Parent:  parent,
+		Replies: filterReplies(msgs, parent.Timestamp, job.MentionTS),
+	}}, nil
 }
 
 // fetchParents は conversations.history をページングしながら、
@@ -378,6 +375,8 @@ func filterReplies(msgs []slack.Message, parentTS, mentionTS string) []slack.Mes
 }
 
 // isBotOrSystem は bot・システム投稿、および要約を起動したメンション自身を判定する。
+// onMessage（翻訳）にも似た SubType の除外があるが、あちらは slackevents.MessageEvent が
+// 対象で除外理由も異なる（翻訳の対象外にする）。統合すると翻訳の挙動が変わるため分けている。
 // メンションを除外しないと、受付メッセージを返信した時点でメンションが
 // 「返信のある親」になり、プレーとして要約対象に混入してしまう。
 func isBotOrSystem(m slack.Message, mentionTS string) bool {
@@ -399,6 +398,8 @@ func isSkippableParent(m slack.Message, mentionTS string) bool {
 	return m.SubType == "thread_broadcast" || isBotOrSystem(m, mentionTS)
 }
 
+// countParentKinds は replies を引く前に、Slack のメタ情報（ReplyCount）だけで見積もる。
+// 受付メッセージを早く出すためにここでは返信本体を取らない。
 func countParentKinds(parents []slack.Message) (plays, headlines int) {
 	for _, p := range parents {
 		if p.ReplyCount == 0 {
@@ -410,6 +411,9 @@ func countParentKinds(parents []slack.Message) (plays, headlines int) {
 	return plays, headlines
 }
 
+// countThreadKinds は bot・システム投稿を除外したあとの実数で数える。
+// bot の返信しか無い親は countParentKinds ではプレー、ここでは見出しになるため、
+// 受付メッセージと最終メタ行で件数がずれることがある（実数は最終メタ行が正）。
 func countThreadKinds(threads []playThread) (plays, headlines, replies int) {
 	for _, t := range threads {
 		if t.IsHeadline() {
@@ -483,9 +487,11 @@ func (bot Bot) summarize(ctx context.Context, threads []playThread, resolve func
 // splitThreadsForPrompt は入力が文脈長に収まる限り 1 塊のまま返す。
 // stellar:debt(scope) 分割時は共通課題が塊ごとに出る。upgrade: 2 段目 reduce
 func splitThreadsForPrompt(threads []playThread, budget int) [][]playThread {
+	sizes := make([]int, len(threads))
 	total := 0
-	for _, t := range threads {
-		total += threadRuneCount(t)
+	for i, t := range threads {
+		sizes[i] = threadRuneCount(t)
+		total += sizes[i]
 	}
 	if total <= budget {
 		return [][]playThread{threads}
@@ -493,8 +499,8 @@ func splitThreadsForPrompt(threads []playThread, budget int) [][]playThread {
 	groups := [][]playThread{}
 	current := []playThread{}
 	size := 0
-	for _, t := range threads {
-		n := threadRuneCount(t)
+	for i, t := range threads {
+		n := sizes[i]
 		if len(current) > 0 && size+n > budget {
 			groups = append(groups, current)
 			current, size = nil, 0
@@ -542,7 +548,7 @@ func resolveMentions(s string, resolve func(string) string) string {
 		return s
 	}
 	return focusMentionPattern.ReplaceAllStringFunc(s, func(match string) string {
-		id := focusMentionPattern.FindStringSubmatch(match)[1]
+		id := match[2 : len(match)-1] // `<@Uxxxx>` の中身。パターン上この形しか来ない
 		if name := resolve(id); name != "" && name != id {
 			return "@" + name
 		}
@@ -613,10 +619,10 @@ func chunkLines(s string, max int) []string {
 
 // splitLongLine は 1 行が上限を超える場合だけ、rune 境界で強制分割する。
 func splitLongLine(line string, max int) []string {
-	runes := []rune(line)
-	if len(runes) <= max {
-		return []string{line}
+	if utf8.RuneCountInString(line) <= max {
+		return []string{line} // ほとんどの行はここで返る（[]rune 変換を避ける）
 	}
+	runes := []rune(line)
 	out := []string{}
 	for len(runes) > max {
 		out = append(out, string(runes[:max]))

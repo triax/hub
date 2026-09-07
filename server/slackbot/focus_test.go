@@ -60,9 +60,9 @@ func TestCollectThreads_Paging(t *testing.T) {
 	api := focusFixture()
 	bot := Bot{SlackAPI: api}
 
-	threads, err := bot.collectThreads(testJob(), nil)
+	threads, err := bot.collectChannelThreads(testJob())
 	if err != nil {
-		t.Fatalf("collectThreads: %v", err)
+		t.Fatalf("collect: %v", err)
 	}
 	if len(threads) != 3 {
 		t.Fatalf("threads = %d, want 3 (%v)", len(threads), threads)
@@ -99,9 +99,9 @@ func TestCollectThreads_HeadlineClassification(t *testing.T) {
 	api := focusFixture()
 	bot := Bot{SlackAPI: api}
 
-	threads, err := bot.collectThreads(testJob(), nil)
+	threads, err := bot.collectChannelThreads(testJob())
 	if err != nil {
-		t.Fatalf("collectThreads: %v", err)
+		t.Fatalf("collect: %v", err)
 	}
 	if threads[0].IsHeadline() {
 		t.Fatal("返信のある親が見出しと判定されている")
@@ -224,9 +224,9 @@ func TestCollectThreads_ThreadOnly(t *testing.T) {
 		t.Fatal("スレッド内メンション + 引数なしが ThreadOnly にならない")
 	}
 
-	threads, err := bot.collectThreads(job, nil)
+	threads, err := bot.collectSingleThread(job)
 	if err != nil {
-		t.Fatalf("collectThreads: %v", err)
+		t.Fatalf("collectSingleThread: %v", err)
 	}
 	if api.historyCalls != 0 {
 		t.Fatalf("history calls = %d, want 0（スレッド単体要約で history を呼んでいる）", api.historyCalls)
@@ -418,4 +418,15 @@ func TestFocusTaskName(t *testing.T) {
 	if strings.Contains(got, ".") {
 		t.Fatalf("task ID に `.` が残っている: %q", got)
 	}
+}
+
+// collectChannelThreads は focus() が非スレッド時に踏む経路（fetchParents → expandThreads）を
+// テストからまとめて呼ぶためのヘルパ。本番の focus() は受付メッセージを挟むため
+// この 2 つを直接呼んでいる。
+func (bot Bot) collectChannelThreads(job focusJob) ([]playThread, error) {
+	parents, err := bot.fetchParents(job)
+	if err != nil {
+		return nil, err
+	}
+	return bot.expandThreads(job, parents, nil)
 }

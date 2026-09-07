@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 
 	// stellar:debt(dep) 既存依存 google.golang.org/api に同梱の REST クライアントを使い、
 	// cloud.google.com/go/cloudtasks の追加を避けている（この生成パッケージは
@@ -24,28 +23,30 @@ type TaskEnqueuer interface {
 }
 
 // CloudTasksEnqueuer は Cloud Tasks（App Engine ターゲット）へタスクを積む。
-// ゼロ値で利用でき、構築時にネットワークへ触れない（サービスは Enqueue 内で遅延生成）。
-type CloudTasksEnqueuer struct{}
+// 設定は呼び出し側（main.go）が環境から解決して渡す。この層は環境変数を読まない。
+// 構築時にネットワークへは触れない（サービスは Enqueue 内で遅延生成）。
+type CloudTasksEnqueuer struct {
+	Project  string // GOOGLE_CLOUD_PROJECT
+	Location string // 例: asia-northeast1
+	Queue    string // 例: focus
+	// Service は配送先の App Engine サービス（GAE_SERVICE）。空なら default サービスへ。
+	// 明示しないと dev サービスからの enqueue が default へ飛ぶ。
+	Service string
+}
 
-// 環境変数名。CLOUD_TASKS_LOCATION は必須（未設定なら enqueue はエラー）。
-const (
-	envCloudTasksLocation  = "CLOUD_TASKS_LOCATION"
-	envCloudTasksQueue     = "CLOUD_TASKS_QUEUE"
-	defaultCloudTasksQueue = "focus"
-)
+// DefaultCloudTasksQueue は CLOUD_TASKS_QUEUE 未設定時に使うキュー名。
+const DefaultCloudTasksQueue = "focus"
 
-func (CloudTasksEnqueuer) Enqueue(ctx context.Context, name, relativeURI string, payload []byte) error {
-	project := os.Getenv("GOOGLE_CLOUD_PROJECT")
-	if project == "" {
-		return fmt.Errorf("GOOGLE_CLOUD_PROJECT is not set")
+func (e CloudTasksEnqueuer) Enqueue(ctx context.Context, name, relativeURI string, payload []byte) error {
+	if e.Project == "" {
+		return fmt.Errorf("GOOGLE_CLOUD_PROJECT が未設定のため focus を実行できません")
 	}
-	location := os.Getenv(envCloudTasksLocation)
-	if location == "" {
-		return fmt.Errorf("%s is not set (例: asia-northeast1)", envCloudTasksLocation)
+	if e.Location == "" {
+		return fmt.Errorf("CLOUD_TASKS_LOCATION が未設定のため focus を実行できません（例: asia-northeast1）")
 	}
-	queue := os.Getenv(envCloudTasksQueue)
+	queue := e.Queue
 	if queue == "" {
-		queue = defaultCloudTasksQueue
+		queue = DefaultCloudTasksQueue
 	}
 
 	// 認証は App Engine ランタイムの既定サービスアカウント（ADC）。
@@ -54,7 +55,7 @@ func (CloudTasksEnqueuer) Enqueue(ctx context.Context, name, relativeURI string,
 		return fmt.Errorf("cloudtasks.NewService: %w", err)
 	}
 
-	parent := fmt.Sprintf("projects/%s/locations/%s/queues/%s", project, location, queue)
+	parent := fmt.Sprintf("projects/%s/locations/%s/queues/%s", e.Project, e.Location, queue)
 	req := &cloudtasks.CreateTaskRequest{Task: &cloudtasks.Task{
 		Name: parent + "/tasks/" + name,
 		AppEngineHttpRequest: &cloudtasks.AppEngineHttpRequest{
@@ -62,10 +63,8 @@ func (CloudTasksEnqueuer) Enqueue(ctx context.Context, name, relativeURI string,
 			RelativeUri: relativeURI,
 			Headers:     map[string]string{"Content-Type": "application/json"},
 			// REST API の bytes フィールドなので base64 で渡す。
-			Body: base64.StdEncoding.EncodeToString(payload),
-			// GAE_SERVICE を明示しないと dev サービスからの enqueue が
-			// default サービスへ配送されてしまう。
-			AppEngineRouting: &cloudtasks.AppEngineRouting{Service: os.Getenv("GAE_SERVICE")},
+			Body:             base64.StdEncoding.EncodeToString(payload),
+			AppEngineRouting: &cloudtasks.AppEngineRouting{Service: e.Service},
 		},
 	}}
 

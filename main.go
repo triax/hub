@@ -24,11 +24,17 @@ var (
 
 // focusEnqueuer は GAE 上でのみ Cloud Tasks を使う。
 // ローカルでは nil を返し、slackbot 側が同プロセス実行へフォールバックする。
+// 環境変数の解決はここ（構成の境界）で行い、slackbot には値だけを渡す。
 func focusEnqueuer() slackbot.TaskEnqueuer {
 	if os.Getenv("GAE_APPLICATION") == "" {
 		return nil
 	}
-	return slackbot.CloudTasksEnqueuer{}
+	return slackbot.CloudTasksEnqueuer{
+		Project:  os.Getenv("GOOGLE_CLOUD_PROJECT"),
+		Location: os.Getenv("CLOUD_TASKS_LOCATION"),
+		Queue:    os.Getenv("CLOUD_TASKS_QUEUE"),
+		Service:  os.Getenv("GAE_SERVICE"),
+	}
 }
 
 func init() {
