@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -297,5 +298,105 @@ func TestOnMentionEquipCheck_PostsErrorToThread(t *testing.T) {
 	}
 	if api.posted[0].ThreadTS() != testMentionTS {
 		t.Fatalf("スレッドに返していない: thread_ts=%q", api.posted[0].ThreadTS())
+	}
+}
+
+// logCapture は log の出力先を差し替え、最初の 1 行をチャネルに流す。
+// spawn は goroutine なので、テストは書き込みを同期点として待つ。
+type logCapture struct{ lines chan string }
+
+func (c logCapture) Write(p []byte) (int, error) {
+	select {
+	case c.lines <- string(p):
+	default: // 2 行目以降は捨てる（先頭の panic 行だけ見れば足りる）
+	}
+	return len(p), nil
+}
+
+func captureLog(t *testing.T) chan string {
+	t.Helper()
+	cap := logCapture{lines: make(chan string, 1)}
+	prevOut, prevFlags := log.Writer(), log.Flags()
+	log.SetOutput(cap)
+	t.Cleanup(func() {
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+	return cap.lines
+}
+
+// AC-1: 本文が空 / メンションのみの app_mention でも panic せず 202 を返し、
+// Slack への投稿は 0 件。従来は Tokenize が空を返して [1:] で panic し、
+// goroutine 内なのでプロセスごと落ちていた。
+func TestWebhook_EmptyMentionDoesNotPanic(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		text string
+	}{
+		{"空文字", ""},
+		{"メンションのみ", "<@BOT>"},
+		{"空白のみ", "   "},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			api := newFakeSlackAPI()
+			enq := newFakeEnqueuer()
+			bot := Bot{VerificationToken: "vt", SlackAPI: api, ChatGPT: &fakeChatGPT{}, Enqueuer: enq}
+
+			body := `{"token":"vt","event":{"type":"app_mention","text":"` + c.text + `","channel":"C1","ts":"` + testMentionTS + `"}}`
+			req := httptest.NewRequest(http.MethodPost, "/slack/events", strings.NewReader(body))
+			rec := httptest.NewRecorder()
+
+			bot.Webhook(rec, req)
+
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+			}
+
+			// Webhook 経由の実行は spawn が panic を握り潰してしまうため、
+			// 「そもそも panic しない」ことは同期呼び出しで確かめる。
+			// ここで panic すれば go test がこのテストを FAIL にする。
+			bot.onMention(mentionPayload(c.text, "C1", testMentionTS, ""))
+
+			if len(api.posted) != 0 {
+				t.Fatalf("空メンションなのに投稿している: %+v", api.posted)
+			}
+			if enq.count() != 0 {
+				t.Fatalf("空メンションなのに enqueue している: %d", enq.count())
+			}
+		})
+	}
+}
+
+// AC-2: spawn に panic する関数を渡しても呼び出し元は落ちず、
+// panic の内容とスタックがログに残る。
+func TestSpawn_RecoversPanic(t *testing.T) {
+	lines := captureLog(t)
+	bot := Bot{SlackAPI: newFakeSlackAPI()}
+
+	bot.spawn("テスト", func() { panic("ばーん") })
+
+	var got string
+	select {
+	case got = <-lines:
+	case <-time.After(3 * time.Second):
+		t.Fatal("panic がログに出なかった")
+	}
+	if !strings.Contains(got, "ばーん") {
+		t.Fatalf("panic の内容がログに無い: %q", got)
+	}
+	if !strings.Contains(got, "テスト") {
+		t.Fatalf("goroutine 名がログに無い: %q", got)
+	}
+	if !strings.Contains(got, "runtime/debug.Stack") && !strings.Contains(got, "slackbot.Bot.spawn") {
+		t.Fatalf("スタックがログに無い: %q", got)
+	}
+
+	// 呼び出し元（このテスト）が生きていることの確認。
+	done := make(chan struct{})
+	bot.spawn("後続", func() { close(done) })
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("panic の後に spawn が動かなくなっている")
 	}
 }

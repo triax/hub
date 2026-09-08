@@ -254,7 +254,7 @@ func (bot Bot) onMentionFocus(event slackevents.AppMentionEvent, args []string) 
 
 	if bot.Enqueuer == nil {
 		// ローカル開発には Cloud Tasks が無いので、同プロセスでワーカーを直接呼ぶ。
-		go func() { _ = bot.runFocus(ctx, job) }()
+		bot.spawn("runFocus", func() { _ = bot.runFocus(ctx, job) })
 		return
 	}
 

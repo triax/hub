@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/slack-go/slack/slackevents"
 	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
+	"github.com/triax/hub/server/observability"
 
 	"github.com/otiai10/largo"
 )
@@ -104,6 +106,32 @@ type (
 	}
 )
 
+// spawn は Webhook から仕事を切り離すための goroutine ラッパ。
+//
+// filters.Recovery が守るのは HTTP ハンドラの内側だけで、ハンドラ復帰後に走る
+// goroutine はその外にいる。Go は goroutine 内の未回復 panic をプロセス終了で
+// 扱うため、素の `go f()` は Slack の 1 メッセージで API サーバごと落としうる。
+// ここで recover し、ログと SLACK_CHANNEL_ALERTS に流してプロセスを生かす（#664）。
+func (bot Bot) spawn(name string, fn func()) {
+	go func() {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			stack := string(debug.Stack())
+			log.Printf("[ERROR] 10002 panic recovered in goroutine %s: %v\n%s", name, rec, stack)
+			observability.Notify(observability.Report{
+				Source:  "backend/panic",
+				Message: fmt.Sprintf("slackbot %s: %v (%T)", name, rec, rec),
+				Stack:   stack,
+				URL:     "slackbot/" + name,
+			})
+		}()
+		fn()
+	}()
+}
+
 func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 
 	// Slack は 3 秒以内に応答が無いと同じイベントを再送する。再送を処理すると
@@ -133,11 +161,11 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 	case payload.Event["type"] == string(slackevents.AppMention):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
-		go bot.onMention(payload)
+		bot.spawn("onMention", func() { bot.onMention(payload) })
 	case payload.Event["type"] == string(slackevents.Message):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
-		go bot.onMessage(payload)
+		bot.spawn("onMessage", func() { bot.onMessage(payload) })
 	default:
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -161,10 +189,13 @@ func (bot Bot) onMention(payload Payload) {
 	json.NewEncoder(buf).Encode(payload.Event)
 	json.NewDecoder(buf).Decode(&event)
 
-	tokens := largo.Tokenize(event.Text)[1:]
-	if len(tokens) == 0 {
+	// Tokenize は本文が空（添付のみのメンション、編集イベント等）だと
+	// 長さ 0 を返す。先に長さを見てから先頭のメンション部分を落とす（#664）。
+	tokens := largo.Tokenize(event.Text)
+	if len(tokens) <= 1 {
 		return
 	}
+	tokens = tokens[1:]
 	switch tokens[0] {
 	case "既読", "既読チェック", "react", "reaction": // 既読チェック
 		bot.onMentionReadCheck(event)
