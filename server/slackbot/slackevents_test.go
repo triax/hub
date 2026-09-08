@@ -338,7 +338,6 @@ func TestWebhook_EmptyMentionDoesNotPanic(t *testing.T) {
 		{"空白のみ", "   "},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			lines := captureLog(t)
 			api := newFakeSlackAPI()
 			enq := newFakeEnqueuer()
 			bot := Bot{VerificationToken: "vt", SlackAPI: api, ChatGPT: &fakeChatGPT{}, Enqueuer: enq}
@@ -352,15 +351,12 @@ func TestWebhook_EmptyMentionDoesNotPanic(t *testing.T) {
 			if rec.Code != http.StatusAccepted {
 				t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
 			}
-			time.Sleep(100 * time.Millisecond)
-			// spawn が panic を握り潰しただけでは不十分。そもそも panic しないこと。
-			select {
-			case got := <-lines:
-				if strings.Contains(got, "panic") {
-					t.Fatalf("空メンションで panic している: %q", got)
-				}
-			default:
-			}
+
+			// Webhook 経由の実行は spawn が panic を握り潰してしまうため、
+			// 「そもそも panic しない」ことは同期呼び出しで確かめる。
+			// ここで panic すれば go test がこのテストを FAIL にする。
+			bot.onMention(mentionPayload(c.text, "C1", testMentionTS, ""))
+
 			if len(api.posted) != 0 {
 				t.Fatalf("空メンションなのに投稿している: %+v", api.posted)
 			}
