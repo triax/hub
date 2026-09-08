@@ -121,13 +121,33 @@ _setup_worktree_symlinks() {
 # per_env に列挙されたリソースは provision が管理するため、エージェントは
 # これらを理由に検証を SKIP しない。
 _manifest() {
-  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"test -f secrets.local.yaml","detail":"secrets.local.yaml"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_fixtures","lifecycle":"provision (毎回、冪等)","detail":"fixtures の scenario（既定: default,taping,position,hpprofile／SEED_SCENARIOS で上書き可）を cmd/seed で投入（key-based upsert）。devdata import は --import-devdata 明示時のみ"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n'
+  # secrets / node_modules の check 文字列は main repo root を実際に解決した値で埋める
+  # （printf のフォーマット文字列に直接 $(...) を書いても展開されず literal で出力されて
+  # しまうため、%s 引数として渡す。_main_repo_root の呼び出しも 1 回にまとめる）。
+  local main_root
+  main_root="$(_main_repo_root)"
+  local secrets_check node_modules_check
+  secrets_check="test -f \"${main_root}/secrets.local.yaml\""
+  node_modules_check="test -d \"${main_root}/node_modules\""
+  printf '{"shared":{"description":"doctor が検証する前提条件。provision は関与しない","requires":[{"id":"gcloud","check":"command -v gcloud","detail":"gcloud CLI"},{"id":"datastore_component","check":"gcloud components list","detail":"cloud-datastore-emulator コンポーネント"},{"id":"go","check":"command -v go","detail":"Go runtime"},{"id":"npm","check":"command -v npm","detail":"Node.js / npm"},{"id":"secrets","check":"%s","detail":"secrets.local.yaml（メインリポジトリ側）"},{"id":"node_modules","check":"%s","detail":"node_modules（メインリポジトリ側。npm ci で用意）"}]},"per_env":{"description":"provision <id> が idempotent に管理するリソース。consumer はこれらを理由に検証を SKIP しない","provisions":[{"id":"datastore_emulator","lifecycle":"provision/teardown","detail":"Datastore エミュレーター（<id> 単位でポートとデータディレクトリを分離）"},{"id":"seed_fixtures","lifecycle":"provision (毎回、冪等)","detail":"fixtures の scenario（既定: default,taping,position,hpprofile／SEED_SCENARIOS で上書き可）を cmd/seed で投入（key-based upsert）。devdata import は --import-devdata 明示時のみ"},{"id":"go_api_server","lifecycle":"provision/teardown","detail":"Go API サーバー"},{"id":"vite_dev_server","lifecycle":"provision/teardown","detail":"Vite dev server"}]}}\n' \
+    "$(_json_escape "$secrets_check")" "$(_json_escape "$node_modules_check")"
+}
+
+# JSON 文字列値として埋め込むための最小エスケープ（バックスラッシュ・二重引用符のみ）。
+# このスクリプトの check 文字列はパス由来でバックスラッシュ・改行を含まない前提。
+_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
 }
 
 # ------------------------------------------------------------------ doctor ---
 _doctor() {
   local ok=true
   local issues=()
+  local main_root
+  main_root="$(_main_repo_root)"
 
   _check() {
     local name="$1" cmd="$2" detail_ok="$3" detail_fail="$4" fix="$5" manifest_item="${6:-}"
@@ -148,9 +168,12 @@ _doctor() {
                                                     "gcloud components install cloud-datastore-emulator"                          "datastore_component"
   _check "go"              "command -v go"          "go found"          "go not found"                  "Install Go"                                                  "go"
   _check "npm"             "command -v npm"          "npm found"         "npm not found"                 "Install Node.js"                                             "npm"
-  _check "secrets"         "test -f '${REPO_ROOT}/secrets.local.yaml'" \
+  _check "secrets"         "test -f '${main_root}/secrets.local.yaml'" \
                                                     "secrets.local.yaml found" "secrets.local.yaml not found" \
-                                                    "cp secrets.example.yaml secrets.local.yaml && fill in values"                "secrets"
+                                                    "cp secrets.example.yaml secrets.local.yaml && fill in values (main repo)" "secrets"
+  _check "node_modules"    "test -d '${main_root}/node_modules'" \
+                                                    "node_modules found" "node_modules not found" \
+                                                    "npm ci"                                                                    "node_modules"
 
   local all_pass=true
   for item in "${issues[@]}"; do
