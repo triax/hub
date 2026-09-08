@@ -82,6 +82,9 @@ type Bot struct {
 	// Enqueuer は時間のかかる仕事をリクエストの外へ逃がすためのキュー。
 	// nil のときは同プロセスで実行する（Cloud Tasks の無いローカル開発）。
 	Enqueuer TaskEnqueuer
+	// EquipStore は備品チェックが読む永続化層。nil のときは
+	// GOOGLE_CLOUD_PROJECT の Datastore を実際に読む（本番 / DEV）。
+	EquipStore EquipStore
 }
 
 // chat は ChatGPT への窓口。未設定の環境では ErrNoChatGPT を返し、
@@ -126,15 +129,15 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 
 	switch {
 	case payload.Type == slackevents.URLVerification:
-		bot.onURLVerification(req, w, payload)
+		bot.onURLVerification(w, payload)
 	case payload.Event["type"] == string(slackevents.AppMention):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
-		go bot.onMention(req, w, payload)
+		go bot.onMention(payload)
 	case payload.Event["type"] == string(slackevents.Message):
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte("ok"))
-		go bot.onMessage(req, w, payload)
+		go bot.onMessage(payload)
 	default:
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -142,13 +145,16 @@ func (bot Bot) Webhook(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (bot Bot) onURLVerification(_ *http.Request, w http.ResponseWriter, payload Payload) {
+func (bot Bot) onURLVerification(w http.ResponseWriter, payload Payload) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(payload.Challenge))
 }
 
-func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Payload) {
+// onMention は Webhook がハンドラ復帰後の goroutine から呼ぶ。そのため
+// *http.Request / http.ResponseWriter を引数に取らない — req.Context() は
+// この時点で既に cancel 済みで、w への書き込みも無効だからである（#665）。
+func (bot Bot) onMention(payload Payload) {
 
 	event := slackevents.AppMentionEvent{}
 	buf := bytes.NewBuffer(nil)
@@ -161,23 +167,24 @@ func (bot Bot) onMention(req *http.Request, w http.ResponseWriter, payload Paylo
 	}
 	switch tokens[0] {
 	case "既読", "既読チェック", "react", "reaction": // 既読チェック
-		bot.onMentionReadCheck(req, w, event)
+		bot.onMentionReadCheck(event)
 	case "備品", "備品チェック": // 備品チェック
-		bot.onMentionEquipCheck(req, w, event)
+		bot.onMentionEquipCheck(event)
 	case "予報":
-		bot.onMentionAmesh(req, w, event)
+		bot.onMentionAmesh(event)
 	case "focus": // プレー反省スレッドの期間指定 AI 要約
 		bot.onMentionFocus(event, tokens[1:])
 	case "HUB_WEBPAGE_BASE_URL":
-		bot.onEnvDumpSafe(req, w, event, "HUB_WEBPAGE_BASE_URL")
+		bot.onEnvDumpSafe(event, "HUB_WEBPAGE_BASE_URL")
 	case "HUB_CONDITIONING_CHECK_SHEET_URL":
-		bot.onEnvDumpSafe(req, w, event, "HUB_CONDITIONING_CHECK_SHEET_URL")
+		bot.onEnvDumpSafe(event, "HUB_CONDITIONING_CHECK_SHEET_URL")
 	default:
 		bot.echo(tokens, event)
 	}
 }
 
-func (bot Bot) onMessage(_ *http.Request, _ http.ResponseWriter, payload Payload) {
+// onMessage も onMention と同じく goroutine から呼ばれる（#665）。
+func (bot Bot) onMessage(payload Payload) {
 
 	event := slackevents.MessageEvent{}
 	buf := bytes.NewBuffer(nil)
@@ -299,7 +306,7 @@ func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
 	log.Println("[echo]", a, b, err)
 }
 
-func (bot Bot) onMentionReadCheck(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
+func (bot Bot) onMentionReadCheck(event slackevents.AppMentionEvent) {
 	if event.ThreadTimeStamp == "" {
 		bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText("スレッドにおいて有効です", false))
 		return
@@ -347,17 +354,60 @@ func (bot Bot) onMentionReadCheck(_ *http.Request, _ http.ResponseWriter, event 
 	bot.SlackAPI.PostMessage(event.Channel, slack.MsgOptionText(buf.String(), false))
 }
 
-func (bot Bot) onMentionEquipCheck(req *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
-	ctx := req.Context()
-	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+// EquipStore は備品チェックが必要とする読み出しだけを切り出した永続化層。
+// Datastore を直接触らない形にすることで、goroutine に渡る context が
+// cancel されていないことをテストから観測できるようにしている（#665）。
+type EquipStore interface {
+	// LoadEquips は全備品と、それぞれの最新の履歴 1 件を読み出す。
+	LoadEquips(ctx context.Context) ([]models.Equip, error)
+}
+
+// datastoreEquipStore は本番 / DEV で使う EquipStore の実装。
+type datastoreEquipStore struct {
+	projectID string
+}
+
+func (s datastoreEquipStore) LoadEquips(ctx context.Context) ([]models.Equip, error) {
+	client, err := datastore.NewClient(ctx, s.projectID)
 	if err != nil {
-		return
+		return nil, err
 	}
 	defer client.Close()
 
 	equips := []models.Equip{}
-	query := datastore.NewQuery(models.KindEquip)
-	if _, err := client.GetAll(ctx, query, &equips); err != nil && !models.IsFiledMismatch(err) {
+	if _, err := client.GetAll(ctx, datastore.NewQuery(models.KindEquip), &equips); err != nil && !models.IsFiledMismatch(err) {
+		return nil, err
+	}
+
+	for i, e := range equips {
+		equips[i].ID = e.Key.ID
+		// 最新のHistoryだけ収集する
+		query := datastore.NewQuery(models.KindCustody).Ancestor(e.Key).Order("-Timestamp").Limit(1)
+		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
+	}
+	return equips, nil
+}
+
+// onMentionEquipCheck は Webhook がハンドラ復帰後の goroutine から呼ぶ入口。
+// req.Context() はこの時点で cancel 済みなので、リクエストから独立した
+// context を作って equipCheck に渡す（#665）。
+func (bot Bot) onMentionEquipCheck(event slackevents.AppMentionEvent) {
+	bot.equipCheck(context.Background(), event)
+}
+
+// equipCheck は備品チェックの本体。ctx は呼び出し側から注入する
+// （テストが「cancel されていない context が渡ること」を検査できるように）。
+func (bot Bot) equipCheck(ctx context.Context, event slackevents.AppMentionEvent) {
+	store := bot.EquipStore
+	if store == nil {
+		store = datastoreEquipStore{projectID: os.Getenv("GOOGLE_CLOUD_PROJECT")}
+	}
+
+	equips, err := store.LoadEquips(ctx)
+	if err != nil {
+		// 従来は黙って return していたため、利用者からは「無反応」に見えた。
+		log.Printf("[equip] load failed: %v", err)
+		bot.postToThread(event, "備品の読み出しに失敗しました:\n> "+err.Error())
 		return
 	}
 
@@ -369,12 +419,7 @@ func (bot Bot) onMentionEquipCheck(req *http.Request, _ http.ResponseWriter, eve
 		Since: time.Now().AddDate(0, 0, -7),
 	}
 
-	for i, e := range equips {
-		equips[i].ID = e.Key.ID
-		// 最新のHistoryだけ収集する
-		query := datastore.NewQuery(models.KindCustody).Ancestor(e.Key).Order("-Timestamp").Limit(1)
-		client.GetAll(ctx, query, &equips[i].History) // エラーは無視してよい
-		// Summarizeする
+	for i := range equips {
 		if len(equips[i].History) == 0 {
 			summary.Unmanaged = append(summary.Unmanaged, equips[i])
 		} else if !equips[i].HasBeenUpdatedSince(summary.Since) {
@@ -386,31 +431,33 @@ func (bot Bot) onMentionEquipCheck(req *http.Request, _ http.ResponseWriter, eve
 
 	buf := bytes.NewBuffer(nil)
 	if err := tplEquipsManagementSummary.Execute(buf, summary); err != nil {
-		log.Println(err.Error())
+		log.Printf("[equip] render failed: %v", err)
+		bot.postToThread(event, "備品チェックの整形に失敗しました:\n> "+err.Error())
 		return
 	}
 
-	opts := []slack.MsgOption{slack.MsgOptionText(buf.String(), false)}
-	if event.ThreadTimeStamp != "" {
-		opts = append(opts, slack.MsgOptionTS(event.ThreadTimeStamp))
-	}
-	_, _, err = bot.SlackAPI.PostMessage(event.Channel, opts...)
+	err = bot.postToThread(event, buf.String())
 	log.Printf("[equip] %+v %v", summary, err)
 }
 
-func (bot Bot) onMentionAmesh(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent) {
-	// U01G23SHBQB
-	opts := []slack.MsgOption{slack.MsgOptionText("<@U01G23SHBQB> 予報", false)}
+// postToThread はメンション元がスレッド内ならそのスレッドへ、そうでなければ
+// チャンネルへ投稿する。分岐が各ハンドラに散らばるのを防ぐ。
+func (bot Bot) postToThread(event slackevents.AppMentionEvent, text string) error {
+	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
 	if event.ThreadTimeStamp != "" {
 		opts = append(opts, slack.MsgOptionTS(event.ThreadTimeStamp))
 	}
 	_, _, err := bot.SlackAPI.PostMessage(event.Channel, opts...)
-	log.Printf("[amesh] %v", err)
+	return err
+}
 
+func (bot Bot) onMentionAmesh(event slackevents.AppMentionEvent) {
+	// U01G23SHBQB
+	log.Printf("[amesh] %v", bot.postToThread(event, "<@U01G23SHBQB> 予報"))
 }
 
 // onEnvDumpSafe は許可リストに基づいて安全に環境変数を返す
-func (bot Bot) onEnvDumpSafe(_ *http.Request, _ http.ResponseWriter, event slackevents.AppMentionEvent, name string) {
+func (bot Bot) onEnvDumpSafe(event slackevents.AppMentionEvent, name string) {
 	_, _, err := bot.SlackAPI.PostMessage(event.Channel,
 		slack.MsgOptionText("`"+os.Getenv(name)+"`", false),
 	)
