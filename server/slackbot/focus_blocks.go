@@ -98,10 +98,11 @@ func digestGuide(job focusJob, report focusReport) string {
 // 「やる」「やめる」は該当が無ければラベルごと省く（空の rich_text_list は
 // Slack に invalid_blocks で弾かれるため、省略は見た目の都合だけではない）。
 func focusItemBlock(i int, f rankedTheme) slack.Block {
-	title := boldElement(fmt.Sprintf("%d. %s", i+1, strings.TrimSpace(f.Title)))
+	// f.Title / f.Summary / f.Quote は normalizeTheme（focus_rank.go）で trim 済み。
+	title := boldElement(fmt.Sprintf("%d. %s", i+1, f.Title))
 	head := []slack.RichTextSectionElement{title}
-	if summary := strings.TrimSpace(f.Summary); summary != "" {
-		head = append(head, plainElement("\n"+truncateRunes(summary, focusSummaryRuneLimit)))
+	if f.Summary != "" {
+		head = append(head, plainElement("\n"+truncateRunes(f.Summary, focusSummaryRuneLimit)))
 	}
 
 	elements := []slack.RichTextElement{slack.NewRichTextSection(head...)}
@@ -149,8 +150,8 @@ func focusItemMeta(f rankedTheme) string {
 	if f.Count > 0 {
 		parts = append(parts, fmt.Sprintf("%d プレー", f.Count))
 	}
-	if quote := strings.TrimSpace(f.Quote); quote != "" {
-		parts = append(parts, "「"+quote+"」")
+	if f.Quote != "" {
+		parts = append(parts, "「"+f.Quote+"」")
 	}
 	return strings.Join(parts, " ／ ")
 }
@@ -177,7 +178,7 @@ func digestMeta(job focusJob, threads []playThread) string {
 func digestFallbackText(job focusJob, report focusReport, now time.Time) string {
 	titles := make([]string, 0, len(report.Focus))
 	for i, f := range report.Focus {
-		titles = append(titles, fmt.Sprintf("%d. %s", i+1, strings.TrimSpace(f.Title)))
+		titles = append(titles, fmt.Sprintf("%d. %s", i+1, f.Title))
 	}
 	if len(titles) == 0 {
 		return digestTitle(job, now)

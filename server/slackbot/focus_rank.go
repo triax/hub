@@ -111,27 +111,38 @@ func pickThemes(d focusDigest, order []int, counts map[string]int, limit, minCou
 	return picked
 }
 
-// normalizeTheme は LLM が挙げた「やる」「やめる」を描画に耐える形に整える。
-// 件数は Structured Outputs（strict）では縛れないので、ここが唯一の関門になる。
+// normalizeTheme は LLM が挙げたテーマを描画に耐える形に整える。件数は Structured
+// Outputs（strict）では縛れないので、ここが唯一の関門になる。Title/Summary/Quote の
+// 前後空白除去と Positions の重複除去もここに集約し、描画側（focus_blocks.go）は
+// 正規化済みの値をそのまま使う（#668）。
 // Do が 0 件でも focus からは外さない（取りこぼしで焦点そのものを失わないため。
 // 描画側は「やる」の見出しごと省く）。
 func normalizeTheme(theme focusTheme) focusTheme {
+	theme.Title = strings.TrimSpace(theme.Title)
+	theme.Summary = strings.TrimSpace(theme.Summary)
+	theme.Quote = strings.TrimSpace(theme.Quote)
 	theme.Do = normalizeActions(theme.Do)
 	theme.Dont = normalizeActions(theme.Dont)
+	theme.Positions = uniqueStrings(trimStrings(theme.Positions))
 	return theme
 }
 
 // normalizeActions は空白を落とし、空文字と重複を除いて focusMaxActions 件までに切り詰める。
 func normalizeActions(actions []string) []string {
-	trimmed := make([]string, 0, len(actions))
-	for _, a := range actions {
-		trimmed = append(trimmed, strings.TrimSpace(a))
-	}
-	kept := uniqueStrings(trimmed)
+	kept := uniqueStrings(trimStrings(actions))
 	if len(kept) > focusMaxActions {
 		kept = kept[:focusMaxActions]
 	}
 	return kept
+}
+
+// trimStrings は各要素の前後空白を落とす（空文字化・重複除去は uniqueStrings に委ねる）。
+func trimStrings(values []string) []string {
+	trimmed := make([]string, 0, len(values))
+	for _, v := range values {
+		trimmed = append(trimmed, strings.TrimSpace(v))
+	}
+	return trimmed
 }
 
 // countThemeKeys は「そのテーマを指しているプレー数」を数える。1 プレーが同じ key を
