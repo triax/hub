@@ -246,6 +246,57 @@ func TestCollectThreads_ThreadOnly(t *testing.T) {
 	}
 }
 
+// #667 AC-1: ThreadOnly でも受付・完了の meta reply が同スレッドに出る。
+func TestFocus_ThreadOnly_MetaReply(t *testing.T) {
+	api := newFakeSlackAPI()
+	api.repliesPages["50.000000"] = [][]slack.Message{{
+		parentMsg("50.000000", "プレーX", 2),
+		replyMsg("51.000000", "U1", "反省X"),
+		replyMsg("52.000000", "U2", "反省Y"),
+	}}
+	gpt := &fakeChatGPT{reply: "*プレーX* 縦の走り込みを揃える。"}
+	bot := Bot{SlackAPI: api, ChatGPT: gpt}
+
+	job, err := newFocusJob(nil, time.Now(), "C1", testMentionTS, "50.000000")
+	if err != nil {
+		t.Fatalf("newFocusJob: %v", err)
+	}
+	if !job.ThreadOnly {
+		t.Fatal("ThreadOnly にならない")
+	}
+
+	if err := bot.runFocus(t.Context(), job); err != nil {
+		t.Fatalf("runFocus: %v", err)
+	}
+
+	if len(api.posted) == 0 {
+		t.Fatalf("受付メッセージが投稿されていない: %+v", api.posted)
+	}
+	accepted := api.posted[0]
+	if !strings.Contains(accepted.Text(), "📝 このスレッドの 2 件の返信を読んでいます") {
+		t.Fatalf("受付メッセージが期待どおりでない: %q", accepted.Text())
+	}
+	if accepted.ThreadTS() != testMentionTS {
+		t.Fatalf("受付メッセージがメンションのスレッド外に投稿されている: %q", accepted.ThreadTS())
+	}
+
+	if len(api.updated) == 0 {
+		t.Fatalf("完了時に受付メッセージが更新されていない: %+v", api.updated)
+	}
+	done := api.updated[len(api.updated)-1]
+	if !strings.Contains(done.Text(), "✅ このスレッドの 2 件の返信を読みました") {
+		t.Fatalf("完了メッセージが期待どおりでない: %q", done.Text())
+	}
+	if !focusDonePattern.MatchString(done.Text()) {
+		t.Fatalf("完了メッセージに所要時間が残っていない: %q", done.Text())
+	}
+	// 受付メッセージ（1 通目の PostMessage）と同じ ts に UpdateMessage が飛んでいる
+	// ことを、フェイクの ts 採番規則（`900.%06d`、1 通目なら `900.000001`）で確認する。
+	if done.Timestamp != "900.000001" {
+		t.Fatalf("完了時の UpdateMessage が受付メッセージと別 ts を指している: %q", done.Timestamp)
+	}
+}
+
 // #659 AC-6: `full` は期間指定と独立に解釈する。
 func TestNewFocusJob_Full(t *testing.T) {
 	now := time.Date(2026, 9, 7, 13, 45, 0, 0, server.ServiceLocation)

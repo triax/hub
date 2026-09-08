@@ -330,6 +330,15 @@ func (bot Bot) focus(ctx context.Context, job focusJob, resolve func(string) str
 		if threads, err = bot.collectSingleThread(job); err != nil {
 			return err
 		}
+		// 進捗更新は 1 スレッドだけなので不要。受付・完了の meta reply だけは
+		// 非 ThreadOnly と同じ statusTS の仕組みに乗せる（#667）。
+		if len(threads) > 0 {
+			_, _, replies := countThreadKinds(threads)
+			if statusTS, err = bot.postStatus(job, fmt.Sprintf(
+				"📝 このスレッドの %d 件の返信を読んでいます", replies)); err != nil {
+				return err
+			}
+		}
 	} else {
 		parents, e := bot.fetchParents(job)
 		if e != nil {
