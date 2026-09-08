@@ -24,7 +24,9 @@ import (
 )
 
 const (
-	BotAssistantName = "佐藤 朋美"
+	// BotAssistantName は echo の人格プロンプトが名乗る名前。
+	// Slack App の表示名（@Mitsuha Onoda / 斧田 三葉）と揃える。
+	BotAssistantName = "斧田 三葉"
 )
 
 var (

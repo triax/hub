@@ -168,6 +168,11 @@ func TestEcho_UsesInjectedChatGPT(t *testing.T) {
 	if !strings.Contains(got.System[2], BotAssistantName) {
 		t.Fatalf("人格の指示が失われている: %q", got.System[2])
 	}
+	// AC-1: 名乗る名前は Slack App の実際の表示名と一致すること。
+	// ここだけは定数ではなくリテラルで pin する（定数の書き換えを検知するため）。
+	if !strings.Contains(got.System[2], "斧田 三葉") {
+		t.Fatalf("system プロンプトが実際の bot 名を名乗っていない: %q", got.System[2])
+	}
 	if got.User != "元気ですか" {
 		t.Fatalf("user = %q, want 元気ですか", got.User)
 	}
