@@ -188,6 +188,35 @@ func TestNormalizeTheme_TrimsActions(t *testing.T) {
 		t.Fatalf("Dont = %+v, want 空（空白だけの要素は落とす）", theme.Dont)
 	}
 
+	// #668 AC-1: テーマ側 Positions も重複・空文字・前後空白を除く。
+	positioned := normalizeTheme(focusTheme{
+		Key:       "targets",
+		Positions: []string{"QB", "QB", " WR ", ""},
+	})
+	if got := strings.Join(positioned.Positions, ","); got != "QB,WR" {
+		t.Fatalf("Positions = %q, want QB,WR（重複・空文字・前後空白を除く）", got)
+	}
+	if got := focusItemMeta(rankedTheme{focusTheme: positioned}); !strings.Contains(got, "対象: QB, WR") {
+		t.Fatalf("補足行 = %q, want 対象: QB, WR を含む", got)
+	}
+
+	// #668 AC-2: Title / Summary / Quote の前後空白も normalizeTheme に集約される。
+	trimmed := normalizeTheme(focusTheme{
+		Key:     "spacing",
+		Title:   "  タイトル  ",
+		Summary: "  概要  ",
+		Quote:   "  原文の引用  ",
+	})
+	if trimmed.Title != "タイトル" {
+		t.Fatalf("Title = %q, want トリム済み", trimmed.Title)
+	}
+	if trimmed.Summary != "概要" {
+		t.Fatalf("Summary = %q, want トリム済み", trimmed.Summary)
+	}
+	if trimmed.Quote != "原文の引用" {
+		t.Fatalf("Quote = %q, want トリム済み", trimmed.Quote)
+	}
+
 	// rankThemes 経由でも同じで、do 0 件のテーマが focus から消えない。
 	d := focusDigest{
 		Themes: []focusTheme{{Key: "a", Title: "A", Do: []string{"やること", "", "やること"}, Dont: nil}},
