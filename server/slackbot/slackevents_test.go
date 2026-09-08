@@ -1,6 +1,7 @@
 package slackbot
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/slack-go/slack"
+	"github.com/triax/hub/server/models"
 )
 
 func mentionPayload(text, channel, ts, threadTS string) Payload {
@@ -41,8 +43,7 @@ func TestOnMention_Dispatch(t *testing.T) {
 			enq := newFakeEnqueuer()
 			bot := Bot{SlackAPI: api, ChatGPT: &fakeChatGPT{}, Enqueuer: enq}
 
-			req := httptest.NewRequest(http.MethodPost, "/slack/events", nil)
-			bot.onMention(req, httptest.NewRecorder(), mentionPayload(c.text, "C1", testMentionTS, ""))
+			bot.onMention(mentionPayload(c.text, "C1", testMentionTS, ""))
 
 			if got := enq.count(); got != c.wantEnqueue {
 				t.Fatalf("enqueue = %d, want %d", got, c.wantEnqueue)
@@ -152,8 +153,7 @@ func TestEcho_UsesInjectedChatGPT(t *testing.T) {
 	gpt := &fakeChatGPT{reply: "こんにちは！"}
 	bot := Bot{SlackAPI: api, ChatGPT: gpt, Enqueuer: newFakeEnqueuer()}
 
-	req := httptest.NewRequest(http.MethodPost, "/slack/events", nil)
-	bot.onMention(req, httptest.NewRecorder(), mentionPayload("<@BOT> 元気ですか", "C1", testMentionTS, ""))
+	bot.onMention(mentionPayload("<@BOT> 元気ですか", "C1", testMentionTS, ""))
 
 	if len(gpt.requests) != 1 {
 		t.Fatalf("ChatGPT calls = %d, want 1", len(gpt.requests))
@@ -189,8 +189,7 @@ func TestEcho_WithoutChatGPT(t *testing.T) {
 	api := newFakeSlackAPI()
 	bot := Bot{SlackAPI: api, Enqueuer: newFakeEnqueuer()}
 
-	req := httptest.NewRequest(http.MethodPost, "/slack/events", nil)
-	bot.onMention(req, httptest.NewRecorder(), mentionPayload("<@BOT> 元気ですか", "C1", testMentionTS, ""))
+	bot.onMention(mentionPayload("<@BOT> 元気ですか", "C1", testMentionTS, ""))
 
 	if len(api.posted) != 1 || !strings.Contains(api.posted[0].Text(), "ちょっと何言っているかわからないです") {
 		t.Fatalf("定型文に落ちていない: %+v", api.posted)
@@ -209,7 +208,7 @@ func TestOnMessage_Translate(t *testing.T) {
 	gpt := &fakeChatGPT{reply: "Bonjour"}
 	bot := Bot{SlackAPI: api, ChatGPT: gpt}
 
-	bot.onMessage(httptest.NewRequest(http.MethodPost, "/slack/events", nil), httptest.NewRecorder(),
+	bot.onMessage(
 		Payload{Event: map[string]any{"type": "message", "text": "おはよう", "channel": "C1", "ts": "100.000000"}})
 
 	if len(gpt.requests) != 1 {
@@ -241,10 +240,62 @@ func TestOnMessage_WithoutChatGPT(t *testing.T) {
 	}}}
 	bot := Bot{SlackAPI: api}
 
-	bot.onMessage(httptest.NewRequest(http.MethodPost, "/slack/events", nil), httptest.NewRecorder(),
+	bot.onMessage(
 		Payload{Event: map[string]any{"type": "message", "text": "おはよう", "channel": "C1", "ts": "100.000000"}})
 
 	if len(api.posted) != 0 {
 		t.Fatalf("ChatGPT が無いのに投稿している: %+v", api.posted)
+	}
+}
+
+// fakeEquipStore は LoadEquips に渡された context を記録するだけの EquipStore。
+// #665 の「goroutine に cancel 済みの context が渡っていないか」を観測する。
+type fakeEquipStore struct {
+	gotCtx context.Context
+	equips []models.Equip
+	err    error
+}
+
+func (f *fakeEquipStore) LoadEquips(ctx context.Context) ([]models.Equip, error) {
+	f.gotCtx = ctx
+	return f.equips, f.err
+}
+
+// AC-2: onMentionEquipCheck は Webhook の goroutine から呼ばれるため、
+// Datastore に渡る context が cancel されていてはならない。
+func TestOnMentionEquipCheck_ContextNotCanceled(t *testing.T) {
+	api := newFakeSlackAPI()
+	store := &fakeEquipStore{}
+	bot := Bot{SlackAPI: api, EquipStore: store, Enqueuer: newFakeEnqueuer()}
+
+	bot.onMentionEquipCheck(mentionEvent("<@BOT> 備品", "C1", testMentionTS, ""))
+
+	if store.gotCtx == nil {
+		t.Fatal("EquipStore が呼ばれていない")
+	}
+	if err := store.gotCtx.Err(); err != nil {
+		t.Fatalf("Datastore に cancel 済みの context が渡っている: %v", err)
+	}
+	if len(api.posted) != 1 {
+		t.Fatalf("集計が投稿されていない: %+v", api.posted)
+	}
+}
+
+// AC-2 の裏: 読み出しに失敗したら黙って return せずスレッドに理由を返す。
+func TestOnMentionEquipCheck_PostsErrorToThread(t *testing.T) {
+	api := newFakeSlackAPI()
+	store := &fakeEquipStore{err: errStub("datastore down")}
+	bot := Bot{SlackAPI: api, EquipStore: store, Enqueuer: newFakeEnqueuer()}
+
+	bot.onMentionEquipCheck(mentionEvent("<@BOT> 備品", "C1", testMentionTS, testMentionTS))
+
+	if len(api.posted) != 1 {
+		t.Fatalf("失敗が黙って捨てられている: %+v", api.posted)
+	}
+	if !strings.Contains(api.posted[0].Text(), "datastore down") {
+		t.Fatalf("失敗の理由がスレッドに出ていない: %q", api.posted[0].Text())
+	}
+	if api.posted[0].ThreadTS() != testMentionTS {
+		t.Fatalf("スレッドに返していない: thread_ts=%q", api.posted[0].ThreadTS())
 	}
 }
