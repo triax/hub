@@ -298,12 +298,7 @@ func (bot Bot) echo(tokens []string, event slackevents.AppMentionEvent) {
 	default:
 		text = reply
 	}
-	opts := []slack.MsgOption{slack.MsgOptionText(text, false)}
-	if event.ThreadTimeStamp != "" {
-		opts = append(opts, slack.MsgOptionTS(event.ThreadTimeStamp))
-	}
-	a, b, err := bot.SlackAPI.PostMessage(event.Channel, opts...)
-	log.Println("[echo]", a, b, err)
+	log.Println("[echo]", event.Channel, bot.postToThread(event, text))
 }
 
 func (bot Bot) onMentionReadCheck(event slackevents.AppMentionEvent) {
