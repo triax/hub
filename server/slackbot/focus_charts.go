@@ -86,18 +86,12 @@ func themeSegments(report focusReport) []slack.DataVisualizationSegment {
 // ポジションだけで集計する（#681）。stats.Positions は件数降順・同数は初出順に
 // 整列済みなので、そのまま並べる。
 func positionSeries(stats focusStats) ([]string, []slack.DataVisualizationDataSeries) {
-	return positionSeriesFrom(stats.Positions)
-}
-
-// positionSeriesFrom は集計済みのポジション件数から bar の x 軸と系列を組む。
-// focus / premortem のどちらの集計からも同じ形で描くのでここに 1 本だけ置く。
-func positionSeriesFrom(positions []labelCount) ([]string, []slack.DataVisualizationDataSeries) {
 	// カテゴリ数の上限を超えるぶんは「その他」に合算する（末尾を切り捨てて数を失わない）。
-	named := positions
+	named := stats.Positions
 	other := 0.0
 	if len(named) > focusChartMaxCategorie {
-		named = positions[:focusChartMaxCategorie-1]
-		for _, position := range positions[focusChartMaxCategorie-1:] {
+		named = stats.Positions[:focusChartMaxCategorie-1]
+		for _, position := range stats.Positions[focusChartMaxCategorie-1:] {
 			other += float64(position.Count)
 		}
 	}
@@ -137,12 +131,6 @@ func dataPoints(categories []string, counts []float64) []slack.DataVisualization
 
 // chartFallbackText はモバイル通知・検索に出る 1 行（blocks だけだと空になる）。
 func chartFallbackText(segments []slack.DataVisualizationSegment) string {
-	return chartFallbackTextWith("課題の内訳", segments)
-}
-
-// chartFallbackTextWith は見出しだけを差し替えられる版。premortem は同じ形で
-// 別の見出し（根拠になった指摘の内訳）を使う。
-func chartFallbackTextWith(title string, segments []slack.DataVisualizationSegment) string {
 	total := 0.0
 	for _, s := range segments {
 		total += s.Value
@@ -151,7 +139,7 @@ func chartFallbackTextWith(title string, segments []slack.DataVisualizationSegme
 	for _, s := range segments {
 		parts = append(parts, fmt.Sprintf("%s %.0f%%", s.Label, s.Value/total*100))
 	}
-	return title + ": " + strings.Join(parts, " / ")
+	return "課題の内訳: " + strings.Join(parts, " / ")
 }
 
 // chartLabel は空ラベルを避ける。Slack はラベル 1 文字以上を要求する。

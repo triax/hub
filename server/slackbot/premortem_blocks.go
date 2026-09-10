@@ -38,17 +38,15 @@ const premortemNoSignalLabel = "（試合中の兆候は挙がっていません
 // premortem 側のコードで focusMessage と書かずに済ませるためだけの名前。
 type premortemMessage = focusMessage
 
-// premortemMessages は 1 通目（チャンネルにも出す負け筋の digest）と、
-// スレッド内に続けるチャート 1 通を組み立てる。
+// premortemMessages は 1 通目（チャンネルにも出す負け筋の digest）だけを組み立てる。
+// focus と違いチャートは出さない。premortem のリスクは未来の仮説で、%は過去の指摘件数。
+// 並べても「この割合で崩れる」という誤読を招くだけで、読み手の判断を助けない。
+// 件数の重みは目次とカードのメタ行で足りる。
 func premortemMessages(job premortemJob, threads []playThread, game string, now time.Time, report premortemReport) []premortemMessage {
-	msgs := []premortemMessage{{
+	return []premortemMessage{{
 		Text:   premortemFallbackText(job, game, now, report),
 		Blocks: premortemDigestBlocks(job, threads, game, now, report),
 	}}
-	if chart, ok := premortemChartMessage(report); ok {
-		msgs = append(msgs, chart)
-	}
-	return msgs
 }
 
 // premortemDigestBlocks は 1 通目。header（対象試合）→ context（件数）→ rich_text（目次）→

@@ -107,13 +107,12 @@ type premortemRisk struct {
 	Quote     string   `json:"quote"`
 }
 
-// premortemPlay は根拠になったプレー。順位付け（risk_keys の実数）と bar の集計に使う。
-// focus の focusPlay と違い headline / issue は持たない。premortem に `full` 相当の
-// プレー別詳細が無く、持たせても誰も読まないため（#683 決定 G-3）。
+// premortemPlay は根拠になったプレー。順位付け（risk_keys の実数）にだけ使う。
+// focus の focusPlay と違い headline / issue / positions は持たない。premortem には
+// `full` 相当のプレー別詳細もチャートも無く、持たせても誰も読まないため（#683 決定 G-3）。
 type premortemPlay struct {
-	Name      string   `json:"name"`
-	RiskKeys  []string `json:"risk_keys"`
-	Positions []string `json:"positions"`
+	Name     string   `json:"name"`
+	RiskKeys []string `json:"risk_keys"`
 }
 
 // premortemDigest は LLM に返させる構造化出力。件数は Hub 側で数えるので持たせない。
@@ -151,7 +150,6 @@ var premortemReportSchema = strictObject(map[string]any{
 	"plays": arrayOf(strictObject(map[string]any{
 		"name":      stringField(),
 		"risk_keys": arrayOf(stringField()),
-		"positions": arrayOf(stringField()),
 	})),
 })
 
@@ -476,7 +474,6 @@ func premortemSystemPrompt(few bool) string {
 - 入力に現れたプレー投稿を、入力の並び順のまま 1 件ずつ挙げる。
 - name は投稿されたプレー名をそのまま使う。
 - risk_keys にはそのプレーが根拠になる risks の key を入れる。該当が無ければ空配列。
-- positions にはそのプレーで指摘の対象になったポジションを入れる。特定できなければ空配列。
 - @channel や @here を含む告知、「ナイスオフェンス！！」のような感想はプレーとして扱わない。`
 }
 

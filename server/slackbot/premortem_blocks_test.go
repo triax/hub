@@ -195,8 +195,8 @@ func TestPremortem_FallbackText(t *testing.T) {
 	report := premortemSampleReport(t)
 	now := time.Now()
 	msgs := premortemMessages(premortemTestJob(), playThreads(8), "9/21(日) vs A", now, report)
-	if len(msgs) < 2 {
-		t.Fatalf("messages = %d, want 1 通目 + チャート", len(msgs))
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %d, want 1 通目だけ（premortem はチャートを出さない）", len(msgs))
 	}
 	for i, m := range msgs {
 		if strings.TrimSpace(m.Text) == "" {

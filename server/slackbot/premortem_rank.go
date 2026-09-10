@@ -13,15 +13,10 @@ const (
 	premortemMaxRisksFew = 1
 	// 1 リスクあたりの「今週やること」の上限。schema では縛れないのでここで切る。
 	premortemMaxPrevent = 2
-	// Label（目次と pie の凡例に出す短い名前）の上限。
+	// Label（目次に出す短い名前）の上限。目次は 1 行に「Label + ポジション + 件数」を
+	// 並べるので、Label が長いと折り返して一覧性が消える。
 	premortemLabelRuneLimit = 14
 )
-
-// label が凡例で切り詰められないことを、定数どうしの関係でコンパイル時に縛る（#681 と同じ）。
-const _ = uint(focusChartLabelLimit - premortemLabelRuneLimit)
-
-// pie は採用した負け筋を 1 つ残らず描き、残りを「その他」の 1 枠に畳む。
-const _ = uint(focusChartMaxSegments - 1 - premortemMaxRisks)
 
 // rankedRisk は採用された負け筋 1 点。Count は plays から数えた実数で、LLM の自己申告ではない。
 type rankedRisk struct {
@@ -35,12 +30,10 @@ type riskCount struct {
 }
 
 // premortemStats は描画に依らない集計結果。件数降順・同数は入力順（決定的）。
+// 採用外の候補も含むので、カードのメタ行に出す割合の分母になる。
 type premortemStats struct {
-	Risks     []riskCount
-	Positions []labelCount
+	Risks []riskCount
 }
-
-func (s premortemStats) empty() bool { return len(s.Risks) == 0 && len(s.Positions) == 0 }
 
 // premortemReport は 1 通目・チャートのすべてが読む描画用の入力。
 type premortemReport struct {
@@ -180,8 +173,8 @@ func countRiskKeys(d premortemDigest) map[string]int {
 	return counts
 }
 
-// buildPremortemStats は pie / bar の集計元。pie は全リスク（採用外も含む）、
-// bar は plays に現れたポジション。どちらも件数降順・同数は入力順。
+// buildPremortemStats は割合の分母になる集計。採用外の候補も含めて数えるので、
+// 「採用した 3 点が全体の何割か」が読める。件数降順・同数は入力順。
 func buildPremortemStats(d premortemDigest, order []int, counts map[string]int) premortemStats {
 	stats := premortemStats{}
 	for _, i := range order {
@@ -191,28 +184,7 @@ func buildPremortemStats(d premortemDigest, order []int, counts map[string]int) 
 		}
 		stats.Risks = append(stats.Risks, riskCount{Key: key, Count: counts[key]})
 	}
-
-	positionOrder := []string{}
-	positionCounts := map[string]int{}
-	for _, play := range d.Plays {
-		for _, position := range premortemPlayPositions(play) {
-			if _, ok := positionCounts[position]; !ok {
-				positionOrder = append(positionOrder, position)
-			}
-			positionCounts[position]++
-		}
-	}
-	stats.Positions = sortedCounts(positionOrder, positionCounts)
 	return stats
-}
-
-// premortemPlayPositions はポジション未特定のプレーも集計から落とさない（穴を黙って捨てない）。
-func premortemPlayPositions(play premortemPlay) []string {
-	positions := uniqueStrings(trimStrings(play.Positions))
-	if len(positions) == 0 {
-		return []string{focusUnknownPosition}
-	}
-	return positions
 }
 
 // premortemUnitsSpan は採用リスクが 2 ユニット以上にまたがるかを返す。

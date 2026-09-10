@@ -204,10 +204,10 @@ func TestPremortemReportSchema(t *testing.T) {
 	play := props["plays"].(map[string]any)["items"].(map[string]any)
 	assertStrict(t, play, "plays[]")
 	playProps := play["properties"].(map[string]any)
-	if len(playProps) != 3 {
-		t.Fatalf("plays[] のフィールド = %v, want name / risk_keys / positions の 3 つだけ", playProps)
+	if len(playProps) != 2 {
+		t.Fatalf("plays[] のフィールド = %v, want name / risk_keys の 2 つだけ", playProps)
 	}
-	for _, dead := range []string{"headline", "evidence", "issue"} {
+	for _, dead := range []string{"headline", "evidence", "issue", "positions"} {
 		if _, ok := playProps[dead]; ok {
 			t.Fatalf("plays[] に使われない %q が残っている", dead)
 		}

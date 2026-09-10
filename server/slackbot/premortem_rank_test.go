@@ -55,12 +55,12 @@ func premortemRiskFixture() premortemDigest {
 			},
 		},
 		Plays: []premortemPlay{
-			{Name: "P1", RiskKeys: []string{"ol_slide"}, Positions: []string{"OL"}},
-			{Name: "P2", RiskKeys: []string{"ol_slide", "run_read"}, Positions: []string{"OL", "DL"}},
-			{Name: "P3", RiskKeys: []string{"ol_slide", "late_call"}, Positions: []string{"QB"}},
-			{Name: "P4", RiskKeys: []string{"run_read"}, Positions: []string{"LB"}},
-			{Name: "P5", RiskKeys: []string{"late_call"}, Positions: []string{"DB"}},
-			{Name: "P6", RiskKeys: []string{"extra"}, Positions: nil},
+			{Name: "P1", RiskKeys: []string{"ol_slide"}},
+			{Name: "P2", RiskKeys: []string{"ol_slide", "run_read"}},
+			{Name: "P3", RiskKeys: []string{"ol_slide", "late_call"}},
+			{Name: "P4", RiskKeys: []string{"run_read"}},
+			{Name: "P5", RiskKeys: []string{"late_call"}},
+			{Name: "P6", RiskKeys: []string{"extra"}},
 		},
 	}
 }
