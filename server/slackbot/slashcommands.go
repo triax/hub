@@ -14,9 +14,34 @@ var (
 	mentionExpEscaped = regexp.MustCompile(`<@(?P<name>[\S]+)>`)
 )
 
+// SlashCommands は Slack のスラッシュコマンドの入口。command で分岐する。
 func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	defer req.Body.Close()
+
+	// Events 側（Webhook）は VerificationToken を見ているのに、ここだけ素通しだった。
+	// URL を知っていれば誰でも bot に DM とチャンネル投稿をさせられる状態だったので塞ぐ（#691）。
+	// 未設定の環境（ローカル開発）では検証しない。本番では必ず設定されている。
+	//
+	// stellar:debt(scope) VerificationToken は Slack 側で deprecated 扱い。
+	// upgrade: signing secret（slack.NewSecretsVerifier）へ移行する。新しい secret の
+	// プロビジョニングが要るので別 Issue に切る
+	if bot.VerificationToken != "" && req.Form.Get("token") != bot.VerificationToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	switch req.Form.Get("command") {
+	case "/premortem", "/passion":
+		bot.onSlashPremortem(w, req)
+	default:
+		// コマンド名を判定に使わず既定へ落とす。既存の「ありがとう」を壊さないため。
+		bot.onSlashThankYou(w, req)
+	}
+}
+
+// onSlashThankYou は「ありがとう」コマンド。本文中のメンション宛に匿名 DM を送る。
+func (bot Bot) onSlashThankYou(w http.ResponseWriter, req *http.Request) {
 	text := req.Form.Get("text")
 	ids := []string{}
 	idx := mentionExpEscaped.SubexpIndex("name")
