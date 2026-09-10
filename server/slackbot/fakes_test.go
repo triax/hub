@@ -99,6 +99,11 @@ type fakeSlackAPI struct {
 	historyCalls  int
 	historyParams []slack.GetConversationHistoryParameters
 
+	// historyByChannel / historyErrByChannel は premortem の複数チャンネル収集用。
+	// 設定されていればチャンネルごとに引き、無ければ従来どおり historyPages を順に返す。
+	historyByChannel    map[string]*slack.GetConversationHistoryResponse
+	historyErrByChannel map[string]error
+
 	// conversations.replies のページ（thread_ts ごと）
 	repliesPages  map[string][][]slack.Message
 	repliesIndex  map[string]int
@@ -163,6 +168,17 @@ func (f *fakeSlackAPI) GetConversationHistory(params *slack.GetConversationHisto
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.historyParams = append(f.historyParams, *params)
+	if f.historyErrByChannel != nil {
+		if err, ok := f.historyErrByChannel[params.ChannelID]; ok {
+			return nil, err
+		}
+	}
+	if f.historyByChannel != nil {
+		if page, ok := f.historyByChannel[params.ChannelID]; ok {
+			return page, nil
+		}
+		return &slack.GetConversationHistoryResponse{}, nil
+	}
 	if f.historyCalls >= len(f.historyPages) {
 		return &slack.GetConversationHistoryResponse{}, nil
 	}

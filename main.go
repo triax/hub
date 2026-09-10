@@ -184,7 +184,8 @@ func main() {
 	cron.Get("/equips/remind/report", tasks.EquipsRemindReportAfterEvent)
 	cron.Get("/equips/scan-unreported", tasks.EquipsScanUnreported)
 	cron.Get("/condition/form", tasks.ConditionFrom)
-	cron.Post("/focus", bot.FocusTask) // slackbot.FocusTaskURI（Cloud Tasks から POST）
+	cron.Post("/focus", bot.FocusTask)         // slackbot.FocusTaskURI（Cloud Tasks から POST）
+	cron.Post("/premortem", bot.PremortemTask) // slackbot.PremortemTaskURI（focus と同じキューを共用）
 	r.Mount("/tasks", cron)
 
 	r.NotFound(controllers.NotFound)
