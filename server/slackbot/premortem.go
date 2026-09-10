@@ -482,11 +482,10 @@ func premortemSystemPrompt(few bool) string {
 func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, threads []playThread, resolve func(string) string) (premortemSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
 	if len(groups) > 1 {
-		// stellar:debt(scope) 分割時は risks が塊ごとに出て 1〜3 点に収束せず、kind の
-		// 重複回避も塊をまたいで効かない（focus と同じ既知の穴。複数チャンネルぶんを
-		// 束ねる premortem では起きやすい）。upgrade: 2 段目 reduce
+		// 分割そのものは黙って起こさない。名寄せ（#688）で収束はさせるが、
+		// 1 回で読み切れなかった事実は読み手に見えるようにしておく。
 		_ = bot.replyToMention(job.focusJobFor(job.Channel), fmt.Sprintf(
-			"⚠️ 対象が多いため入力を %d 分割して読みました。負け筋が絞り切れていない可能性があります",
+			"⚠️ 対象が多いため入力を %d 分割して読みました（重複した負け筋は名寄せしています）",
 			len(groups)))
 	}
 
@@ -524,6 +523,11 @@ func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, threads
 	if !structured {
 		return summary, nil
 	}
+	if len(groups) > 1 {
+		// 塊ごとに出た重複を名寄せしてから数える（#688）。kind の重複回避も
+		// 名寄せ後の 1 回で効かせる。1 塊なら 2 段目は呼ばない。
+		digest = bot.mergePremortemDigest(ctx, digest)
+	}
 	report := rankRisks(digest, few)
 	if len(report.Risks) == 0 {
 		log.Printf("[premortem] digest has no risks, falling back to plain text")
@@ -536,6 +540,23 @@ func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, threads
 	}
 	summary.Report = &report
 	return summary, nil
+}
+
+// mergePremortemDigest は分割で重複して挙がった負け筋を名寄せする（#688）。
+// 名寄せ後に rankRisks を回すので、kind の重複回避が全体に対して 1 回だけ効く。
+func (bot Bot) mergePremortemDigest(ctx context.Context, d premortemDigest) premortemDigest {
+	mapping := bot.mergeCandidateKeys(ctx, toMergeCandidates(d.Risks, func(risk premortemRisk) mergeCandidate {
+		return mergeCandidate{Key: risk.Key, Title: risk.Title, Label: risk.Label}
+	}))
+	if len(mapping) == 0 {
+		return d
+	}
+	d.Risks = keepCanonical(d.Risks, func(r premortemRisk) string { return r.Key }, mapping)
+	for i := range d.Plays {
+		d.Plays[i].RiskKeys = canonicalKeys(d.Plays[i].RiskKeys, mapping)
+	}
+	log.Printf("[premortem] 分割で重複した候補 %d 件を名寄せしました", len(mapping))
+	return d
 }
 
 // premortemFewTargets は「対象が少ない」入力かどうか。focus と同じ閾値。
