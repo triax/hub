@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"reflect"
@@ -16,23 +17,24 @@ import (
 // digestJSON は LLM が返す構造化出力。テーマ 4 件・プレー 6 件で、
 // theme_keys の分布は timing=3 / vertical=2 / call=2 / stance=1。
 // stance は件数 1 なので focus には採られない（単発は詳細側の材料）。
+// call だけ label を持たせず、title からのフォールバック（#681）を踏ませる。
 //
 // do / dont は正規化と描画の分岐を 1 つの入力で踏めるように散らしてある:
 // timing は do / dont とも 3 件（空文字・重複入り。2 件に切り詰まる）、
 // vertical は dont が空（「やめる」を省く）、call は do が空（「やる」を省く）。
 const digestJSON = `{
   "themes": [
-    {"key":"timing","title":"QB↔WR のタイミング","summary":"スナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。","positions":["QB","WR"],
+    {"key":"timing","title":"QB↔WR のタイミング","label":"タイミング","summary":"スナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。","positions":["QB","WR"],
      "quote":"Xがピタッと止まれてないのと、QBが待ちすぎ",
      "do":["ブレイク 3 歩目でボールを離す","  ","ブレイク 3 歩目でボールを離す","スナップ前に SF の目線で MOFO/MOFC を決める","フラットは最後に読む"],
      "dont":["フラットを第一選択にして待つ","","投げ急いでリズムを崩す","ブレイク後に投げ先を決める"]},
-    {"key":"vertical","title":"縦の走り込み","summary":"3 歩目で減速して縦が死に、SF を釣れていない。","positions":["WR"],
+    {"key":"vertical","title":"縦の走り込み","label":"縦の走り込み","summary":"3 歩目で減速して縦が死に、SF を釣れていない。","positions":["WR"],
      "quote":"3歩目で減速して縦が死んでいる",
      "do":["奥まで駆け抜けてから切る","縦の 5 歩目まで減速しない"],"dont":[]},
     {"key":"call","title":"セット前のコール","summary":"SF の位置を声に出しておらず、コールが後ろまで届いていない。","positions":[],
      "quote":"コールが聞こえなくて合わせられなかった",
      "do":[],"dont":["黙ってセットする"]},
-    {"key":"stance","title":"スタンスの幅","summary":"スタンスが狭く、内側を割られている。","positions":["OL"],
+    {"key":"stance","title":"スタンスの幅","label":"スタンスの幅","summary":"スタンスが狭く、内側を割られている。","positions":["OL"],
      "quote":"スタンスが狭くて割られた",
      "do":["肩幅より広く構える"],"dont":["狭いスタンスで構える"]}
   ],
@@ -46,11 +48,36 @@ const digestJSON = `{
   ]
 }`
 
+// playThreads は返信の付いたプレー投稿を n 件組む。focusFewTargetsThreshold 以上
+// 渡すと few 扱いを外れ、focus が focusMaxThemes まで採られる。
+func playThreads(n int) []playThread {
+	threads := make([]playThread, 0, n)
+	for i := 0; i < n; i++ {
+		ts := fmt.Sprintf("%03d.000000", 100+i)
+		threads = append(threads, playThread{
+			Parent:  parentMsg(ts, "プレー", 1),
+			Replies: []slack.Message{replyMsg(ts+"1", "U1", "反省")},
+		})
+	}
+	return threads
+}
+
+// sampleDigest は digestJSON を LLM 越しに通さず直接 focusDigest に戻す
+// （few の判定に引きずられずに描画だけを見たいとき用）。
+func sampleDigest(t *testing.T) focusDigest {
+	t.Helper()
+	d := focusDigest{}
+	if err := json.Unmarshal([]byte(digestJSON), &d); err != nil {
+		t.Fatalf("digestJSON: %v", err)
+	}
+	return d
+}
+
 func sampleReport(t *testing.T) focusReport {
 	t.Helper()
 	gpt := &fakeChatGPT{reply: digestJSON}
 	bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
-	summary, err := bot.summarize(t.Context(), testJob(), []playThread{{Parent: parentMsg("1", "x", 1)}}, nil)
+	summary, err := bot.summarize(t.Context(), testJob(), playThreads(focusFewTargetsThreshold), nil)
 	if err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
@@ -58,6 +85,31 @@ func sampleReport(t *testing.T) focusReport {
 		t.Fatal("report が decode されていない")
 	}
 	return *summary.Report
+}
+
+// blockTypes は digestBlocks の戻り値の並びを type だけの列にする
+// （sentMessage.BlockTypes の、Slack に投げずに使える版）。
+func blockTypes(blocks []slack.Block) []string {
+	types := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		types = append(types, string(b.BlockType()))
+	}
+	return types
+}
+
+// marshalBlocks は digestBlocks の戻り値を、Slack へ送られるのと同じ JSON の
+// 素の map に戻す（sentMessage.Blocks の、投稿を挟まない版）。
+func marshalBlocks(t *testing.T, blocks []slack.Block) []map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("blocks の marshal: %v", err)
+	}
+	out := []map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("blocks の unmarshal: %v", err)
+	}
+	return out
 }
 
 // blockText は block の map から text を掘り出す（header / section / context 用）。
@@ -172,8 +224,12 @@ func TestSummarize_DecodesReport(t *testing.T) {
 	if len(report.Stats.Themes) != 4 || report.Stats.Themes[0].Count != 3 {
 		t.Fatalf("Stats.Themes = %+v, want 4 件（件数降順）", report.Stats.Themes)
 	}
-	if got := strings.Join(report.Stats.Headlines, ","); got != "GL Drive1,skel" {
-		t.Fatalf("Stats.Headlines = %q, want 初出順", got)
+	// #681 AC-2/AC-3: label は目次と pie 凡例に出す短い名前。無ければ title に倒す。
+	wantLabels := []string{"タイミング", "縦の走り込み", "セット前のコール"}
+	for i, want := range wantLabels {
+		if got := report.Focus[i].Label; got != want {
+			t.Fatalf("focus[%d].Label = %q, want %q", i, got, want)
+		}
 	}
 }
 
@@ -219,8 +275,9 @@ func TestSummarize_BrokenJSONFallback(t *testing.T) {
 	})
 }
 
-// #661 AC-3: 1 通目は header → context → focus 件数ぶんの rich_text → divider →
-// context で、チャンネルにも出す（reply_broadcast=true）。text は空にしない。
+// #661 AC-3 / #681: 1 通目は header → context → rich_text（目次）→ テーマごとの
+// カード → divider → context。チャンネルにも出す（reply_broadcast=true）。
+// focusFixture は返信付きプレーが 2 件（= few）なので、#681 AC-20 と同じく focus は 1 点。
 func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	api := focusFixture()
 	gpt := &fakeChatGPT{reply: digestJSON}
@@ -234,18 +291,16 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	}
 
 	digest := api.posted[1] // posted[0] は受付メッセージ
-	// focus は 3 件（timing / vertical / call）なので rich_text も 3 ブロック。
-	if got := strings.Join(digest.BlockTypes(), ","); got != "header,context,rich_text,rich_text,rich_text,divider,context" {
-		t.Fatalf("1 通目の blocks = %q, want header,context,rich_text×3,divider,context", got)
+	want := "header,context,rich_text,divider,section,rich_text,context,divider,context"
+	if got := strings.Join(digest.BlockTypes(), ","); got != want {
+		t.Fatalf("1 通目の blocks = %q, want %q", got, want)
 	}
 	if got := digest.Broadcast(); got != "true" {
 		t.Fatalf("1 通目の reply_broadcast = %q, want true", got)
 	}
-	if digest.Text() == "" {
-		t.Fatal("通知用の text フォールバックが空（モバイル通知に何も出ない）")
-	}
-	if !strings.Contains(digest.Text(), "1. QB↔WR のタイミング") {
-		t.Fatalf("text フォールバックに focus 1 点目が入っていない: %q", digest.Text())
+	// #681 AC-14: 通知プレビューは長い title ではなく短い label を並べる。
+	if got := digest.Text(); !strings.Contains(got, "1. タイミング") || strings.Contains(got, "QB↔WR のタイミング") {
+		t.Fatalf("text フォールバック = %q, want label 並び", got)
 	}
 
 	blocks := digest.Blocks()
@@ -255,71 +310,10 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	if got := blockText(blocks[1]); !strings.Contains(got, "2 プレー / 4 件の反省から") {
 		t.Fatalf("context の件数メタが期待どおりでない: %q", got)
 	}
-
-	// 1 点目（timing）: 概要 → やる（2 件）→ やめる（2 件）→ 補足行 の階層。
-	first := richTextElements(t, blocks[2])
-	wantTypes := "rich_text_section,rich_text_section,rich_text_list,rich_text_section,rich_text_list,rich_text_section"
-	if got := strings.Join(richTextElementTypes(first), ","); got != wantTypes {
-		t.Fatalf("focus 1 点目の要素列 = %q, want %q", got, wantTypes)
-	}
-	if got := sectionText(first[0]); got != "1. QB↔WR のタイミング\nスナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。" {
-		t.Fatalf("見出し＋概要 = %q", got)
-	}
-	if !boldFirst(first[0]) {
-		t.Fatalf("見出しが太字になっていない: %+v", first[0])
-	}
-	// ラベルと、その直後に来る段下げ bullet（rich_text は入れ子のリストを持てないので
-	// 段下げは list の indent で表す）。並びを見るので順序のある表で回す。
-	for _, c := range []struct {
-		at    int // ラベルの位置。list はその次
-		label string
-		items []string
-	}{
-		{1, "やる", []string{"ブレイク 3 歩目でボールを離す", "スナップ前に SF の目線で MOFO/MOFC を決める"}},
-		{3, "やめる", []string{"フラットを第一選択にして待つ", "投げ急いでリズムを崩す"}},
-	} {
-		if got := sectionText(first[c.at]); got != c.label {
-			t.Fatalf("elements[%d] = %q, want %q", c.at, got, c.label)
-		}
-		if !boldFirst(first[c.at]) {
-			t.Fatalf("ラベル %q が太字になっていない", c.label)
-		}
-		list := first[c.at+1]
-		if list["style"] != "bullet" || list["indent"] != float64(1) {
-			t.Fatalf("%s の list = style %v / indent %v, want bullet / 1", c.label, list["style"], list["indent"])
-		}
-		if n := len(list["elements"].([]any)); n != len(c.items) {
-			t.Fatalf("%s の項目 = %d 件, want %d 件", c.label, n, len(c.items))
-		}
-		for i, want := range c.items {
-			if got := richTextItemText(t, list, i); got != want {
-				t.Fatalf("%s[%d] = %q, want %q", c.label, i, got, want)
-			}
-		}
-	}
-	// #658 AC-6: 補足行の引用と件数（件数は導出値＝theme_keys の実数）は残す。
-	if got := sectionText(first[5]); got != "対象: QB, WR ／ 3 プレー ／ 「Xがピタッと止まれてないのと、QBが待ちすぎ」" {
-		t.Fatalf("補足行 = %q", got)
-	}
-
-	// #661 AC-4: dont が空なら「やめる」が、do が空なら「やる」が、ラベルごと消える。
-	// どちらも「概要 → ラベル ＋ list 1 組 → 補足行」の 4 要素に縮む。
-	oneAction := "rich_text_section,rich_text_section,rich_text_list,rich_text_section"
-	for _, c := range []struct {
-		at    int    // blocks の位置
-		name  string // 落ちるほうのラベル
-		label string // 残るほうのラベル
-	}{
-		{3, "やめる", "やる"},
-		{4, "やる", "やめる"},
-	} {
-		elements := richTextElements(t, blocks[c.at])
-		if got := strings.Join(richTextElementTypes(elements), ","); got != oneAction {
-			t.Fatalf("blocks[%d] = %q, want %q の section と list が無い", c.at, got, c.name)
-		}
-		if got := sectionText(elements[1]); got != c.label {
-			t.Fatalf("blocks[%d] の 2 要素目 = %q, want %q", c.at, got, c.label)
-		}
+	// #681 AC-20: 目次もカードも 1 件だけ。
+	toc := richTextElements(t, blocks[2])[0]
+	if n := len(toc["elements"].([]any)); n != 1 {
+		t.Fatalf("目次 = %d 件, want 1（few は 1 点に絞る）", n)
 	}
 
 	// 続きは同じスレッドに broadcast 無しで出る。
@@ -336,22 +330,127 @@ func TestFocus_DigestBlocks_FirstMessage(t *testing.T) {
 	}
 }
 
-// #661: 1 通目のブロック数は「固定 4 ＋ focus 件数」。focusDigestFixedBlocks の
-// 手勘定が digestBlocks の実装からずれたら（context を 1 つ足した等）ここで落ちる。
+// #681 AC-5 / AC-6 / AC-7 / AC-8 / AC-22: 目次付きカード型（案 C）の中身。
+// 固定 5 ブロック ＋ テーマごとに divider / section / rich_text / context。
+func TestFocus_DigestBlocks_Cards(t *testing.T) {
+	report := rankThemes(sampleDigest(t), false)
+	blocks := digestBlocks(testJob(), nil, time.Now(), report)
+
+	want := "header,context,rich_text," +
+		strings.Repeat("divider,section,rich_text,context,", focusMaxThemes) +
+		"divider,context"
+	if got := strings.Join(blockTypes(blocks), ","); got != want {
+		t.Fatalf("blocks = %q, want %q", got, want)
+	}
+	if n := len(blocks); n != focusDigestFixedBlocks+focusMaxThemes*focusBlocksPerTheme {
+		t.Fatalf("blocks = %d, want %d", n, focusDigestFixedBlocks+focusMaxThemes*focusBlocksPerTheme)
+	}
+
+	raw := marshalBlocks(t, blocks)
+
+	// AC-6: 目次は ordered list で、並び・件数が report.Focus と一致する。
+	toc := richTextElements(t, raw[2])
+	if got := strings.Join(richTextElementTypes(toc), ","); got != "rich_text_list" {
+		t.Fatalf("目次ブロックの要素 = %q, want rich_text_list", got)
+	}
+	if toc[0]["style"] != "ordered" || toc[0]["indent"] != float64(0) {
+		t.Fatalf("目次 = style %v / indent %v, want ordered / 0", toc[0]["style"], toc[0]["indent"])
+	}
+	wantTOC := []string{
+		"タイミング\u3000QB, WR · 3 プレー",
+		"縦の走り込み\u3000WR · 2 プレー",
+		"セット前のコール\u30002 プレー", // AC-22: ポジションが空なら中黒ごと省く
+	}
+	if n := len(toc[0]["elements"].([]any)); n != len(wantTOC) {
+		t.Fatalf("目次 = %d 件, want %d 件", n, len(wantTOC))
+	}
+	for i, want := range wantTOC {
+		if got := richTextItemText(t, toc[0], i); got != want {
+			t.Fatalf("目次[%d] = %q, want %q", i, got, want)
+		}
+		if !boldFirst(toc[0]["elements"].([]any)[i].(map[string]any)) {
+			t.Fatalf("目次[%d] の label が太字になっていない", i)
+		}
+	}
+
+	// カード 1 枚目（timing）。section は `N. title` ＋ 概要。
+	if got := blockText(raw[4]); got != "*1. QB↔WR のタイミング*\nスナップ前に MOFO/MOFC を決めておらず、投げ先の判断がブレイク後になっている。" {
+		t.Fatalf("カード見出し＋概要 = %q", got)
+	}
+	// AC-8: 末尾 context は ポジション · 件数（割合）· 引用。割合の分母は集計に
+	// 残った全テーマの件数合計（3+2+2+1 = 8。3/8 = 38%）。
+	if got := blockText(raw[6]); got != "QB, WR · 3 プレー（38%）\u3000·\u3000「Xがピタッと止まれてないのと、QBが待ちすぎ」" {
+		t.Fatalf("カード末尾の context = %q", got)
+	}
+
+	// AC-7: 「やる」「やめる」は ✅ / 🚫 を先頭に置いた 1 つの bullet リスト。
+	// 片方しか無いテーマでも空のリストを作らない。
+	for _, c := range []struct {
+		at    int // アクションの rich_text ブロックの位置
+		items []string
+	}{
+		{5, []string{
+			"✅ ブレイク 3 歩目でボールを離す",
+			"✅ スナップ前に SF の目線で MOFO/MOFC を決める",
+			"🚫 フラットを第一選択にして待つ",
+			"🚫 投げ急いでリズムを崩す",
+		}},
+		{9, []string{"✅ 奥まで駆け抜けてから切る", "✅ 縦の 5 歩目まで減速しない"}},
+		{13, []string{"🚫 黙ってセットする"}},
+	} {
+		list := richTextElements(t, raw[c.at])[0]
+		if list["style"] != "bullet" || list["indent"] != float64(0) {
+			t.Fatalf("blocks[%d] のリスト = style %v / indent %v, want bullet / 0",
+				c.at, list["style"], list["indent"])
+		}
+		if n := len(list["elements"].([]any)); n != len(c.items) {
+			t.Fatalf("blocks[%d] のアクション = %d 件, want %d 件", c.at, n, len(c.items))
+		}
+		for i, want := range c.items {
+			if got := richTextItemText(t, list, i); got != want {
+				t.Fatalf("blocks[%d] のアクション[%d] = %q, want %q", c.at, i, got, want)
+			}
+		}
+	}
+}
+
+// #661 / #681 AC-9: 1 通目のブロック数は「固定 5 ＋ focus 件数 × 4」を超えない。
+// focusDigestFixedBlocks / focusBlocksPerTheme の手勘定が digestBlocks の実装から
+// ずれたら（context を 1 つ足した等）ここで落ちる。
 func TestFocus_DigestBlocks_MaxThemes(t *testing.T) {
 	report := focusReport{}
 	for i := 0; i < focusMaxThemes; i++ {
 		report.Focus = append(report.Focus, rankedTheme{
-			focusTheme: focusTheme{Title: "テーマ", Do: []string{"やる"}, Dont: []string{"やめる"}},
+			focusTheme: focusTheme{Title: "テーマ", Label: "テーマ", Do: []string{"やる"}, Dont: []string{"やめる"}},
 			Count:      1,
 		})
 	}
 	blocks := digestBlocks(testJob(), nil, time.Now(), report)
-	if got := len(blocks) - len(report.Focus); got != focusDigestFixedBlocks {
+	if got := len(blocks) - len(report.Focus)*focusBlocksPerTheme; got != focusDigestFixedBlocks {
 		t.Fatalf("focus 以外のブロック = %d, want %d（focusDigestFixedBlocks とずれている）", got, focusDigestFixedBlocks)
 	}
 	if len(blocks) > focusMaxBlocksPerMessage {
 		t.Fatalf("1 通目 = %d blocks, want <= %d", len(blocks), focusMaxBlocksPerMessage)
+	}
+}
+
+// #681 AC-7: 「やる」「やめる」が両方 0 件のテーマは rich_text ごと省く
+// （空の rich_text_list は Slack に invalid_blocks で弾かれる）。
+func TestFocus_DigestBlocks_NoActions(t *testing.T) {
+	report := focusReport{
+		Focus: []rankedTheme{{
+			focusTheme: focusTheme{Title: "タイトル", Label: "ラベル", Positions: []string{"QB"}},
+			Count:      2,
+		}},
+		Stats: focusStats{Themes: []themeCount{{Key: "a", Count: 2}}},
+	}
+	blocks := digestBlocks(testJob(), nil, time.Now(), report)
+	want := "header,context,rich_text,divider,section,context,divider,context"
+	if got := strings.Join(blockTypes(blocks), ","); got != want {
+		t.Fatalf("blocks = %q, want %q（アクションが無いテーマは rich_text を省く）", got, want)
+	}
+	if got := len(blocks); got != focusDigestFixedBlocks+focusBlocksPerTheme-1 {
+		t.Fatalf("blocks = %d, want %d", got, focusDigestFixedBlocks+focusBlocksPerTheme-1)
 	}
 }
 
@@ -531,6 +630,9 @@ func TestFocusSystemPrompt_Sharpness(t *testing.T) {
 		"dont にはやめることを 0〜2 件。無ければ空配列にする",
 		"症状ではなく原因で切る",
 		"issue はそのプレーで指摘された事実を 1 文で",
+		// #681: 目次と pie 凡例に出す短い名前。title の指示は変えない。
+		"label は目次と凡例に出す 14 文字以内の短い名詞句",
+		"title は 1 行の見出し。誰が・どのプレーで・何が起きているかが分かる形にする",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("プロンプトに %q が無い:\n%s", want, prompt)
@@ -554,14 +656,7 @@ func TestFocusSystemPrompt_FewTargets(t *testing.T) {
 		t.Fatal("few=false のプロンプトに「3〜7 個」が無い")
 	}
 
-	play := func(ts string) playThread {
-		return playThread{Parent: parentMsg(ts, "プレー", 1),
-			Replies: []slack.Message{replyMsg(ts+"1", "U1", "反省")}}
-	}
-	many := []playThread{}
-	for i := 0; i < focusFewTargetsThreshold+1; i++ {
-		many = append(many, play(fmt.Sprintf("%03d.000000", 100+i)))
-	}
+	many := playThreads(focusFewTargetsThreshold + 1)
 	few := many[:focusFewTargetsThreshold-1]
 
 	threadOnly := testJob()
@@ -642,13 +737,14 @@ func TestFocusReportSchema_Strict(t *testing.T) {
 	// #661 AC-1: themes は summary / do / dont を持ち、detail / stop / start は持たない。
 	theme := props["themes"].(map[string]any)["items"].(map[string]any)
 	themeProps := theme["properties"].(map[string]any)
-	for _, key := range []string{"key", "title", "summary", "do", "dont", "positions", "quote"} {
+	// #681 AC-2: label（目次・凡例に出す短い名前）を足した。
+	for _, key := range []string{"key", "title", "label", "summary", "do", "dont", "positions", "quote"} {
 		if _, ok := themeProps[key]; !ok {
 			t.Fatalf("themes に %q が無い", key)
 		}
 	}
-	if len(themeProps) != 7 {
-		t.Fatalf("themes の properties = %v, want 7 件（detail / stop / start は消えている）", themeProps)
+	if len(themeProps) != 8 {
+		t.Fatalf("themes の properties = %v, want 8 件（detail / stop / start は消えている）", themeProps)
 	}
 	for _, key := range []string{"do", "dont"} {
 		field := themeProps[key].(map[string]any)
@@ -662,14 +758,12 @@ func TestFocusReportSchema_Strict(t *testing.T) {
 func TestSummarize_UsesStructuredOutputs(t *testing.T) {
 	gpt := &fakeChatGPT{reply: digestJSON}
 	bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
-	threads := []playThread{{Parent: parentMsg("100.000000", "プレーA", 1),
-		Replies: []slack.Message{replyMsg("101.000000", "U1", "反省1")}}}
 
-	summary, err := bot.summarize(t.Context(), testJob(), threads, nil)
+	summary, err := bot.summarize(t.Context(), testJob(), playThreads(focusFewTargetsThreshold), nil)
 	if err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
-	if summary.Report == nil || len(summary.Report.Focus) != 3 {
+	if summary.Report == nil || len(summary.Report.Focus) != focusMaxThemes {
 		t.Fatalf("report が decode されていない: %+v", summary)
 	}
 	if len(gpt.requests) != 1 {

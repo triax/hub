@@ -8,16 +8,16 @@ import (
 )
 
 // Slack の data_visualization ブロックの上限。1 メッセージ 2 個まで、title 50 文字、
-// ラベル 20 文字。セグメント数・系列数は公式 reference が 12、slack-go v0.29.0 の
-// Validate() が 6 を上限とするので、両方の解釈で安全な 6 に倒す
-// （focus は最大 5 テーマなので実データ上の欠落も起きない）。
+// ラベル 20 文字。セグメント数は公式 reference が 12、slack-go v0.29.0 の Validate() が
+// 6 を上限とするので、両方の解釈で安全な 6 に倒す
+// （focus は最大 3 テーマなので実データ上の欠落も起きない）。
 const (
 	focusChartMaxSegments  = 6
-	focusChartMaxSeries    = 6
 	focusChartMaxCategorie = 20 // 系列あたりのデータ点上限（= x 軸のカテゴリ数上限）
 	focusChartLabelLimit   = 20
 	focusChartTitleLimit   = 50
 	focusChartOtherLabel   = "その他"
+	focusChartPositionName = "指摘プレー数"
 )
 
 // pie は focus に採られたテーマを 1 つ残らず描き、残りを「その他」の 1 枠に畳む。
@@ -41,19 +41,22 @@ func focusChartMessage(report focusReport) (focusMessage, bool) {
 		slack.NewDataVisualizationPieChart(segments...),
 		slack.DataVisualizationBlockOptionBlockID("focus_chart_themes"),
 	)}
-	// 見出しが 1 つしか無い（スレッド単体など）と場面の比較にならないので bar は出さない。
-	if categories, series := positionSeries(report.Stats); len(categories) > 1 && len(series) > 0 {
-		blocks = append(blocks, slack.NewDataVisualizationBlock(
-			truncateRunes("ポジション × 場面", focusChartTitleLimit),
-			slack.NewDataVisualizationBarChart(slack.NewDataVisualizationAxisConfig(categories...), series...),
-			slack.DataVisualizationBlockOptionBlockID("focus_chart_positions"),
-		))
+	// ポジションが 1 種類しか無い（スレッド単体など）と比較にならないので bar は出さない。
+	if len(report.Stats.Positions) > 1 {
+		if categories, series := positionSeries(report.Stats); len(series) > 0 {
+			blocks = append(blocks, slack.NewDataVisualizationBlock(
+				truncateRunes("ポジション別の指摘数", focusChartTitleLimit),
+				slack.NewDataVisualizationBarChart(slack.NewDataVisualizationAxisConfig(categories...), series...),
+				slack.DataVisualizationBlockOptionBlockID("focus_chart_positions"),
+			))
+		}
 	}
 	return focusMessage{Text: chartFallbackText(segments), Blocks: blocks}, true
 }
 
 // themeSegments は pie のセグメント。focus に採られたテーマをその順で並べ、
-// 残りのテーマ（件数 1 の単発を含む）は「その他」に畳む。
+// 残りのテーマ（件数 1 の単発を含む）は「その他」に畳む。ラベルは短い label で、
+// 長い title を使うと focusChartLabelLimit と Slack の凡例で二重に切り詰められる（#681）。
 func themeSegments(report focusReport) []slack.DataVisualizationSegment {
 	focused := make(map[string]struct{}, len(report.Focus))
 	segments := make([]slack.DataVisualizationSegment, 0, focusChartMaxSegments)
@@ -63,7 +66,7 @@ func themeSegments(report focusReport) []slack.DataVisualizationSegment {
 		}
 		focused[f.Key] = struct{}{}
 		segments = append(segments, slack.NewDataVisualizationSegment(
-			truncateRunes(chartLabel(f.Title, f.Key), focusChartLabelLimit), float64(f.Count)))
+			truncateRunes(chartLabel(f.Label, f.Key), focusChartLabelLimit), float64(f.Count)))
 	}
 
 	rest := 0
@@ -78,56 +81,46 @@ func themeSegments(report focusReport) []slack.DataVisualizationSegment {
 	return segments
 }
 
-// positionSeries は bar の x 軸（見出し）と系列（ポジション）を組む。Slack は
-// 「系列ごとに全カテゴリぶんの点」を要求するので、出現しない組み合わせは 0 で埋める。
+// positionSeries は bar の x 軸（ポジション）と 1 本の系列を組む。見出し（練習日や
+// ドリル）を x 軸に取るとボリュームが桁違いになり比較として成立しないので、
+// ポジションだけで集計する（#681）。stats.Positions は件数降順・同数は初出順に
+// 整列済みなので、そのまま並べる。
 func positionSeries(stats focusStats) ([]string, []slack.DataVisualizationDataSeries) {
-	categories := make([]string, 0, focusChartMaxCategorie)
-	sources := make([]string, 0, focusChartMaxCategorie) // 切り詰め前の見出し（集計の引き当て用）
-	seen := map[string]struct{}{}
-	for _, headline := range stats.Headlines {
-		if len(categories) == focusChartMaxCategorie {
-			break
+	// カテゴリ数の上限を超えるぶんは「その他」に合算する（末尾を切り捨てて数を失わない）。
+	named := stats.Positions
+	other := 0.0
+	if len(named) > focusChartMaxCategorie {
+		named = stats.Positions[:focusChartMaxCategorie-1]
+		for _, position := range stats.Positions[focusChartMaxCategorie-1:] {
+			other += float64(position.Count)
 		}
-		label := truncateRunes(chartLabel(headline, focusChartOtherLabel), focusChartLabelLimit)
+	}
+
+	categories := make([]string, 0, focusChartMaxCategorie)
+	counts := make([]float64, 0, focusChartMaxCategorie)
+	seen := map[string]struct{}{}
+	for _, position := range named {
+		label := truncateRunes(chartLabel(position.Label, focusUnknownPosition), focusChartLabelLimit)
 		if _, ok := seen[label]; ok {
-			continue // 切り詰めで衝突した見出しは捨てる（categories は一意でなければならない）
+			continue // 切り詰めで衝突したポジションは捨てる（categories は一意でなければならない）
 		}
 		seen[label] = struct{}{}
 		categories = append(categories, label)
-		sources = append(sources, headline)
+		counts = append(counts, float64(position.Count))
 	}
-
-	// 系列数の上限を超えるぶんは「その他」に合算する（末尾を切り捨てて数を失わない）。
-	named := stats.Positions
-	other := make([]float64, len(categories))
-	hasOther := len(named) > focusChartMaxSeries
-	if hasOther {
-		named = stats.Positions[:focusChartMaxSeries-1]
-		for _, position := range stats.Positions[focusChartMaxSeries-1:] {
-			for j, headline := range sources {
-				other[j] += float64(stats.HeadlinePositions[headline][position.Label])
-			}
-		}
+	if other > 0 {
+		categories = append(categories, focusChartOtherLabel)
+		counts = append(counts, other)
 	}
-
-	series := make([]slack.DataVisualizationDataSeries, 0, focusChartMaxSeries)
-	for _, position := range named {
-		counts := make([]float64, len(categories))
-		for j, headline := range sources {
-			counts[j] = float64(stats.HeadlinePositions[headline][position.Label])
-		}
-		series = append(series, slack.NewDataVisualizationDataSeries(
-			truncateRunes(position.Label, focusChartLabelLimit), dataPoints(categories, counts)...))
+	if len(categories) == 0 {
+		return nil, nil
 	}
-	if hasOther {
-		series = append(series, slack.NewDataVisualizationDataSeries(
-			focusChartOtherLabel, dataPoints(categories, other)...))
-	}
-	return categories, series
+	return categories, []slack.DataVisualizationDataSeries{
+		slack.NewDataVisualizationDataSeries(focusChartPositionName, dataPoints(categories, counts)...)}
 }
 
-// dataPoints は各カテゴリに 1 点ずつ（出現しない組み合わせは 0）を置く。
-// Slack は「系列ごとに全カテゴリぶんの点」を要求するので 0 を省略できない。
+// dataPoints は各カテゴリに 1 点ずつ置く。Slack は「系列ごとに全カテゴリぶんの点」を
+// 要求するので、カテゴリと点は 1:1 で並ぶ。
 func dataPoints(categories []string, counts []float64) []slack.DataVisualizationDataPoint {
 	points := make([]slack.DataVisualizationDataPoint, 0, len(categories))
 	for j, label := range categories {

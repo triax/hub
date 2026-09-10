@@ -43,11 +43,13 @@ func rankFixture() focusDigest {
 func TestRankThemes(t *testing.T) {
 	report := rankThemes(rankFixture(), false)
 
-	if len(report.Focus) != 4 {
-		t.Fatalf("focus = %d 件, want 4（件数 1 の solo は除外）", len(report.Focus))
+	// #681: focusMaxThemes を 5 → 3 に絞ったので、件数上位 3 件だけが採られる
+	// （件数 1 の solo は元から除外。件数 2 の depth は上限からあふれる）。
+	if len(report.Focus) != focusMaxThemes {
+		t.Fatalf("focus = %d 件, want %d（上位のみ）", len(report.Focus), focusMaxThemes)
 	}
-	wantKeys := []string{"timing", "read", "stance", "depth"}
-	wantCounts := []int{8, 6, 3, 2}
+	wantKeys := []string{"timing", "read", "stance"}
+	wantCounts := []int{8, 6, 3}
 	for i := range wantKeys {
 		if got := report.Focus[i].Key; got != wantKeys[i] {
 			t.Fatalf("focus[%d].Key = %q, want %q（件数順に並んでいない）", i, got, wantKeys[i])
@@ -69,9 +71,12 @@ func TestRankThemes(t *testing.T) {
 	}
 }
 
-// #658 AC-2: few（ThreadOnly / 返信付き投稿が少ない）では focus を 3 件までに絞る。
+// #658 AC-2 / #681: few（ThreadOnly / 返信付き投稿が少ない）では focus を 1 件に絞る。
 func TestRankThemes_Few(t *testing.T) {
 	report := rankThemes(rankFixture(), true)
+	if focusMaxThemesFew != 1 {
+		t.Fatalf("focusMaxThemesFew = %d, want 1（対象が少ない入力は 1 点に振り切る）", focusMaxThemesFew)
+	}
 	if len(report.Focus) != focusMaxThemesFew {
 		t.Fatalf("focus = %d 件, want %d", len(report.Focus), focusMaxThemesFew)
 	}
@@ -134,7 +139,7 @@ func TestRankThemes_DedupesThemeKeysPerPlay(t *testing.T) {
 	}
 }
 
-// #659 が読む集計。ポジションは件数降順、見出しは初出順、空欄は「不明」「その他」に寄せる。
+// #659 が読む集計。ポジションは件数降順で、空欄は「不明」に寄せる。
 func TestBuildFocusStats(t *testing.T) {
 	d := focusDigest{
 		Themes: []focusTheme{{Key: "a", Title: "A"}, {Key: "b", Title: "B"}, {Key: "z", Title: "Z"}},
@@ -147,22 +152,13 @@ func TestBuildFocusStats(t *testing.T) {
 	stats := rankThemes(d, false).Stats
 
 	// 参照ゼロの z は Themes に出さない（pie に値 0 のセグメントを作らないため）。
-	want := []themeCount{{Key: "a", Title: "A", Count: 2}, {Key: "b", Title: "B", Count: 2}}
+	want := []themeCount{{Key: "a", Count: 2}, {Key: "b", Count: 2}}
 	if !reflect.DeepEqual(stats.Themes, want) {
 		t.Fatalf("Stats.Themes = %+v, want %+v", stats.Themes, want)
 	}
 	wantPositions := []labelCount{{Label: "QB", Count: 2}, {Label: "WR", Count: 1}, {Label: focusUnknownPosition, Count: 1}}
 	if !reflect.DeepEqual(stats.Positions, wantPositions) {
 		t.Fatalf("Stats.Positions = %+v, want %+v", stats.Positions, wantPositions)
-	}
-	if got := strings.Join(stats.Headlines, ","); got != "skel,"+focusUnknownHeadline {
-		t.Fatalf("Stats.Headlines = %q, want skel,%s（初出順・空は その他）", got, focusUnknownHeadline)
-	}
-	if got := stats.HeadlinePositions["skel"]["QB"]; got != 2 {
-		t.Fatalf("HeadlinePositions[skel][QB] = %d, want 2", got)
-	}
-	if got := stats.HeadlinePositions[focusUnknownHeadline][focusUnknownPosition]; got != 1 {
-		t.Fatalf("HeadlinePositions[その他][不明] = %d, want 1", got)
 	}
 	if stats.empty() {
 		t.Fatal("中身のある集計が empty 判定になっている")
@@ -196,8 +192,8 @@ func TestNormalizeTheme_TrimsActions(t *testing.T) {
 	if got := strings.Join(positioned.Positions, ","); got != "QB,WR" {
 		t.Fatalf("Positions = %q, want QB,WR（重複・空文字・前後空白を除く）", got)
 	}
-	if got := focusItemMeta(rankedTheme{focusTheme: positioned}); !strings.Contains(got, "対象: QB, WR") {
-		t.Fatalf("補足行 = %q, want 対象: QB, WR を含む", got)
+	if got := focusItemMeta(rankedTheme{focusTheme: positioned}, 0); !strings.Contains(got, "QB, WR") {
+		t.Fatalf("補足行 = %q, want QB, WR を含む", got)
 	}
 
 	// #668 AC-2: Title / Summary / Quote の前後空白も normalizeTheme に集約される。
@@ -231,5 +227,28 @@ func TestNormalizeTheme_TrimsActions(t *testing.T) {
 	}
 	if len(focus[0].Dont) != 0 {
 		t.Fatalf("focus[0].Dont = %+v, want 空（やめるが無くても focus に残る）", focus[0].Dont)
+	}
+}
+
+// #681 AC-3: label は trim して 14 文字に収め、空なら title の切り詰めに倒す
+// （strict schema は「必ず埋める」までは縛れないので、ここが唯一の関門）。
+func TestNormalizeTheme_Label(t *testing.T) {
+	long := strings.Repeat("あ", 40)
+	for _, c := range []struct {
+		name  string
+		theme focusTheme
+		want  string
+	}{
+		{"前後空白を落とす", focusTheme{Label: "  ブレイク前後の減速  "}, "ブレイク前後の減速"},
+		{"長すぎる label は切り詰める", focusTheme{Label: long}, truncateRunes(long, focusLabelRuneLimit)},
+		{"空なら title に倒す", focusTheme{Title: "  QB↔WR のタイミング  "}, "QB↔WR のタイミング"},
+		{"空白だけでも title に倒す", focusTheme{Label: "   ", Title: long}, truncateRunes(long, focusLabelRuneLimit)},
+		{"title も空なら空のまま", focusTheme{}, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := normalizeTheme(c.theme).Label; got != c.want {
+				t.Fatalf("Label = %q, want %q", got, c.want)
+			}
+		})
 	}
 }
