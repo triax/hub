@@ -116,36 +116,53 @@ func TestPremortemTaskName(t *testing.T) {
 	}
 }
 
-// AC-1 / AC-34: premortem と passion の両方が受付処理に入り、👀 が付く。alias は完全に同じ job。
-func TestOnMentionPremortem_Alias(t *testing.T) {
-	for _, token := range []string{"premortem", "passion"} {
-		t.Run(token, func(t *testing.T) {
-			api := newFakeSlackAPI()
-			enq := newFakeEnqueuer()
-			bot := Bot{SlackAPI: api, Enqueuer: enq}
+// AC-1: `@斧田 三葉 premortem` が受付処理に入り、👀 が付く。
+func TestOnMentionPremortem(t *testing.T) {
+	api := newFakeSlackAPI()
+	enq := newFakeEnqueuer()
+	bot := Bot{SlackAPI: api, Enqueuer: enq}
 
-			bot.onMention(mentionPayload("<@BOT> "+token+" 12d", "C1", testMentionTS, ""))
+	bot.onMention(mentionPayload("<@BOT> premortem 12d", "C1", testMentionTS, ""))
 
-			if joined(api.added) != focusReactionWorking {
-				t.Fatalf("👀 が付いていない: %v", api.added)
-			}
-			if enq.count() != 1 {
-				t.Fatalf("enqueue = %d, want 1", enq.count())
-			}
-			if enq.uris[0] != PremortemTaskURI {
-				t.Fatalf("uri = %q, want %q", enq.uris[0], PremortemTaskURI)
-			}
-			if !strings.HasPrefix(enq.names[0], "premortem-") {
-				t.Fatalf("task 名 = %q", enq.names[0])
-			}
-			job := premortemJob{}
-			if err := json.Unmarshal([]byte(enq.bodies[0]), &job); err != nil {
-				t.Fatalf("payload: %v", err)
-			}
-			if job.Channel != "C1" || len(job.Sources) != 1 || job.Sources[0] != "C1" {
-				t.Fatalf("job = %+v", job)
-			}
-		})
+	if joined(api.added) != focusReactionWorking {
+		t.Fatalf("👀 が付いていない: %v", api.added)
+	}
+	if enq.count() != 1 {
+		t.Fatalf("enqueue = %d, want 1", enq.count())
+	}
+	if enq.uris[0] != PremortemTaskURI {
+		t.Fatalf("uri = %q, want %q", enq.uris[0], PremortemTaskURI)
+	}
+	if !strings.HasPrefix(enq.names[0], "premortem-") {
+		t.Fatalf("task 名 = %q", enq.names[0])
+	}
+	job := premortemJob{}
+	if err := json.Unmarshal([]byte(enq.bodies[0]), &job); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if job.Channel != "C1" || len(job.Sources) != 1 || job.Sources[0] != "C1" {
+		t.Fatalf("job = %+v", job)
+	}
+}
+
+// `passion` は alias として一度出したが廃止した（#691）。premortem として扱わず、
+// 未知トークンとして echo（雑談）へ落ちる。復活させないための番人。
+func TestOnMentionPassion_IsNotAnAlias(t *testing.T) {
+	api := newFakeSlackAPI()
+	enq := newFakeEnqueuer()
+	gpt := &fakeChatGPT{reply: "雑談の返事"}
+	bot := Bot{SlackAPI: api, ChatGPT: gpt, Enqueuer: enq}
+
+	bot.onMention(mentionPayload("<@BOT> passion 12d", "C1", testMentionTS, ""))
+
+	if enq.count() != 0 {
+		t.Fatalf("passion で premortem が起動している: %d 件 enqueue", enq.count())
+	}
+	if len(api.added) != 0 {
+		t.Fatalf("👀 が付いている: %v", api.added)
+	}
+	if len(gpt.requests) != 1 {
+		t.Fatalf("echo に落ちていない: LLM 呼び出し %d 回", len(gpt.requests))
 	}
 }
 

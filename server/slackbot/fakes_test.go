@@ -220,8 +220,13 @@ func (f *fakeSlackAPI) GetConversationInfo(*slack.GetConversationInfoInput) (*sl
 	}
 	return f.channelInfo, nil
 }
+
+// OpenConversation は DM チャンネルを開く。「ありがとう」コマンドが戻り値の ID を
+// そのまま PostMessage に渡すので、nil ではなく実体を返す。
 func (f *fakeSlackAPI) OpenConversation(*slack.OpenConversationParameters) (*slack.Channel, bool, bool, error) {
-	return nil, false, false, nil
+	ch := &slack.Channel{}
+	ch.ID = "D1"
+	return ch, false, false, nil
 }
 
 type fakeChatGPT struct {

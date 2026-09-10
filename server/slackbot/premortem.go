@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/otiai10/largo"
 	"github.com/otiai10/marmoset"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -209,10 +210,54 @@ func takePremortemChannels(args []string) ([]string, []string) {
 // -------------------------------------------------------------- 受付と enqueue ---
 
 func (bot Bot) onMentionPremortem(event slackevents.AppMentionEvent, args []string) {
-	mention := slack.NewRefToMessage(event.Channel, event.TimeStamp)
+	bot.startPremortem(args, event.Channel, event.TimeStamp, event.ThreadTimeStamp)
+}
+
+// onSlashPremortem は `/premortem` の入口。
+//
+// slash command のペイロードには ts が無い（そもそもメッセージではないので）。premortem の
+// 下流は「起動したメッセージ」の ts に全部ぶら下がっている — 👀 のリアクション、受付
+// メッセージのスレッド、結果の連投と 1 通目の broadcast、そして「起動したメッセージ自身を
+// プレーとして数えない」除外まで。
+//
+// そこで**アンカーになる投稿を 1 通出し、その ts を MentionTS として使う**。これで下流は
+// mention 経由とまったく同じ経路になる。アンカーは bot 投稿なので isBotOrSystem が
+// 既に除外し、プレーとして数えられる心配も無い（#691）。
+func (bot Bot) onSlashPremortem(w http.ResponseWriter, req *http.Request) {
+	channel := req.Form.Get("channel_id")
+
+	var anchorTS string
+	err := callSlack(func() error {
+		_, ts, err := bot.SlackAPI.PostMessage(channel, slack.MsgOptionText(
+			fmt.Sprintf("🧨 <@%s> が premortem を実行します", req.Form.Get("user_id")), false))
+		anchorTS = ts
+		return err
+	})
+	if err != nil {
+		// アンカーが無いと MentionTS を作れず下流が成立しない。チャンネルに投稿できない以上、
+		// 返せる先は response_url しか無い（slash は bot が参加していないチャンネルでも打てる）。
+		log.Println("[premortem] slash anchor:", err)
+		postSlackJSON(req.Form.Get("response_url"),
+			"このチャンネルに投稿できませんでした。bot が参加しているか確認してください。")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// 重い処理は enqueue の先。ここでやるのは投稿 1 回 + リアクション + enqueue だけなので
+	// Slack の 3 秒ルールに収まる。
+	// トークナイズは mention と同じ largo.Tokenize を使う。ここだけ別の分割器にすると
+	// 「同じ引数なのに mention と slash で解釈が違う」が起こりうる。
+	bot.startPremortem(largo.Tokenize(req.Form.Get("text")), channel, anchorTS, "")
+	w.WriteHeader(http.StatusOK)
+}
+
+// startPremortem は mention / slash 共通の受付。anchorTS は「起動したメッセージ」の ts で、
+// mention ならメンション自身、slash ならアンカー投稿を指す。
+func (bot Bot) startPremortem(args []string, channel, anchorTS, threadTS string) {
+	mention := slack.NewRefToMessage(channel, anchorTS)
 	_ = callSlack(func() error { return bot.SlackAPI.AddReaction(focusReactionWorking, mention) })
 
-	job, err := newPremortemJob(args, time.Now(), event.Channel, event.TimeStamp, event.ThreadTimeStamp)
+	job, err := newPremortemJob(args, time.Now(), channel, anchorTS, threadTS)
 	if err != nil {
 		bot.abortPremortem(job, err)
 		return

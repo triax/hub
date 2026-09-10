@@ -205,7 +205,7 @@ func (bot Bot) onMention(payload Payload) {
 		bot.onMentionAmesh(event)
 	case "focus": // プレー反省スレッドの期間指定 AI 要約
 		bot.onMentionFocus(event, tokens[1:])
-	case "premortem", "passion": // 次の試合の負け筋を先に洗い出す（#683）
+	case "premortem": // 次の試合の負け筋を先に洗い出す（#683）
 		bot.onMentionPremortem(event, tokens[1:])
 	case "HUB_WEBPAGE_BASE_URL":
 		bot.onEnvDumpSafe(event, "HUB_WEBPAGE_BASE_URL")
