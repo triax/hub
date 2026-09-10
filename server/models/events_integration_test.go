@@ -138,3 +138,62 @@ func TestFindEventsBetween_EmptyWindow(t *testing.T) {
 		t.Fatalf("件数 = %d, want 0", len(events))
 	}
 }
+
+// #687 AC-5: EquipsScanUnreported の「直近の過去イベント」が、下限を入れる前後で変わらない。
+//
+// あの endpoint は from にゼロ値（＝過去全件）を渡して events[0] を取っていた。Limit を
+// 外すのに合わせて 1 年の下限を入れたので、「下限あり」と「下限なし」で同じイベントを
+// 引くことを実測で押さえる。
+func TestFindEventsBetween_LookbackKeepsLatest(t *testing.T) {
+	client := emulatorClient(t)
+
+	// 2 年前・30 日前・1 日前（いずれも過去）。期待する latest は 1 日前。
+	now := time.Now().UTC().Truncate(time.Hour)
+	offsets := []time.Duration{-2 * 365 * 24 * time.Hour, -30 * 24 * time.Hour, -24 * time.Hour}
+	keys := make([]*datastore.Key, 0, len(offsets))
+	entities := make([]*Event, 0, len(offsets))
+	for i, d := range offsets {
+		id := fmt.Sprintf("issue687_lookback_%02d", i)
+		ev := &Event{}
+		ev.Google.ID = id
+		ev.Google.Title = "#練習 " + id
+		ev.Google.StartTime = now.Add(d).Unix() * 1000
+		keys = append(keys, datastore.NameKey(KindEvent, id, nil))
+		entities = append(entities, ev)
+	}
+	if _, err := client.PutMulti(context.Background(), keys, entities); err != nil {
+		t.Fatalf("PutMulti: %v", err)
+	}
+	t.Cleanup(func() { _ = client.DeleteMulti(context.Background(), keys) })
+
+	wantID := "issue687_lookback_02"
+	latestOf := func(name string, from time.Time) string {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			events, err := FindEventsBetween(context.Background(), from, now)
+			if err != nil {
+				t.Fatalf("%s: FindEventsBetween: %v", name, err)
+			}
+			if len(events) > 0 && events[0].Google.ID == wantID {
+				return events[0].Google.ID
+			}
+			if time.Now().After(deadline) {
+				if len(events) == 0 {
+					t.Fatalf("%s: イベントが 1 件も返らない", name)
+				}
+				return events[0].Google.ID
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// 下限なし（変更前の呼び方）と 1 年の下限（変更後）で同じイベントを引く。
+	unbounded := latestOf("下限なし", time.Time{})
+	bounded := latestOf("1 年の下限", now.Add(-365*24*time.Hour))
+	if unbounded != bounded {
+		t.Fatalf("latest が変わった: 下限なし=%q / 1 年の下限=%q", unbounded, bounded)
+	}
+	if bounded != wantID {
+		t.Fatalf("latest = %q, want %q（最も新しい過去イベント）", bounded, wantID)
+	}
+}
