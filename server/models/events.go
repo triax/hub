@@ -176,8 +176,18 @@ func (t ParticipationType) Unanswered() bool {
 	return t == "" || t == PTUnanswered
 }
 
-// timeboud[0] == いつから
-// timeboud[1] == いつまで
+// FindEventsBetween は timebound で挟んだ範囲のイベントを返す。
+//
+//	timebound[0] == いつから（ゼロ値なら下限なし）
+//	timebound[1] == いつまで（省略時は timebound[0] + 24h、ゼロ値なら上限なし）
+//
+// 並びは **Google.StartTime の降順**（新しいものが先頭）。「直近の 1 件」を取る用途を
+// 想定した既定で、events[0] が「窓の中で最も新しいイベント」になる。
+// **近い順（昇順）が欲しい呼び出し側は自分で並べ替えるか末尾から見ること。**
+//
+// **件数上限は無い。窓が唯一の絞り**なので、下限を省く（ゼロ値を渡す）と過去全件が対象になる。
+// 呼び出し側は必ず有限の窓を渡すこと。以前は Limit(10) が付いていたが、窓を広く取ったときに
+// 「最も遠い 10 件」だけが返り、近い方が黙って落ちていたため外した（#687）。
 func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Event, err error) {
 
 	if len(timebound) == 0 {
@@ -200,7 +210,6 @@ func FindEventsBetween(ctx context.Context, timebound ...time.Time) (events []Ev
 		query = query.Filter("Google.StartTime <", to.Unix()*1000)
 	}
 	query = query.Order("-Google.StartTime")
-	query = query.Limit(10)
 
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
@@ -220,10 +229,11 @@ const UpcomingGameLookahead = 14 * 24 * time.Hour
 
 // FindUpcomingGame は from から within の間で最も近い「#試合」を 1 件返す。
 //
-// FindEventsBetween は使えない。あちらは Order("-Google.StartTime") かつ Limit(10) なので、
-// 窓を広く取ると返るのは「最も遠い 10 件」で、最も近い試合が黙って落ちる。既存の
-// 呼び出し元はいずれも窓が 1 日程度で events[0] が成立しているだけなので、
-// あちらの並び順・件数上限は変えずに専用のクエリを立てる（#683）。
+// FindEventsBetween とは並び順が逆。あちらは Order("-Google.StartTime")（降順）で、
+// 「窓の中で最も新しい 1 件」を events[0] で取る呼び出し元のための既定になっている。
+// こちらが欲しいのは「最も近い（＝最も古い）未来の試合」なので、降順の結果を先頭から
+// 見ると最も遠い試合を拾ってしまう。並べ替えを挟むより専用のクエリのほうが継ぎ目が
+// 少ないので分けたまま置く（#683 / #687 決定 G-2）。
 //
 // 「#試合」は Google.Title の正規表現判定でインデックスできないため、Datastore 側では
 // 絞れない。開始時刻の昇順・件数上限なしで窓ぶんを読み、Go 側で最初の 1 件を採る。

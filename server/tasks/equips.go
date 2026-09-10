@@ -230,6 +230,9 @@ func EquipsRemindReportAfterEvent(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// scanUnreportedLookback は EquipsScanUnreported が「直近の過去イベント」を探す幅。
+const scanUnreportedLookback = 365 * 24 * time.Hour
+
 func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w, true)
 	offsetHours, err := strconv.Atoi(req.URL.Query().Get("oh"))
@@ -239,7 +242,11 @@ func EquipsScanUnreported(w http.ResponseWriter, req *http.Request) {
 	}
 	ctx := req.Context()
 
-	events, err := models.FindEventsBetween(ctx, time.Time{}, time.Now())
+	// 使うのは events[0]（＝直近の過去イベント）1 件だけ。以前は FindEventsBetween の
+	// Limit(10) に寄りかかって「最新 10 件」を得ていたが、上限が外れた（#687）ので
+	// ここで窓を閉じる。窓を狭めるとオフシーズンに「イベント無し」となって判定ごと
+	// skip されてしまうため、実運用で挙動が変わらない 1 年に取る。
+	events, err := models.FindEventsBetween(ctx, time.Now().Add(-scanUnreportedLookback), time.Now())
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, map[string]any{"error": err})
 		return
