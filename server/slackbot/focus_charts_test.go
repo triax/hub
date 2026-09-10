@@ -86,8 +86,12 @@ func TestFocusChartMessage_PieAndBar(t *testing.T) {
 	if !ok {
 		t.Fatalf("2 個目が bar でない: %T", msg.Blocks[1].(*slack.DataVisualizationBlock).Chart)
 	}
-	if got := strings.Join(bar.AxisConfig.Categories, ","); got != "見出し0,見出し1,見出し2,見出し3" {
-		t.Fatalf("bar の categories = %q, want 見出しの初出順", got)
+	// #681: x 軸はポジション（件数降順・同数は初出順）で、系列は 1 本。
+	if got := strings.Join(bar.AxisConfig.Categories, ","); got != "QB,WR,OL,TE,RB" {
+		t.Fatalf("bar の categories = %q, want ポジションの件数降順", got)
+	}
+	if len(bar.Series) != 1 || bar.Series[0].Name != focusChartPositionName {
+		t.Fatalf("bar の系列 = %+v, want %q の 1 本", bar.Series, focusChartPositionName)
 	}
 	names := map[string]struct{}{}
 	for _, s := range bar.Series {
@@ -114,7 +118,7 @@ func TestFocusChartMessage_PieAndBar(t *testing.T) {
 	}
 }
 
-// #659 AC-3: テーマが多くても pie は 上位 5 ＋「その他」の 6 セグメントに畳む
+// #659 AC-3: テーマが多くても pie は focus に採った上位 ＋「その他」に畳む
 // （slack-go v0.29.0 の Validate は 6 が上限。公式 reference は 12）。
 func TestFocusChartMessage_ManyThemes(t *testing.T) {
 	d := focusDigest{}
@@ -141,8 +145,9 @@ func TestFocusChartMessage_ManyThemes(t *testing.T) {
 	validateChartBlocks(t, msg)
 
 	pie := msg.Blocks[0].(*slack.DataVisualizationBlock).Chart.(*slack.DataVisualizationPieChart)
-	if len(pie.Segments) != focusChartMaxSegments {
-		t.Fatalf("pie のセグメント = %d, want %d（上位 5 ＋ その他）", len(pie.Segments), focusChartMaxSegments)
+	if len(pie.Segments) != focusMaxThemes+1 {
+		t.Fatalf("pie のセグメント = %d, want %d（focus %d ＋ その他）",
+			len(pie.Segments), focusMaxThemes+1, focusMaxThemes)
 	}
 	if got := pie.Segments[len(pie.Segments)-1].Label; got != focusChartOtherLabel {
 		t.Fatalf("末尾のセグメント = %q, want %q", got, focusChartOtherLabel)
@@ -157,14 +162,15 @@ func TestFocusChartMessage_ManyThemes(t *testing.T) {
 	}
 }
 
-// #659 AC-4: 見出しが 1 つなら bar を省略し pie のみ。集計が空ならチャート通を出さない。
+// #659 AC-4 / #681: ポジションが 1 種類なら bar を省略し pie のみ。
+// 集計が空ならチャート通を出さない。
 func TestFocusChartMessage_Degenerate(t *testing.T) {
-	t.Run("見出しが 1 つなら pie のみ", func(t *testing.T) {
+	t.Run("ポジションが 1 種類なら pie のみ", func(t *testing.T) {
 		d := focusDigest{
 			Themes: []focusTheme{{Key: "a", Title: "A"}, {Key: "b", Title: "B"}},
 			Plays: []focusPlay{
 				{Headline: "skel", Name: "1", ThemeKeys: []string{"a"}, Positions: []string{"QB"}},
-				{Headline: "skel", Name: "2", ThemeKeys: []string{"a", "b"}, Positions: []string{"WR"}},
+				{Headline: "GL", Name: "2", ThemeKeys: []string{"a", "b"}, Positions: []string{"QB"}},
 				{Headline: "skel", Name: "3", ThemeKeys: []string{"b"}, Positions: []string{"QB"}},
 			},
 		}
@@ -174,7 +180,7 @@ func TestFocusChartMessage_Degenerate(t *testing.T) {
 		}
 		validateChartBlocks(t, msg)
 		if len(msg.Blocks) != 1 {
-			t.Fatalf("blocks = %d, want 1（見出しが 1 つなら bar を省く）", len(msg.Blocks))
+			t.Fatalf("blocks = %d, want 1（ポジションが 1 種類なら bar を省く）", len(msg.Blocks))
 		}
 	})
 
@@ -185,7 +191,7 @@ func TestFocusChartMessage_Degenerate(t *testing.T) {
 	})
 }
 
-// #659 AC-5: 長いラベルは 20 文字に切り詰められ、空の見出し・ポジションも捨てない。
+// #659 AC-5: 長いラベルは 20 文字に切り詰められ、空のポジションも捨てない。
 func TestFocusChartMessage_Truncation(t *testing.T) {
 	long := strings.Repeat("あ", 40)
 	d := focusDigest{
@@ -203,31 +209,33 @@ func TestFocusChartMessage_Truncation(t *testing.T) {
 	validateChartBlocks(t, msg) // ラベル 20 文字超なら Validate が落ちる
 
 	bar := msg.Blocks[1].(*slack.DataVisualizationBlock).Chart.(*slack.DataVisualizationBarChart)
-	if !slices.Contains(bar.AxisConfig.Categories, focusUnknownHeadline) {
-		t.Fatalf("空の見出しが %q に寄せられていない: %v", focusUnknownHeadline, bar.AxisConfig.Categories)
+	if !slices.Contains(bar.AxisConfig.Categories, focusUnknownPosition) {
+		t.Fatalf("ポジション未特定が %q に寄せられていない: %v", focusUnknownPosition, bar.AxisConfig.Categories)
 	}
-	found := false
-	for _, s := range bar.Series {
-		if s.Name == focusUnknownPosition {
-			found = true
-		}
+	if !slices.Contains(bar.AxisConfig.Categories, truncateRunes(long, focusChartLabelLimit)) {
+		t.Fatalf("長いポジションが切り詰められていない: %v", bar.AxisConfig.Categories)
 	}
-	if !found {
-		t.Fatalf("ポジション未特定が %q の系列になっていない: %+v", focusUnknownPosition, bar.Series)
+	// #681: pie の凡例は長い title ではなく短い label を使うので切り詰めが起きない。
+	pie := msg.Blocks[0].(*slack.DataVisualizationBlock).Chart.(*slack.DataVisualizationPieChart)
+	if got := pie.Segments[0].Label; got != truncateRunes(long, focusLabelRuneLimit) {
+		t.Fatalf("pie のラベル = %q, want label（%d 文字に正規化済み）", got, focusLabelRuneLimit)
 	}
 }
 
-// 系列（ポジション）が上限を超えるぶんは「その他」に合算し、件数を失わない。
+// #681: ポジションが x 軸の上限を超えるぶんは「その他」に合算し、件数を失わない。
 func TestFocusChartMessage_ManyPositions(t *testing.T) {
+	const positions = focusChartMaxCategorie + 5
 	d := focusDigest{Themes: []focusTheme{{Key: "a", Title: "A"}}}
-	for i := 0; i < 9; i++ {
-		for n := 0; n < 9-i; n++ {
+	total := 0
+	for i := 0; i < positions; i++ {
+		for n := 0; n <= i; n++ { // POS{i} を i+1 件（件数に差を付ける）
 			d.Plays = append(d.Plays, focusPlay{
-				Headline:  fmt.Sprintf("見出し%d", n%2),
-				Name:      fmt.Sprintf("プレー%d-%d", i, n),
+				Headline:  "skel",
+				Name:      fmt.Sprintf("プレー%02d-%02d", i, n),
 				ThemeKeys: []string{"a"},
-				Positions: []string{fmt.Sprintf("POS%d", i)},
+				Positions: []string{fmt.Sprintf("POS%02d", i)},
 			})
+			total++
 		}
 	}
 	msg, ok := focusChartMessage(rankThemes(d, false))
@@ -237,19 +245,21 @@ func TestFocusChartMessage_ManyPositions(t *testing.T) {
 	validateChartBlocks(t, msg)
 
 	bar := msg.Blocks[1].(*slack.DataVisualizationBlock).Chart.(*slack.DataVisualizationBarChart)
-	if len(bar.Series) != focusChartMaxSeries {
-		t.Fatalf("系列 = %d, want %d（上位 5 ＋ その他）", len(bar.Series), focusChartMaxSeries)
+	if len(bar.AxisConfig.Categories) != focusChartMaxCategorie {
+		t.Fatalf("categories = %d, want %d（上限まで ＋ その他）",
+			len(bar.AxisConfig.Categories), focusChartMaxCategorie)
 	}
-	if got := bar.Series[len(bar.Series)-1].Name; got != focusChartOtherLabel {
-		t.Fatalf("末尾の系列 = %q, want %q", got, focusChartOtherLabel)
+	if got := bar.AxisConfig.Categories[len(bar.AxisConfig.Categories)-1]; got != focusChartOtherLabel {
+		t.Fatalf("末尾のカテゴリ = %q, want %q", got, focusChartOtherLabel)
 	}
-	total := 0.0
-	for _, s := range bar.Series {
-		for _, p := range s.Data {
-			total += p.Value
-		}
+	if len(bar.Series) != 1 {
+		t.Fatalf("系列 = %d, want 1（ポジションのみの集計）", len(bar.Series))
 	}
-	if total != 45 { // 9+8+…+1
-		t.Fatalf("bar の合計 = %v, want 45（その他に合算しても数を失わない）", total)
+	sum := 0.0
+	for _, p := range bar.Series[0].Data {
+		sum += p.Value
+	}
+	if sum != float64(total) {
+		t.Fatalf("bar の合計 = %v, want %d（その他に合算しても数を失わない）", sum, total)
 	}
 }

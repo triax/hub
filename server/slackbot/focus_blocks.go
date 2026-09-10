@@ -2,6 +2,7 @@ package slackbot
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,21 +19,26 @@ const (
 	// 1 つの rich_text_list に詰めるプレー数。ブロック数上限の内側に収めるための安全域。
 	focusMaxListItems = 25
 	// 1 通目の focus 1 点あたりの文字数。読み飛ばされない長さに抑える
-	// （Block Kit の上限より手前で切る意図的な制約）。
-	focusSummaryRuneLimit = 300
+	// （Block Kit の上限より手前で切る意図的な制約）。カード化で 1 テーマの縦が
+	// 伸びたぶん、概要が 1〜2 文に収まる長さまで詰めた（#681）。
+	focusSummaryRuneLimit = 120
 	focusActionRuneLimit  = 120
 )
 
 // focusDigestFixedBlocks は 1 通目の focus 以外のブロック数（header・context・
-// divider・context）。digestBlocks の容量計算と下の上限チェックが同じ数を見るように、
-// マジックナンバーをここ 1 箇所に置く。
-const focusDigestFixedBlocks = 4
+// 目次の rich_text・divider・context）。digestBlocks の容量計算と下の上限チェックが
+// 同じ数を見るように、マジックナンバーをここ 1 箇所に置く。
+const focusDigestFixedBlocks = 5
 
-// 1 通目は「固定 4 ブロック + focus 件数ぶんの rich_text」。focus の上限を増やしたときに
-// ブロック数上限を静かに越えないよう、関係をコンパイル時に縛る
-// （focusMaxThemes を増やしたらここで落ちる。実測での番人は
-// TestFocus_DigestBlocks_MaxThemes）。
-const _ = uint(focusMaxBlocksPerMessage - focusDigestFixedBlocks - focusMaxThemes)
+// focusBlocksPerTheme は focus 1 点あたりのブロック数の上限（divider・section・
+// rich_text・context）。「やる」「やめる」が両方 0 件のテーマは rich_text を省くので、
+// 実際のブロック数はこれ以下になる。
+const focusBlocksPerTheme = 4
+
+// 1 通目は「固定 5 ブロック + focus 件数 × focusBlocksPerTheme」。focus の上限や
+// カードの構成を増やしたときにブロック数上限を静かに越えないよう、関係をコンパイル時に
+// 縛る（実測での番人は TestFocus_DigestBlocks_MaxThemes）。
+const _ = uint(focusMaxBlocksPerMessage - focusDigestFixedBlocks - focusMaxThemes*focusBlocksPerTheme)
 
 // focusMessage は Slack へ 1 通として投稿する単位。
 // Text は通知・検索用のフォールバック（blocks だけだと通知プレビューが空になる）。
@@ -58,19 +64,21 @@ func focusMessages(job focusJob, threads []playThread, now time.Time, report foc
 	return msgs
 }
 
-// digestBlocks は 1 通目。header（期間）→ context（件数）→ focus 1 点 = 1 ブロック →
-// divider → context（詳細への案内）。番号は title に含めるので ordered list は使わない
-// （rich_text は入れ子のリストを持てず、段下げは list の indent で表すため）。
+// digestBlocks は 1 通目。header（期間）→ context（件数）→ rich_text（目次）→
+// focus 1 点 = カード（focusItemBlocks）→ divider → context（詳細への案内）。
+// 目次を先に置くことで「何点あるのか・どれが重いのか」が最初に読める（#681）。
 func digestBlocks(job focusJob, threads []playThread, now time.Time, report focusReport) []slack.Block {
-	blocks := make([]slack.Block, 0, focusDigestFixedBlocks+len(report.Focus))
+	blocks := make([]slack.Block, 0, focusDigestFixedBlocks+len(report.Focus)*focusBlocksPerTheme)
 	blocks = append(blocks,
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(digestTitle(job, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("focus_meta", slack.NewTextBlockObject(
 			slack.MarkdownType, digestMeta(job, threads), false, false)),
+		focusTOCBlock(report.Focus),
 	)
+	total := totalThemeCount(report.Stats)
 	for i, f := range report.Focus {
-		blocks = append(blocks, focusItemBlock(i, f))
+		blocks = append(blocks, focusItemBlocks(i, f, total)...)
 	}
 	return append(blocks,
 		slack.NewDividerBlock(),
@@ -92,42 +100,76 @@ func digestGuide(job focusJob, report focusReport) string {
 	}
 }
 
-// focusItemBlock は focus 1 点を 1 つの rich_text ブロックに組む。要素の並びは
-// 「太字の `N. タイトル` ＋ 改行 ＋ 概要」→「太字の やる ＋ 段下げ bullet」→
-// 「太字の やめる ＋ 段下げ bullet」→「対象・件数・引用の補足行」。
-// 「やる」「やめる」は該当が無ければラベルごと省く（空の rich_text_list は
-// Slack に invalid_blocks で弾かれるため、省略は見た目の都合だけではない）。
-func focusItemBlock(i int, f rankedTheme) slack.Block {
-	// f.Title / f.Summary / f.Quote は normalizeTheme（focus_rank.go）で trim 済み。
-	title := boldElement(fmt.Sprintf("%d. %s", i+1, f.Title))
-	head := []slack.RichTextSectionElement{title}
-	if f.Summary != "" {
-		head = append(head, plainElement("\n"+truncateRunes(f.Summary, focusSummaryRuneLimit)))
+// focusTOCBlock は 1 通目の冒頭に置く目次。番号は ordered list に振らせ、各カードの
+// 見出し（`N. title`）と一致させる。行に出すのは短い label で、長い title はカード側の
+// 見出しに残す（役割が違うので両方持つ）。
+func focusTOCBlock(focus []rankedTheme) slack.Block {
+	items := make([]slack.RichTextElement, 0, len(focus))
+	for _, f := range focus {
+		elements := []slack.RichTextSectionElement{boldElement(f.Label)}
+		if meta := focusTOCMeta(f); meta != "" {
+			elements = append(elements, plainElement("　"+meta))
+		}
+		items = append(items, slack.NewRichTextSection(elements...))
 	}
-
-	elements := []slack.RichTextElement{slack.NewRichTextSection(head...)}
-	elements = append(elements, focusActionElements("やる", f.Do)...)
-	elements = append(elements, focusActionElements("やめる", f.Dont)...)
-	if meta := focusItemMeta(f); meta != "" {
-		elements = append(elements, slack.NewRichTextSection(plainElement(meta)))
-	}
-	return slack.NewRichTextBlock(fmt.Sprintf("focus_item_%d", i+1), elements...)
+	return slack.NewRichTextBlock("focus_toc", slack.NewRichTextList(slack.RTEListOrdered, 0, items...))
 }
 
-// focusActionElements は「やる」「やめる」の 1 段（太字のラベル ＋ 段下げした bullet）。
-// 該当が無ければ空を返し、呼び出し側でラベルごと消える。
-func focusActionElements(label string, actions []string) []slack.RichTextElement {
-	if len(actions) == 0 {
-		return nil
+// focusTOCMeta は目次 1 行の補足（`WR, H · 27 プレー`）。ポジションが取れていない
+// テーマでは中黒ごと省く（「不明」はチャートの穴埋めラベルで、テーマ側の欠落とは
+// 別の概念なので目次には持ち込まない）。
+func focusTOCMeta(f rankedTheme) string {
+	parts := []string{}
+	if positions := joinNonEmpty(f.Positions, ", "); positions != "" {
+		parts = append(parts, positions)
 	}
-	items := make([]slack.RichTextElement, 0, len(actions))
-	for _, a := range actions {
-		items = append(items, slack.NewRichTextSection(plainElement(truncateRunes(a, focusActionRuneLimit))))
+	if f.Count > 0 {
+		parts = append(parts, fmt.Sprintf("%d プレー", f.Count))
 	}
-	return []slack.RichTextElement{
-		slack.NewRichTextSection(boldElement(label)),
-		slack.NewRichTextList(slack.RTEListBullet, 1, items...),
+	return strings.Join(parts, " · ")
+}
+
+// focusItemBlocks は focus 1 点を 1 枚のカードに組む。divider（前のテーマとの区切り）
+// → section（`N. title` ＋ 概要）→ rich_text（✅ / 🚫 の bullet）→ context（ポジション・
+// 件数・割合・引用）。「やる」「やめる」が両方 0 件なら rich_text を省く（空の
+// rich_text_list は Slack に invalid_blocks で弾かれるため、省略は見た目の都合だけではない）。
+func focusItemBlocks(i int, f rankedTheme, total int) []slack.Block {
+	// f.Title / f.Summary / f.Quote は normalizeTheme（focus_rank.go）で trim 済み。
+	head := fmt.Sprintf("*%d. %s*", i+1, f.Title)
+	if f.Summary != "" {
+		head += "\n" + truncateRunes(f.Summary, focusSummaryRuneLimit)
 	}
+	blocks := []slack.Block{
+		slack.NewDividerBlock(),
+		slack.NewSectionBlock(slack.NewTextBlockObject(
+			slack.MarkdownType, truncateRunes(head, focusSectionRuneLimit), false, false), nil, nil),
+	}
+	if actions := focusActionItems(f); len(actions) > 0 {
+		blocks = append(blocks, slack.NewRichTextBlock(fmt.Sprintf("focus_item_%d", i+1),
+			slack.NewRichTextList(slack.RTEListBullet, 0, actions...)))
+	}
+	if meta := focusItemMeta(f, total); meta != "" {
+		blocks = append(blocks, slack.NewContextBlock(fmt.Sprintf("focus_item_meta_%d", i+1),
+			slack.NewTextBlockObject(slack.MarkdownType, meta, false, false)))
+	}
+	return blocks
+}
+
+// focusActionItems は「やる」「やめる」を 1 つの bullet リストに畳む。ラベル行を持たせず
+// ✅ / 🚫 を各行の先頭に置くことで、片方が 0 件でも空のリストを作らずに済む
+// （かつカード 1 枚の縦が短くなる）。
+func focusActionItems(f rankedTheme) []slack.RichTextElement {
+	items := make([]slack.RichTextElement, 0, len(f.Do)+len(f.Dont))
+	for _, group := range []struct {
+		prefix  string
+		actions []string
+	}{{"✅ ", f.Do}, {"🚫 ", f.Dont}} {
+		for _, a := range group.actions {
+			items = append(items, slack.NewRichTextSection(
+				plainElement(group.prefix+truncateRunes(a, focusActionRuneLimit))))
+		}
+	}
+	return items
 }
 
 // boldElement / plainElement はリスト項目の要素。text の上限は要素ごとに掛かるので、
@@ -142,18 +184,38 @@ func plainElement(s string) *slack.RichTextSectionTextElement {
 	return slack.NewRichTextSectionTextElement(truncateRunes(s, focusSectionRuneLimit), nil)
 }
 
-func focusItemMeta(f rankedTheme) string {
+// focusItemMeta はカードの末尾に置く補足（`WR, H · 27 プレー（34%）　·　「引用」`）。
+// 割合の分母は集計（focusStats.Themes）の件数合計で、pie の 1 切れと同じものを指す。
+func focusItemMeta(f rankedTheme, total int) string {
 	parts := []string{}
 	if positions := joinNonEmpty(f.Positions, ", "); positions != "" {
-		parts = append(parts, "対象: "+positions)
+		parts = append(parts, positions)
 	}
 	if f.Count > 0 {
-		parts = append(parts, fmt.Sprintf("%d プレー", f.Count))
+		count := fmt.Sprintf("%d プレー", f.Count)
+		if total > 0 {
+			count += fmt.Sprintf("（%d%%）", int(math.Round(float64(f.Count)/float64(total)*100)))
+		}
+		parts = append(parts, count)
 	}
-	if f.Quote != "" {
-		parts = append(parts, "「"+f.Quote+"」")
+	head := strings.Join(parts, " · ")
+	if f.Quote == "" {
+		return head
 	}
-	return strings.Join(parts, " ／ ")
+	if head == "" {
+		return "「" + f.Quote + "」"
+	}
+	return head + "　·　「" + f.Quote + "」"
+}
+
+// totalThemeCount は集計に残った全テーマの件数合計。focus に採らなかったテーマも含む
+// （カードの割合と pie の 1 切れが同じ分母を見るようにするため）。
+func totalThemeCount(stats focusStats) int {
+	total := 0
+	for _, t := range stats.Themes {
+		total += t.Count
+	}
+	return total
 }
 
 // digestTitle は 1 通目の header。focusRangeLabel をそのまま流用しないのは、
@@ -176,9 +238,10 @@ func digestMeta(job focusJob, threads []playThread) string {
 
 // digestFallbackText はモバイル通知プレビューと検索に出る 1 行。
 func digestFallbackText(job focusJob, report focusReport, now time.Time) string {
+	// 通知プレビューは短いほうが効くので、長い title ではなく label を並べる。
 	titles := make([]string, 0, len(report.Focus))
 	for i, f := range report.Focus {
-		titles = append(titles, fmt.Sprintf("%d. %s", i+1, f.Title))
+		titles = append(titles, fmt.Sprintf("%d. %s", i+1, f.Label))
 	}
 	if len(titles) == 0 {
 		return digestTitle(job, now)

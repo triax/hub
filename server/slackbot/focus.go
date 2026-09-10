@@ -36,7 +36,7 @@ const (
 	// これは約 60,000 トークンに相当する。超えたときだけスレッド単位に分割する。
 	focusPromptRuneBudget = 120000
 
-	// 返信の付いた投稿がこれ未満（またはスレッド単体要約）なら focus を 1〜3 点に絞る。
+	// 返信の付いた投稿がこれ未満（またはスレッド単体要約）なら focus を 1 点に絞る。
 	focusFewTargetsThreshold = 5
 
 	focusReactionWorking = "eyes"
@@ -86,6 +86,10 @@ type focusDigest struct {
 type focusTheme struct {
 	Key   string `json:"key"`
 	Title string `json:"title"`
+	// Label は目次と pie の凡例に出す短い名詞句。Title は「誰が・どのプレーで・
+	// 何が起きているか」の 1 行見出しで必ず長くなり、凡例では二重に切り詰められて
+	// 判別できなくなるため、短い名前を別に持つ（#681）。
+	Label string `json:"label"`
 	// Summary は何が起きていて何が原因かの 1〜2 文。
 	Summary string `json:"summary"`
 	// Do は次の練習でやること（1〜2 件）、Dont はやめること（0〜2 件）。
@@ -140,6 +144,7 @@ var focusReportSchema = strictObject(map[string]any{
 	"themes": arrayOf(strictObject(map[string]any{
 		"key":     stringField(),
 		"title":   stringField(),
+		"label":   stringField(),
 		"summary": stringField(),
 		// do / dont の件数は strict schema（minItems / maxItems 非対応）では縛れないので、
 		// プロンプトで頼み、normalizeTheme で切り詰める。dont は空配列を許す。
@@ -609,6 +614,7 @@ func focusSystemPrompt(few bool) string {
 - テーマは症状ではなく原因で切る（"キャッチミス" ではなく "ブレイク前に減速してタイミングがずれる"）。
 - key はテーマを識別する短い英小文字のスラッグ（例: "qb_release_timing"）。plays から参照するので一意にする。
 - title は 1 行の見出し。誰が・どのプレーで・何が起きているかが分かる形にする。
+- label は目次と凡例に出す 14 文字以内の短い名詞句（例: "ブレイク前後の減速"）。title を要約したものにする。
 - summary は何が起きていて何が原因かを 1〜2 文で書く。
 - do には次の練習でやることを動作で 1〜2 件。誰が・どのプレーで・何を、まで書く。
 - dont にはやめることを 0〜2 件。無ければ空配列にする（無理に書かない）。

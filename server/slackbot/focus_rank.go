@@ -7,9 +7,11 @@ import (
 )
 
 // 焦点として採るテーマ数の上限。few（対象が少ない入力）はさらに絞る。
+// 「大事なものにもっと focus する」ため 5 → 3 に絞った（#681）。LLM に挙げさせる
+// 候補数（focusSystemPrompt）は変えていない。候補が多いほうが実データでの順位付けが効く。
 const (
-	focusMaxThemes    = 5
-	focusMaxThemesFew = 3
+	focusMaxThemes    = 3
+	focusMaxThemesFew = 1
 	// 代表プレー名として保持する件数。
 	focusMaxSamplePlays = 3
 	// 1 テーマあたりの「やる」「やめる」の件数上限。schema では縛れないのでここで切る。
@@ -17,7 +19,13 @@ const (
 	// ポジション・見出しが特定できなかったときの表示名。集計の穴を黙って捨てない。
 	focusUnknownPosition = "不明"
 	focusUnknownHeadline = "その他"
+	// Label（目次と pie の凡例に出す短い名前）の上限。
+	focusLabelRuneLimit = 14
 )
+
+// label が凡例で切り詰められないことを、定数どうしの関係でコンパイル時に縛る
+// （focusLabelRuneLimit を伸ばしたらここで落ちる）。
+const _ = uint(focusChartLabelLimit - focusLabelRuneLimit)
 
 // rankedTheme は focus として採用されたテーマ 1 点。Count は実データから数えた
 // 指摘プレー数で、LLM の自己申告ではない。
@@ -38,7 +46,6 @@ type labelCount struct {
 
 type themeCount struct {
 	Key   string
-	Title string
 	Count int
 }
 
@@ -46,9 +53,6 @@ type themeCount struct {
 type focusStats struct {
 	Themes    []themeCount
 	Positions []labelCount
-	// Headlines は見出しの初出順。HeadlinePositions は 見出し → ポジション → 件数。
-	Headlines         []string
-	HeadlinePositions map[string]map[string]int
 }
 
 // empty は描くべき中身が無いことを返す。
@@ -119,12 +123,23 @@ func pickThemes(d focusDigest, order []int, counts map[string]int, limit, minCou
 // 描画側は「やる」の見出しごと省く）。
 func normalizeTheme(theme focusTheme) focusTheme {
 	theme.Title = strings.TrimSpace(theme.Title)
+	theme.Label = focusThemeLabel(theme)
 	theme.Summary = strings.TrimSpace(theme.Summary)
 	theme.Quote = strings.TrimSpace(theme.Quote)
 	theme.Do = normalizeActions(theme.Do)
 	theme.Dont = normalizeActions(theme.Dont)
 	theme.Positions = uniqueStrings(trimStrings(theme.Positions))
 	return theme
+}
+
+// focusThemeLabel は目次と pie の凡例に出す短い名前。strict schema は「必ず埋める」
+// までは縛れないので、空文字なら Title の切り詰めにフォールバックする。長すぎる
+// label も切り詰め、凡例が切れないことを描画側に依らず保証する。
+func focusThemeLabel(theme focusTheme) string {
+	if label := strings.TrimSpace(theme.Label); label != "" {
+		return truncateRunes(label, focusLabelRuneLimit)
+	}
+	return truncateRunes(strings.TrimSpace(theme.Title), focusLabelRuneLimit)
 }
 
 // normalizeActions は空白を落とし、空文字と重複を除いて focusMaxActions 件までに切り詰める。
@@ -172,32 +187,26 @@ func samplePlays(plays []focusPlay, key string) []string {
 }
 
 // buildFocusStats は チャート（#659）が読む集計を組む。テーマは order（件数降順・
-// 同数は入力順）、ポジションは件数降順・同数は初出順、見出しは初出順。
+// 同数は入力順）、ポジションは件数降順・同数は初出順。
 func buildFocusStats(d focusDigest, order []int, counts map[string]int) focusStats {
-	stats := focusStats{HeadlinePositions: map[string]map[string]int{}}
+	stats := focusStats{}
 
 	for _, i := range order {
 		theme := d.Themes[i]
 		if theme.Key == "" || counts[theme.Key] == 0 {
 			continue
 		}
-		stats.Themes = append(stats.Themes, themeCount{Key: theme.Key, Title: theme.Title, Count: counts[theme.Key]})
+		stats.Themes = append(stats.Themes, themeCount{Key: theme.Key, Count: counts[theme.Key]})
 	}
 
 	positions := map[string]int{}
 	positionOrder := []string{}
 	for _, play := range d.Plays {
-		headline := focusHeadlineLabel(play.Headline)
-		if _, seen := stats.HeadlinePositions[headline]; !seen {
-			stats.HeadlinePositions[headline] = map[string]int{}
-			stats.Headlines = append(stats.Headlines, headline)
-		}
 		for _, position := range playPositions(play) {
 			if _, seen := positions[position]; !seen {
 				positionOrder = append(positionOrder, position)
 			}
 			positions[position]++
-			stats.HeadlinePositions[headline][position]++
 		}
 	}
 	stats.Positions = sortedCounts(positionOrder, positions)
@@ -205,8 +214,7 @@ func buildFocusStats(d focusDigest, order []int, counts map[string]int) focusSta
 }
 
 // focusHeadlineLabel は 1 プレーが属する見出しの表示名。空欄の寄せ先を 1 箇所に
-// 閉じることで、チャートの x 軸（buildFocusStats）と詳細の見出し（groupPlaysByHeadline）が
-// 同じ区切りを指すことを保証する。
+// 閉じることで、詳細の見出し（groupPlaysByHeadline）が入力に依らず同じ区切りを指す。
 func focusHeadlineLabel(headline string) string {
 	if h := strings.TrimSpace(headline); h != "" {
 		return h
