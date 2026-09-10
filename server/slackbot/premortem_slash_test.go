@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/slack-go/slack"
 	"github.com/triax/hub/server"
 )
 
@@ -55,73 +56,114 @@ func slashBot(api *fakeSlackAPI, enq *fakeEnqueuer) Bot {
 	return Bot{VerificationToken: testSlashToken, SlackAPI: api, ChatGPT: &fakeChatGPT{}, Enqueuer: enq}
 }
 
-// AC-1 / AC-4 / AC-12: /premortem がアンカーを 1 通出し、その ts で enqueue する。
+// AC-1 / AC-2 / AC-10: /premortem はチャンネルに何も残さず、受付を ephemeral で出して
+// 打った人だけに見える job を積む。
 func TestSlash_Premortem(t *testing.T) {
 	api := newFakeSlackAPI()
 	enq := newFakeEnqueuer()
-	rec := postSlash(slashBot(api, enq), slashForm("/premortem", "12d"))
+	form := slashForm("/premortem", "12d")
+	form.Set("trigger_id", "13345224609.738474920.8088930838d88f008e0")
+	rec := postSlash(slashBot(api, enq), form)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	if body := rec.Body.String(); body != "" {
-		t.Fatalf("body = %q, want 空（可視のフィードバックはアンカー投稿が担う）", body)
+		t.Fatalf("body = %q, want 空", body)
 	}
-	// AC-4: アンカー投稿が 1 通
-	if len(api.posted) != 1 {
-		t.Fatalf("posted = %d, want アンカー 1 通", len(api.posted))
+	// AC-1: チャンネルへの通常投稿はゼロ（アンカーを廃止した）
+	if len(api.posted) != 0 {
+		t.Fatalf("チャンネルに投稿している: %+v", api.posted)
 	}
-	anchor := api.posted[0]
-	if anchor.Channel != "C1" || !strings.Contains(anchor.Text(), "<@U9>") {
-		t.Fatalf("アンカー投稿が期待どおりでない: %+v", anchor)
+	// AC-2: 受付は ephemeral で、宛先は打った人
+	if len(api.ephemeral) != 1 {
+		t.Fatalf("ephemeral = %d, want 受付 1 通", len(api.ephemeral))
 	}
-	if anchor.ThreadTS() != "" {
-		t.Fatal("アンカーはトップレベルに出す（スレッド返信にしない）")
+	receipt := api.ephemeral[0]
+	if receipt.Channel != "C1" || receipt.Timestamp != "U9" {
+		t.Fatalf("受付の宛先 = ch:%q user:%q, want C1/U9", receipt.Channel, receipt.Timestamp)
 	}
-	// 👀 が付く
-	if joined(api.added) != focusReactionWorking {
-		t.Fatalf("👀 が付いていない: %v", api.added)
+	if !strings.Contains(receipt.Text(), "あなただけに見えます") {
+		t.Fatalf("受付メッセージ = %q", receipt.Text())
 	}
-	// AC-1: enqueue
-	if enq.count() != 1 {
-		t.Fatalf("enqueue = %d, want 1", enq.count())
+	// AC-5: リアクションを付ける先が無い
+	if len(api.added) != 0 || len(api.removed) != 0 {
+		t.Fatalf("リアクションを操作している: added=%v removed=%v", api.added, api.removed)
 	}
-	if enq.uris[0] != PremortemTaskURI {
-		t.Fatalf("uri = %q, want %q", enq.uris[0], PremortemTaskURI)
+
+	if enq.count() != 1 || enq.uris[0] != PremortemTaskURI {
+		t.Fatalf("enqueue = %d / uri = %v", enq.count(), enq.uris)
 	}
 	job := premortemJob{}
 	if err := json.Unmarshal([]byte(enq.bodies[0]), &job); err != nil {
 		t.Fatalf("payload: %v", err)
 	}
-	// AC-4: アンカーの ts が MentionTS になる
-	if job.MentionTS != "900.000001" {
-		t.Fatalf("MentionTS = %q, want アンカーの ts", job.MentionTS)
+	// AC-10
+	if !job.Ephemeral || job.UserID != "U9" || job.MentionTS != "" {
+		t.Fatalf("job = %+v, want Ephemeral=true UserID=U9 MentionTS=空", job)
 	}
-	if job.Channel != "C1" || job.ThreadOnly {
-		t.Fatalf("job = %+v", job)
+	// AC-9: task 名は trigger_id 由来
+	if !strings.Contains(enq.names[0], "13345224609-738474920") {
+		t.Fatalf("task 名 = %q, want trigger_id 由来", enq.names[0])
 	}
 }
 
-// AC-2: `/passion` は alias にしない（#691 で廃止）。premortem を起動せず、
-// 未知の command として既定（ありがとう）へ落ちる。復活させないための番人。
-func TestSlash_PassionIsNotAnAlias(t *testing.T) {
+// AC-9: 同じ人が連続で打っても trigger_id が違えば task 名が衝突しない。
+func TestSlash_TaskNameFromTriggerID(t *testing.T) {
+	a := premortemTaskName(premortemJob{Channel: "C1", TaskKey: "111.222.aaa"})
+	b := premortemTaskName(premortemJob{Channel: "C1", TaskKey: "111.333.bbb"})
+	if a == b {
+		t.Fatalf("task 名が衝突している: %q", a)
+	}
+	if strings.Contains(a, ".") {
+		t.Fatalf("task ID に `.` が残っている: %q", a)
+	}
+	// mention 経由（TaskKey = MentionTS）とも衝突しない
+	if a == premortemTaskName(premortemJob{Channel: "C1", TaskKey: testMentionTS}) {
+		t.Fatal("mention の task 名と衝突している")
+	}
+}
+
+// AC-8: 受付 ephemeral が失敗（bot 未参加）→ response_url にエラーを返し enqueue しない。
+func TestSlash_ReceiptFailure(t *testing.T) {
+	responseURL, texts := responseURLCatcher(t)
+	api := newFakeSlackAPI()
+	api.postErr = errors.New("not_in_channel")
+	enq := newFakeEnqueuer()
+
+	form := slashForm("/premortem", "12d")
+	form.Set("response_url", responseURL)
+	rec := postSlash(slashBot(api, enq), form)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if enq.count() != 0 {
+		t.Fatalf("受付に失敗したのに enqueue している: %d", enq.count())
+	}
+	if len(texts()) != 1 || !strings.Contains(texts()[0], "bot が参加しているか") {
+		t.Fatalf("response_url へのエラーが期待どおりでない: %v", texts())
+	}
+}
+
+// AC-14: 期間の指定が読めないときは response_url で返す（チャンネルには何も出さない）。
+func TestSlash_InvalidPeriodIsReported(t *testing.T) {
 	responseURL, texts := responseURLCatcher(t)
 	api := newFakeSlackAPI()
 	enq := newFakeEnqueuer()
 
-	form := slashForm("/passion", "12d")
+	form := slashForm("/premortem", "きのう")
 	form.Set("response_url", responseURL)
 	postSlash(slashBot(api, enq), form)
 
 	if enq.count() != 0 {
-		t.Fatalf("/passion で premortem が起動している: %d 件 enqueue", enq.count())
+		t.Fatalf("enqueue = %d, want 0", enq.count())
 	}
-	if len(api.posted) != 0 {
-		t.Fatalf("アンカーが投稿されている: %+v", api.posted)
+	if len(api.posted) != 0 || len(api.ephemeral) != 0 {
+		t.Fatalf("チャンネルに何か出ている: posted=%v ephemeral=%v", api.posted, api.ephemeral)
 	}
-	// 既定（ありがとう）に落ちる。メンションが無いので使い方の案内が返る
-	if len(texts()) != 1 || !strings.Contains(texts()[0], "メンションで指定") {
-		t.Fatalf("既定の command に落ちていない: %v", texts())
+	if len(texts()) != 1 || !strings.Contains(texts()[0], "期間の指定") {
+		t.Fatalf("エラーが返っていない: %v", texts())
 	}
 }
 
@@ -173,15 +215,6 @@ func TestSlash_AnchorIsExcludedFromPlays(t *testing.T) {
 	}
 	if !isSkippableParent(anchor, "") {
 		t.Fatal("アンカーが親候補から除外されていない")
-	}
-}
-
-// AC-7: task 名が mention 経由と衝突しない（アンカーの ts が違う）。
-func TestSlash_TaskNameDiffersFromMention(t *testing.T) {
-	slash := premortemTaskName(premortemJob{Channel: "C1", MentionTS: "900.000001"})
-	mention := premortemTaskName(premortemJob{Channel: "C1", MentionTS: testMentionTS})
-	if slash == mention {
-		t.Fatalf("task 名が衝突している: %q", slash)
 	}
 }
 
@@ -288,22 +321,194 @@ func TestSlash_AnchorFailure(t *testing.T) {
 	}
 }
 
-// AC-14: 期間の指定が読めないときは黙らず、アンカーのスレッドに理由を返して 👀 を外す。
-func TestSlash_InvalidPeriodIsReported(t *testing.T) {
-	api := newFakeSlackAPI()
-	enq := newFakeEnqueuer()
-	postSlash(slashBot(api, enq), slashForm("/premortem", "きのう"))
+// ---- ephemeral 配送の end-to-end ---------------------------------------------
 
-	if enq.count() != 0 {
-		t.Fatalf("enqueue = %d, want 0", enq.count())
+func ephemeralJob() premortemJob {
+	return premortemJob{
+		Channel: "C1", Sources: []string{"C1"}, UserID: "U9",
+		Ephemeral: true, TaskKey: "111.222.aaa",
 	}
-	if len(api.posted) != 2 {
-		t.Fatalf("posted = %d, want アンカー + エラー返信", len(api.posted))
+}
+
+// AC-1 / AC-2 / AC-5 / AC-6: ワーカーはチャンネルに何も出さず、結果を打った人だけに届ける。
+// 編集もリアクションも起きない。
+//
+// 受付は slash ハンドラ側で出す（疎通確認を兼ねるため）ので、ワーカーは出さない。
+// ユーザから見える ephemeral は「受付（ハンドラ）+ 結果（ワーカー）」の 2 通で、
+// 受付側は TestSlash_Premortem が押さえている（AC-6b）。
+func TestPremortem_EphemeralEndToEnd(t *testing.T) {
+	api := focusFixture()
+	gpt := &fakeChatGPT{reply: premortemDigestJSON(t)}
+	bot := Bot{SlackAPI: api, ChatGPT: gpt}
+
+	job := ephemeralJob()
+	if err := bot.runPremortem(t.Context(), job); err != nil {
+		t.Fatalf("runPremortem: %v", err)
 	}
-	if !strings.Contains(api.posted[1].Text(), "期間の指定") {
-		t.Fatalf("エラーが返っていない: %q", api.posted[1].Text())
+
+	// AC-1: チャンネルへの通常投稿はゼロ
+	if len(api.posted) != 0 {
+		t.Fatalf("チャンネルに投稿している: %+v", api.posted)
 	}
-	if joined(api.removed) != focusReactionWorking {
-		t.Fatalf("👀 が外れていない: %v", api.removed)
+	// AC-6: 編集も起きない（受付を完了に差し替えない）
+	if len(api.updated) != 0 {
+		t.Fatalf("UpdateMessage を呼んでいる: %+v", api.updated)
+	}
+	// AC-5: リアクションも無い
+	if len(api.added) != 0 || len(api.removed) != 0 {
+		t.Fatalf("リアクションを操作している: added=%v removed=%v", api.added, api.removed)
+	}
+	// 完了メタの 3 通目を出さない（ワーカーが出すのは結果 1 通だけ）
+	if len(api.ephemeral) != 1 {
+		t.Fatalf("ephemeral = %d 通, want 1（結果のみ。受付はハンドラ側）", len(api.ephemeral))
+	}
+	for i, m := range api.ephemeral {
+		if m.Channel != "C1" || m.Timestamp != "U9" {
+			t.Fatalf("ephemeral[%d] の宛先 = ch:%q user:%q", i, m.Channel, m.Timestamp)
+		}
+		if strings.TrimSpace(m.Text()) == "" {
+			t.Fatalf("ephemeral[%d] の fallback text が空", i)
+		}
+	}
+	if len(api.ephemeral[0].Blocks()) == 0 {
+		t.Fatal("結果に blocks が載っていない")
+	}
+}
+
+// AC-3 / AC-4: 結果の blocks は mention 経由と同じ構成で、末尾の案内だけが違う。
+func TestPremortem_EphemeralBlocksMatchMention(t *testing.T) {
+	report := rankRisks(premortemRiskFixture(), false)
+	now := time.Now()
+	threads := playThreads(8)
+
+	channelJob := premortemTestJob()
+	ephJob := channelJob
+	ephJob.Ephemeral = true
+	ephJob.UserID = "U9"
+
+	channelBlocks := premortemDigestBlocks(channelJob, threads, "9/21(日) vs A", now, report)
+	ephBlocks := premortemDigestBlocks(ephJob, threads, "9/21(日) vs A", now, report)
+
+	// AC-3: block の並びは同一
+	if got, want := strings.Join(blockTypes(ephBlocks), ","), strings.Join(blockTypes(channelBlocks), ","); got != want {
+		t.Fatalf("block 構成が違う:\n eph=%s\n ch =%s", got, want)
+	}
+	if len(ephBlocks) != len(channelBlocks) {
+		t.Fatalf("block 数が違う: %d vs %d", len(ephBlocks), len(channelBlocks))
+	}
+
+	// AC-4: 案内文だけが違う
+	chBody, ephBody := blocksJSON(t, channelBlocks), blocksJSON(t, ephBlocks)
+	if !strings.Contains(chBody, "反論・追加はこのスレッドへ") {
+		t.Fatal("mention 側の案内が変わっている")
+	}
+	if strings.Contains(ephBody, "このスレッドへ") {
+		t.Fatal("ephemeral なのにスレッドへの導線が残っている")
+	}
+	if !strings.Contains(ephBody, "あなただけに見えています") {
+		t.Fatalf("ephemeral の案内が期待どおりでない: %s", ephBody[len(ephBody)-400:])
+	}
+	// 案内以外は一致する（案内の block を落として比べる）
+	if trim := func(s string) string { return s[:strings.LastIndex(s, "premortem_guide")] }; trim(chBody) != trim(ephBody) {
+		t.Fatal("案内以外の中身が違う")
+	}
+}
+
+// AC-7: mention の挙動が一切変わらない（sink 抽象化の回帰よけ）。
+func TestPremortem_MentionUnchanged(t *testing.T) {
+	api := focusFixture()
+	gpt := &fakeChatGPT{reply: premortemDigestJSON(t)}
+	bot := Bot{SlackAPI: api, ChatGPT: gpt}
+
+	if err := bot.runPremortem(t.Context(), premortemTestJob()); err != nil {
+		t.Fatalf("runPremortem: %v", err)
+	}
+	if len(api.ephemeral) != 0 {
+		t.Fatalf("mention なのに ephemeral を使っている: %+v", api.ephemeral)
+	}
+	if len(api.posted) < 2 {
+		t.Fatalf("posted = %d, want 受付 + 結果", len(api.posted))
+	}
+	// 受付はスレッド返信、結果の 1 通目は broadcast
+	if api.posted[0].ThreadTS() != testMentionTS {
+		t.Fatalf("受付がスレッドに出ていない: %+v", api.posted[0])
+	}
+	if api.posted[1].Broadcast() == "" {
+		t.Fatalf("1 通目が broadcast されていない: %+v", api.posted[1])
+	}
+	// 完了メタへの差し替えとリアクション遷移
+	if len(api.updated) == 0 || !strings.HasPrefix(api.updated[len(api.updated)-1].Text(), "✅ ") {
+		t.Fatalf("完了メタに差し替わっていない: %+v", api.updated)
+	}
+	if joined(api.added) != focusReactionDone || joined(api.removed) != focusReactionWorking {
+		t.Fatalf("リアクションの遷移が変わっている: added=%v removed=%v", api.added, api.removed)
+	}
+}
+
+// AC-11: MentionTS が空でも収集が壊れない（除外すべきアンカーが存在しないだけ）。
+func TestPremortem_EphemeralCollects(t *testing.T) {
+	api := focusFixture()
+	gpt := &fakeChatGPT{reply: premortemDigestJSON(t)}
+	bot := Bot{SlackAPI: api, ChatGPT: gpt}
+
+	if err := bot.runPremortem(t.Context(), ephemeralJob()); err != nil {
+		t.Fatalf("runPremortem: %v", err)
+	}
+	prompt := gpt.requests[0].User
+	for _, want := range []string{"プレーA", "プレーB", "反省1"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("収集できていない（%q が無い）:\n%s", want, prompt)
+		}
+	}
+}
+
+// AC-12: 平文フォールバックも ephemeral で届く。
+func TestPremortem_EphemeralPlainTextFallback(t *testing.T) {
+	api := focusFixture()
+	bot := Bot{SlackAPI: api, ChatGPT: &fakeChatGPT{reply: "これは JSON ではありません"}}
+
+	if err := bot.runPremortem(t.Context(), ephemeralJob()); err != nil {
+		t.Fatalf("runPremortem: %v", err)
+	}
+	if len(api.posted) != 0 {
+		t.Fatalf("チャンネルに漏れている: %+v", api.posted)
+	}
+	last := api.ephemeral[len(api.ephemeral)-1]
+	if !strings.Contains(last.Text(), "これは JSON ではありません") {
+		t.Fatalf("平文フォールバックが届いていない: %q", last.Text())
+	}
+	if len(last.Blocks()) != 0 {
+		t.Fatal("平文フォールバックなのに blocks が付いている")
+	}
+}
+
+// AC-13: 読めないチャンネルの警告も ephemeral で届く（チャンネルに漏れない）。
+func TestPremortem_EphemeralUnreadableNotice(t *testing.T) {
+	api := newFakeSlackAPI()
+	api.historyByChannel = map[string]*slack.GetConversationHistoryResponse{
+		"C1": historyPage("", parentMsg("100.000000", "プレーA", 1)),
+	}
+	api.historyErrByChannel = map[string]error{"C2": errors.New("not_in_channel")}
+	api.repliesPages["100.000000"] = [][]slack.Message{{
+		parentMsg("100.000000", "プレーA", 1), replyMsg("101.000000", "U1", "反省1"),
+	}}
+	bot := Bot{SlackAPI: api, ChatGPT: &fakeChatGPT{reply: premortemDigestJSON(t)}}
+
+	job := ephemeralJob()
+	job.Sources = []string{"C1", "C2"}
+	if err := bot.runPremortem(t.Context(), job); err != nil {
+		t.Fatalf("runPremortem: %v", err)
+	}
+	if len(api.posted) != 0 {
+		t.Fatalf("警告がチャンネルに漏れている: %+v", api.posted)
+	}
+	notice := ""
+	for _, m := range api.ephemeral {
+		if strings.Contains(m.Text(), "<#C2>") {
+			notice = m.Text()
+		}
+	}
+	if notice == "" {
+		t.Fatalf("読めなかったチャンネルの警告が届いていない: %+v", api.ephemeral)
 	}
 }

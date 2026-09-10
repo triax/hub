@@ -64,11 +64,20 @@ type premortemJob struct {
 	// Channel はメンションされたチャンネル。投稿先であり、収集元の 1 つでもある。
 	Channel string `json:"channel"`
 	// Sources は収集対象チャンネル（先頭は必ず Channel）。`#scouting` の指定で増える。
-	Sources    []string `json:"sources"`
-	MentionTS  string   `json:"mention_ts"`
-	ThreadTS   string   `json:"thread_ts"`
-	Oldest     int64    `json:"oldest"`
-	ThreadOnly bool     `json:"thread_only"`
+	Sources []string `json:"sources"`
+	// MentionTS は起動したメッセージの ts。mention のときだけ埋まる（slash には
+	// アンカーになるメッセージが無い。#695）。リアクション・スレッド・除外に使う。
+	MentionTS  string `json:"mention_ts"`
+	ThreadTS   string `json:"thread_ts"`
+	Oldest     int64  `json:"oldest"`
+	ThreadOnly bool   `json:"thread_only"`
+	// Ephemeral は「打った人だけに見える」配送。slash（/premortem）で true になる。
+	Ephemeral bool `json:"ephemeral"`
+	// UserID は Ephemeral のときの宛先。
+	UserID string `json:"user_id"`
+	// TaskKey は Cloud Tasks の task ID を一意にする種。mention は MentionTS、
+	// slash は trigger_id（1 起動ごとに一意）。
+	TaskKey string `json:"task_key"`
 }
 
 // focusJobFor は収集・投稿系のヘルパ（fetchParents / expandThreads / postStatus 等）へ
@@ -213,61 +222,62 @@ func (bot Bot) onMentionPremortem(event slackevents.AppMentionEvent, args []stri
 	bot.startPremortem(args, event.Channel, event.TimeStamp, event.ThreadTimeStamp)
 }
 
-// onSlashPremortem は `/premortem` の入口。
+// onSlashPremortem は `/premortem` の入口。**結果は打った人だけに見える**（#695）。
 //
-// slash command のペイロードには ts が無い（そもそもメッセージではないので）。premortem の
-// 下流は「起動したメッセージ」の ts に全部ぶら下がっている — 👀 のリアクション、受付
-// メッセージのスレッド、結果の連投と 1 通目の broadcast、そして「起動したメッセージ自身を
-// プレーとして数えない」除外まで。
+// チャンネルには何も残さない。#694 ではアンカー投稿を出してその ts を MentionTS に使ったが、
+// ephemeral 配送ではスレッドもリアクションも成立しないので、アンカーごと廃止した。
 //
-// そこで**アンカーになる投稿を 1 通出し、その ts を MentionTS として使う**。これで下流は
-// mention 経由とまったく同じ経路になる。アンカーは bot 投稿なので isBotOrSystem が
-// 既に除外し、プレーとして数えられる心配も無い（#691）。
+// 受付の ephemeral が「このチャンネルで喋れるか」の疎通確認を兼ねる。失敗＝bot 未参加なので、
+// enqueue せずに response_url でユーザへ返す（チャンネルに投稿できない以上、返せる先はそこだけ）。
 func (bot Bot) onSlashPremortem(w http.ResponseWriter, req *http.Request) {
-	channel := req.Form.Get("channel_id")
-
-	var anchorTS string
-	err := callSlack(func() error {
-		_, ts, err := bot.SlackAPI.PostMessage(channel, slack.MsgOptionText(
-			fmt.Sprintf("🧨 <@%s> が premortem を実行します", req.Form.Get("user_id")), false))
-		anchorTS = ts
-		return err
-	})
+	// MentionTS は空。slash にはアンカーになるメッセージが無い（それが ephemeral 配送の前提）。
+	job, err := newPremortemJob(largo.Tokenize(req.Form.Get("text")), time.Now(),
+		req.Form.Get("channel_id"), "", "")
 	if err != nil {
-		// アンカーが無いと MentionTS を作れず下流が成立しない。チャンネルに投稿できない以上、
-		// 返せる先は response_url しか無い（slash は bot が参加していないチャンネルでも打てる）。
-		log.Println("[premortem] slash anchor:", err)
+		postSlackJSON(req.Form.Get("response_url"), err.Error())
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	job.Ephemeral = true
+	job.UserID = req.Form.Get("user_id")
+	job.TaskKey = req.Form.Get("trigger_id") // 1 起動ごとに一意。二重 enqueue の抑止に使う
+
+	sink := bot.premortemSinkFor(job)
+	if err := sink.Receipt(premortemEphemeralReceipt(len(job.Sources))); err != nil {
+		log.Println("[premortem] slash receipt:", err)
 		postSlackJSON(req.Form.Get("response_url"),
-			"このチャンネルに投稿できませんでした。bot が参加しているか確認してください。")
+			"このチャンネルで実行できませんでした。bot が参加しているか確認してください。")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 重い処理は enqueue の先。ここでやるのは投稿 1 回 + リアクション + enqueue だけなので
-	// Slack の 3 秒ルールに収まる。
-	// トークナイズは mention と同じ largo.Tokenize を使う。ここだけ別の分割器にすると
-	// 「同じ引数なのに mention と slash で解釈が違う」が起こりうる。
-	bot.startPremortem(largo.Tokenize(req.Form.Get("text")), channel, anchorTS, "")
+	// 重い処理は enqueue の先。ここでやるのは ephemeral 1 通 + enqueue だけなので 3 秒に収まる。
+	bot.enqueuePremortem(job)
 	w.WriteHeader(http.StatusOK)
 }
 
-// startPremortem は mention / slash 共通の受付。anchorTS は「起動したメッセージ」の ts で、
-// mention ならメンション自身、slash ならアンカー投稿を指す。
-func (bot Bot) startPremortem(args []string, channel, anchorTS, threadTS string) {
-	mention := slack.NewRefToMessage(channel, anchorTS)
-	_ = callSlack(func() error { return bot.SlackAPI.AddReaction(focusReactionWorking, mention) })
+// startPremortem は mention の受付。mentionTS は起動したメンション自身の ts。
+func (bot Bot) startPremortem(args []string, channel, mentionTS, threadTS string) {
+	job, err := newPremortemJob(args, time.Now(), channel, mentionTS, threadTS)
+	job.TaskKey = mentionTS
 
-	job, err := newPremortemJob(args, time.Now(), channel, anchorTS, threadTS)
+	sink := bot.premortemSinkFor(job)
+	sink.Working()
 	if err != nil {
-		bot.abortPremortem(job, err)
+		sink.Notice(err.Error())
+		sink.Close(false)
 		return
 	}
+	bot.enqueuePremortem(job)
+}
 
-	// Webhook のハンドラは既に復帰しているので req.Context() は cancel 済み。使わない。
+// enqueuePremortem は仕事をキューへ積む。Cloud Tasks が無い環境（ローカル開発）では
+// 同プロセスでワーカーを直接呼ぶ。
+func (bot Bot) enqueuePremortem(job premortemJob) {
+	// Webhook / slash のハンドラは既に復帰しているので req.Context() は cancel 済み。使わない。
 	ctx := context.Background()
 
 	if bot.Enqueuer == nil {
-		// ローカル開発には Cloud Tasks が無いので、同プロセスでワーカーを直接呼ぶ。
 		bot.spawn("runPremortem", func() { _ = bot.runPremortem(ctx, job) })
 		return
 	}
@@ -277,21 +287,16 @@ func (bot Bot) startPremortem(args []string, channel, anchorTS, threadTS string)
 		err = bot.Enqueuer.Enqueue(ctx, premortemTaskName(job), PremortemTaskURI, payload)
 	}
 	if err != nil {
-		bot.abortPremortem(job, err)
+		sink := bot.premortemSinkFor(job)
+		sink.Notice(err.Error())
+		sink.Close(false)
 	}
 }
 
 // premortemTaskName は Cloud Tasks の task ID。focus と同じキューを共用するので、
 // prefix で名前空間を分ける（task ID に `.` は使えない）。
 func premortemTaskName(job premortemJob) string {
-	return "premortem-" + job.Channel + "-" + strings.ReplaceAll(job.MentionTS, ".", "-")
-}
-
-func (bot Bot) abortPremortem(job premortemJob, cause error) {
-	bot.replyToMention(job.focusJobFor(job.Channel), cause.Error())
-	_ = callSlack(func() error {
-		return bot.SlackAPI.RemoveReaction(focusReactionWorking, slack.NewRefToMessage(job.Channel, job.MentionTS))
-	})
+	return "premortem-" + job.Channel + "-" + strings.ReplaceAll(job.TaskKey, ".", "-")
 }
 
 // ------------------------------------------------------------------ ワーカー ---
@@ -318,65 +323,55 @@ func (bot Bot) PremortemTask(w http.ResponseWriter, req *http.Request) {
 }
 
 func (bot Bot) runPremortem(ctx context.Context, job premortemJob) error {
-	err := bot.premortem(ctx, job, memberNameResolver(ctx))
+	sink := bot.premortemSinkFor(job)
+	err := bot.premortem(ctx, job, sink, memberNameResolver(ctx))
 	if err != nil {
-		bot.replyToMention(job.focusJobFor(job.Channel), err.Error())
+		sink.Notice(err.Error())
 	}
-	mention := slack.NewRefToMessage(job.Channel, job.MentionTS)
-	_ = callSlack(func() error { return bot.SlackAPI.RemoveReaction(focusReactionWorking, mention) })
-	if err == nil {
-		_ = callSlack(func() error { return bot.SlackAPI.AddReaction(focusReactionDone, mention) })
-	}
+	sink.Close(err == nil)
 	return err
 }
 
 // premortem は 収集 → 進捗表示 → 要約 → 投稿 の一連。
-func (bot Bot) premortem(ctx context.Context, job premortemJob, resolve func(string) string) error {
+func (bot Bot) premortem(ctx context.Context, job premortemJob, sink premortemSink, resolve func(string) string) error {
 	now := time.Now().In(server.ServiceLocation)
-	base := job.focusJobFor(job.Channel)
 
-	threads, unreadable, statusTS, err := bot.collectPremortem(job, now)
+	threads, unreadable, err := bot.collectPremortem(job, sink, now)
 	if err != nil {
 		return err
 	}
 	if len(unreadable) > 0 {
 		// 黙って握り潰すと「読んだつもり」の premortem が出る。読めなかった事実を必ず残す。
-		_ = bot.replyToMention(base, fmt.Sprintf(
+		sink.Notice(fmt.Sprintf(
 			"⚠️ %s は読めませんでした（bot が参加していない可能性があります）。残りのチャンネルだけで進めます",
 			strings.Join(unreadable, ", ")))
 	}
 	if len(threads) == 0 {
-		return bot.replyToMention(base, premortemEmptyMessage)
+		sink.Notice(premortemEmptyMessage)
+		return nil
 	}
 
-	summary, err := bot.summarizePremortem(ctx, job, threads, resolve)
+	summary, err := bot.summarizePremortem(ctx, job, sink, threads, resolve)
 	if err != nil {
 		return err
 	}
 
 	game := bot.upcomingGame(ctx, now)
+	msgs := []premortemMessage{}
 	if summary.Report != nil {
-		if err := bot.postPremortemMessages(job, premortemMessages(job, threads, game, now, *summary.Report)); err != nil {
-			return err
-		}
+		msgs = premortemMessages(job, threads, game, now, *summary.Report)
 	} else {
-		chunks := chunkLines(premortemHeader(job, threads, game, now)+"\n\n"+summary.Text, focusChunkSize)
-		msgs := make([]premortemMessage, 0, len(chunks))
-		for _, chunk := range chunks {
+		// 構造化に失敗したときは黙って諦めず、LLM の生出力をそのまま平文で流す。
+		for _, chunk := range chunkLines(
+			premortemHeader(job, threads, game, now)+"\n\n"+summary.Text, focusChunkSize) {
 			msgs = append(msgs, premortemMessage{Text: chunk})
 		}
-		if err := bot.postPremortemMessages(job, msgs); err != nil {
-			return err
-		}
+	}
+	if err := sink.Deliver(msgs); err != nil {
+		return err
 	}
 
-	if statusTS != "" {
-		done := premortemDoneText(job, threads, now, time.Since(now))
-		_ = callSlack(func() error {
-			_, _, _, err := bot.SlackAPI.UpdateMessage(job.Channel, statusTS, slack.MsgOptionText(done, false))
-			return err
-		})
-	}
+	sink.Finish(premortemDoneText(job, threads, now, time.Since(now)))
 	return nil
 }
 
@@ -385,31 +380,34 @@ func (bot Bot) premortem(ctx context.Context, job premortemJob, resolve func(str
 // collectPremortem は Sources の各チャンネルから投稿と反省スレッドを集める。
 // 1 チャンネルが読めなくても他は続行し、読めなかったチャンネルを返す（#683）。
 // 全チャンネルが読めなかったときだけエラーにする。
-func (bot Bot) collectPremortem(job premortemJob, now time.Time) (threads []playThread, unreadable []string, statusTS string, err error) {
+func (bot Bot) collectPremortem(job premortemJob, sink premortemSink, now time.Time) (threads []playThread, unreadable []string, err error) {
 	base := job.focusJobFor(job.Channel)
 
 	if job.ThreadOnly {
 		threads, err = bot.collectSingleThread(base)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, err
 		}
 		if len(threads) > 0 {
 			_, _, replies := countThreadKinds(threads)
-			statusTS, err = bot.postStatus(base, fmt.Sprintf(
-				"🧨 このスレッドの %d 件の返信から、負け筋を洗い出しています", replies))
-			if err != nil {
-				return nil, nil, "", err
+			if err := sink.Receipt(fmt.Sprintf(
+				"🧨 このスレッドの %d 件の返信から、負け筋を洗い出しています", replies)); err != nil {
+				return nil, nil, err
 			}
 		}
-		return threads, nil, statusTS, nil
+		return threads, nil, nil
 	}
 
 	// 受付メッセージは収集前に出す（複数チャンネルだと収集そのものに時間がかかるため）。
-	statusTS, err = bot.postStatus(base, fmt.Sprintf(
-		"🧨 %s の %d チャンネルを読んでいます。1〜2 分ほどかかります",
-		focusRangeLabel(base, now), len(job.Sources)))
-	if err != nil {
-		return nil, nil, "", err
+	// ただし slash（Ephemeral）は**ハンドラが既に受付 ephemeral を出している**。あれは
+	// 「このチャンネルで喋れるか」の疎通確認を兼ねていて、失敗したら enqueue しない。
+	// ここで出すと同じことを 2 回言うことになるので出さない（#695）。
+	if !job.Ephemeral {
+		if err := sink.Receipt(fmt.Sprintf(
+			"🧨 %s の %d チャンネルを読んでいます。1〜2 分ほどかかります",
+			focusRangeLabel(base, now), len(job.Sources))); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	var lastErr error
@@ -422,7 +420,7 @@ func (bot Bot) collectPremortem(job premortemJob, now time.Time) (threads []play
 			unreadable = append(unreadable, "<#"+channel+">")
 			continue
 		}
-		expanded, e := bot.expandThreads(sub, parents, bot.progressUpdater(base, statusTS))
+		expanded, e := bot.expandThreads(sub, parents, sink.Progress)
 		if e != nil {
 			lastErr = e
 			unreadable = append(unreadable, "<#"+channel+">")
@@ -431,9 +429,9 @@ func (bot Bot) collectPremortem(job premortemJob, now time.Time) (threads []play
 		threads = append(threads, expanded...)
 	}
 	if len(unreadable) == len(job.Sources) && lastErr != nil {
-		return nil, unreadable, statusTS, lastErr
+		return nil, unreadable, lastErr
 	}
-	return threads, unreadable, statusTS, nil
+	return threads, unreadable, nil
 }
 
 // ------------------------------------------------------------------ 対象試合 ---
@@ -524,12 +522,12 @@ func premortemSystemPrompt(few bool) string {
 
 // summarizePremortem は全スレッドを 1 プロンプトにまとめて ChatGPT を呼ぶ。
 // 分割が起きたかどうかを bool で返す（黙って質が落ちるのを防ぐため呼び出し側が通知する）。
-func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, threads []playThread, resolve func(string) string) (premortemSummary, error) {
+func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, sink premortemSink, threads []playThread, resolve func(string) string) (premortemSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
 	if len(groups) > 1 {
 		// 分割そのものは黙って起こさない。名寄せ（#688）で収束はさせるが、
 		// 1 回で読み切れなかった事実は読み手に見えるようにしておく。
-		_ = bot.replyToMention(job.focusJobFor(job.Channel), fmt.Sprintf(
+		sink.Notice(fmt.Sprintf(
 			"⚠️ 対象が多いため入力を %d 分割して読みました（重複した負け筋は名寄せしています）",
 			len(groups)))
 	}
@@ -689,12 +687,6 @@ func oneLine(s string) string {
 }
 
 // ------------------------------------------------------------------ 投稿 ---
-
-// postPremortemMessages はメンションのスレッドへ連投する。連投・broadcast の規則は
-// focus と同じなので共有ヘルパに委譲する。
-func (bot Bot) postPremortemMessages(job premortemJob, msgs []premortemMessage) error {
-	return bot.postThreadMessages(job.Channel, job.MentionTS, job.ThreadOnly, msgs)
-}
 
 // premortemDoneText は受付メッセージの最終形。読んだ範囲を実数で残す。
 func premortemDoneText(job premortemJob, threads []playThread, now time.Time, elapsed time.Duration) string {
