@@ -107,7 +107,7 @@ func focusTOCBlock(focus []rankedTheme) slack.Block {
 	items := make([]slack.RichTextElement, 0, len(focus))
 	for _, f := range focus {
 		elements := []slack.RichTextSectionElement{boldElement(f.Label)}
-		if meta := focusTOCMeta(f); meta != "" {
+		if meta := focusThemeMeta(f); meta != "" {
 			elements = append(elements, plainElement("　"+meta))
 		}
 		items = append(items, slack.NewRichTextSection(elements...))
@@ -115,10 +115,10 @@ func focusTOCBlock(focus []rankedTheme) slack.Block {
 	return slack.NewRichTextBlock("focus_toc", slack.NewRichTextList(slack.RTEListOrdered, 0, items...))
 }
 
-// focusTOCMeta は目次 1 行の補足（`WR, H · 27 プレー`）。ポジションが取れていない
-// テーマでは中黒ごと省く（「不明」はチャートの穴埋めラベルで、テーマ側の欠落とは
-// 別の概念なので目次には持ち込まない）。
-func focusTOCMeta(f rankedTheme) string {
+// focusThemeMeta は目次 1 行とカード末尾に共通の補足（`WR, H · 27 プレー`）。
+// ポジションが取れていないテーマでは中黒ごと省く（「不明」はチャートの穴埋め
+// ラベルで、テーマ側の欠落とは別の概念なので目次には持ち込まない）。
+func focusThemeMeta(f rankedTheme) string {
 	parts := []string{}
 	if positions := joinNonEmpty(f.Positions, ", "); positions != "" {
 		parts = append(parts, positions)
@@ -135,14 +135,15 @@ func focusTOCMeta(f rankedTheme) string {
 // rich_text_list は Slack に invalid_blocks で弾かれるため、省略は見た目の都合だけではない）。
 func focusItemBlocks(i int, f rankedTheme, total int) []slack.Block {
 	// f.Title / f.Summary / f.Quote は normalizeTheme（focus_rank.go）で trim 済み。
-	head := fmt.Sprintf("*%d. %s*", i+1, f.Title)
+	// 見出しと概要は別々に切り詰める（まとめて切ると太字の `*` を落として
+	// markdown が壊れる）。
+	head := fmt.Sprintf("*%d. %s*", i+1, truncateRunes(f.Title, focusHeaderRuneLimit))
 	if f.Summary != "" {
 		head += "\n" + truncateRunes(f.Summary, focusSummaryRuneLimit)
 	}
 	blocks := []slack.Block{
 		slack.NewDividerBlock(),
-		slack.NewSectionBlock(slack.NewTextBlockObject(
-			slack.MarkdownType, truncateRunes(head, focusSectionRuneLimit), false, false), nil, nil),
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, head, false, false), nil, nil),
 	}
 	if actions := focusActionItems(f); len(actions) > 0 {
 		blocks = append(blocks, slack.NewRichTextBlock(fmt.Sprintf("focus_item_%d", i+1),
@@ -187,18 +188,10 @@ func plainElement(s string) *slack.RichTextSectionTextElement {
 // focusItemMeta はカードの末尾に置く補足（`WR, H · 27 プレー（34%）　·　「引用」`）。
 // 割合の分母は集計（focusStats.Themes）の件数合計で、pie の 1 切れと同じものを指す。
 func focusItemMeta(f rankedTheme, total int) string {
-	parts := []string{}
-	if positions := joinNonEmpty(f.Positions, ", "); positions != "" {
-		parts = append(parts, positions)
+	head := focusThemeMeta(f) // 末尾が「N プレー」なので、割合はそのまま後ろに付く
+	if f.Count > 0 && total > 0 {
+		head += fmt.Sprintf("（%d%%）", int(math.Round(float64(f.Count)/float64(total)*100)))
 	}
-	if f.Count > 0 {
-		count := fmt.Sprintf("%d プレー", f.Count)
-		if total > 0 {
-			count += fmt.Sprintf("（%d%%）", int(math.Round(float64(f.Count)/float64(total)*100)))
-		}
-		parts = append(parts, count)
-	}
-	head := strings.Join(parts, " · ")
 	if f.Quote == "" {
 		return head
 	}

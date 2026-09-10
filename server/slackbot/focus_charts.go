@@ -42,13 +42,14 @@ func focusChartMessage(report focusReport) (focusMessage, bool) {
 		slack.DataVisualizationBlockOptionBlockID("focus_chart_themes"),
 	)}
 	// ポジションが 1 種類しか無い（スレッド単体など）と比較にならないので bar は出さない。
-	categories, series := positionSeries(report.Stats)
-	if len(report.Stats.Positions) > 1 && len(series) > 0 {
-		blocks = append(blocks, slack.NewDataVisualizationBlock(
-			truncateRunes("ポジション別の指摘数", focusChartTitleLimit),
-			slack.NewDataVisualizationBarChart(slack.NewDataVisualizationAxisConfig(categories...), series...),
-			slack.DataVisualizationBlockOptionBlockID("focus_chart_positions"),
-		))
+	if len(report.Stats.Positions) > 1 {
+		if categories, series := positionSeries(report.Stats); len(series) > 0 {
+			blocks = append(blocks, slack.NewDataVisualizationBlock(
+				truncateRunes("ポジション別の指摘数", focusChartTitleLimit),
+				slack.NewDataVisualizationBarChart(slack.NewDataVisualizationAxisConfig(categories...), series...),
+				slack.DataVisualizationBlockOptionBlockID("focus_chart_positions"),
+			))
+		}
 	}
 	return focusMessage{Text: chartFallbackText(segments), Blocks: blocks}, true
 }
@@ -118,8 +119,8 @@ func positionSeries(stats focusStats) ([]string, []slack.DataVisualizationDataSe
 		slack.NewDataVisualizationDataSeries(focusChartPositionName, dataPoints(categories, counts)...)}
 }
 
-// dataPoints は各カテゴリに 1 点ずつ（出現しない組み合わせは 0）を置く。
-// Slack は「系列ごとに全カテゴリぶんの点」を要求するので 0 を省略できない。
+// dataPoints は各カテゴリに 1 点ずつ置く。Slack は「系列ごとに全カテゴリぶんの点」を
+// 要求するので、カテゴリと点は 1:1 で並ぶ。
 func dataPoints(categories []string, counts []float64) []slack.DataVisualizationDataPoint {
 	points := make([]slack.DataVisualizationDataPoint, 0, len(categories))
 	for j, label := range categories {
