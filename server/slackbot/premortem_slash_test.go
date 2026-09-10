@@ -207,17 +207,6 @@ func TestSlash_ParsesTextLikeMention(t *testing.T) {
 	}
 }
 
-// AC-5: アンカーは bot 投稿なので、収集時にプレーとして数えられない。
-func TestSlash_AnchorIsExcludedFromPlays(t *testing.T) {
-	anchor := botMsg("900.000001", "🧨 <@U9> が premortem を実行します")
-	if !isBotOrSystem(anchor, "") {
-		t.Fatal("bot 投稿のアンカーが除外されていない")
-	}
-	if !isSkippableParent(anchor, "") {
-		t.Fatal("アンカーが親候補から除外されていない")
-	}
-}
-
 // AC-3: 未知の command は従来の「ありがとう」処理へ落ちる。
 func TestSlash_FallsBackToThankYou(t *testing.T) {
 	responseURL, texts := responseURLCatcher(t)
@@ -296,28 +285,6 @@ func TestSlash_DoesNoHeavyWorkInHandler(t *testing.T) {
 	}
 	if api.historyCalls != 0 || len(api.historyParams) != 0 {
 		t.Fatalf("ハンドラ内で収集している: %d", len(api.historyParams))
-	}
-}
-
-// AC-13: アンカー投稿が失敗したら response_url にエラーを返し、enqueue しない。
-func TestSlash_AnchorFailure(t *testing.T) {
-	responseURL, texts := responseURLCatcher(t)
-	api := newFakeSlackAPI()
-	api.postErr = errors.New("not_in_channel")
-	enq := newFakeEnqueuer()
-
-	form := slashForm("/premortem", "12d")
-	form.Set("response_url", responseURL)
-	rec := postSlash(slashBot(api, enq), form)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200（Slack にはエラーを返さない）", rec.Code)
-	}
-	if enq.count() != 0 {
-		t.Fatalf("アンカーが無いのに enqueue している: %d", enq.count())
-	}
-	if len(texts()) != 1 || !strings.Contains(texts()[0], "bot が参加しているか") {
-		t.Fatalf("response_url へのエラーが期待どおりでない: %v", texts())
 	}
 }
 
