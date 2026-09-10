@@ -627,28 +627,10 @@ func oneLine(s string) string {
 
 // ------------------------------------------------------------------ 投稿 ---
 
-// postPremortemMessages はメンションのスレッドへ連投する。トップレベルにも見せたいのは
-// 1 通目だけなので broadcast はそこにしか付けない。
+// postPremortemMessages はメンションのスレッドへ連投する。連投・broadcast の規則は
+// focus と同じなので共有ヘルパに委譲する。
 func (bot Bot) postPremortemMessages(job premortemJob, msgs []premortemMessage) error {
-	for i, msg := range msgs {
-		opts := []slack.MsgOption{
-			slack.MsgOptionText(msg.Text, false),
-			slack.MsgOptionTS(job.MentionTS),
-		}
-		if len(msg.Blocks) > 0 {
-			opts = append(opts, slack.MsgOptionBlocks(msg.Blocks...))
-		}
-		if i == 0 && !job.ThreadOnly {
-			opts = append(opts, slack.MsgOptionBroadcast())
-		}
-		if err := callSlack(func() error {
-			_, _, err := bot.SlackAPI.PostMessage(job.Channel, opts...)
-			return err
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return bot.postThreadMessages(job.Channel, job.MentionTS, job.ThreadOnly, msgs)
 }
 
 // premortemDoneText は受付メッセージの最終形。読んだ範囲を実数で残す。

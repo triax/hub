@@ -1,9 +1,6 @@
 package slackbot
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/slack-go/slack"
 )
 
@@ -33,7 +30,7 @@ func premortemChartMessage(report premortemReport) (premortemMessage, bool) {
 	)}
 	// ポジションが 1 種類しか無い（スレッド単体など）と比較にならないので bar は出さない。
 	if len(report.Stats.Positions) > 1 {
-		if categories, series := premortemPositionSeries(report.Stats); len(series) > 0 {
+		if categories, series := positionSeriesFrom(report.Stats.Positions); len(series) > 0 {
 			blocks = append(blocks, slack.NewDataVisualizationBlock(
 				truncateRunes(premortemBarTitle, focusChartTitleLimit),
 				slack.NewDataVisualizationBarChart(slack.NewDataVisualizationAxisConfig(categories...), series...),
@@ -70,49 +67,6 @@ func riskSegments(report premortemReport) []slack.DataVisualizationSegment {
 	return segments
 }
 
-// premortemPositionSeries は bar の x 軸（ポジション）と 1 本の系列を組む。
-func premortemPositionSeries(stats premortemStats) ([]string, []slack.DataVisualizationDataSeries) {
-	// カテゴリ数の上限を超えるぶんは「その他」に合算する（末尾を切り捨てて数を失わない）。
-	named := stats.Positions
-	other := 0.0
-	if len(named) > focusChartMaxCategorie {
-		named = stats.Positions[:focusChartMaxCategorie-1]
-		for _, position := range stats.Positions[focusChartMaxCategorie-1:] {
-			other += float64(position.Count)
-		}
-	}
-
-	categories := make([]string, 0, focusChartMaxCategorie)
-	counts := make([]float64, 0, focusChartMaxCategorie)
-	seen := map[string]struct{}{}
-	for _, position := range named {
-		label := truncateRunes(chartLabel(position.Label, focusUnknownPosition), focusChartLabelLimit)
-		if _, ok := seen[label]; ok {
-			continue // 切り詰めで衝突したポジションは捨てる（categories は一意でなければならない）
-		}
-		seen[label] = struct{}{}
-		categories = append(categories, label)
-		counts = append(counts, float64(position.Count))
-	}
-	if other > 0 {
-		categories = append(categories, focusChartOtherLabel)
-		counts = append(counts, other)
-	}
-	if len(categories) == 0 {
-		return nil, nil
-	}
-	return categories, []slack.DataVisualizationDataSeries{
-		slack.NewDataVisualizationDataSeries(focusChartPositionName, dataPoints(categories, counts)...)}
-}
-
 func premortemChartFallbackText(segments []slack.DataVisualizationSegment) string {
-	total := 0.0
-	for _, s := range segments {
-		total += s.Value
-	}
-	parts := make([]string, 0, len(segments))
-	for _, s := range segments {
-		parts = append(parts, fmt.Sprintf("%s %.0f%%", s.Label, s.Value/total*100))
-	}
-	return premortemPieTitle + ": " + strings.Join(parts, " / ")
+	return chartFallbackTextWith(premortemPieTitle, segments)
 }

@@ -859,20 +859,26 @@ func (bot Bot) postSummary(job focusJob, chunks []string) error {
 // トップレベルにも見せたいのは 1 通目（focus の digest）だけなので broadcast はそこにしか
 // 付けない。blocks だけの投稿は通知・検索が空になるので Text を必ず併せて渡す。
 func (bot Bot) postFocusMessages(job focusJob, msgs []focusMessage) error {
+	return bot.postThreadMessages(job.Channel, job.MentionTS, job.ThreadOnly, msgs)
+}
+
+// postThreadMessages は「メンションのスレッドへ連投し、1 通目だけ broadcast する」規則。
+// focus / premortem が同じ規則で投稿するのでここに 1 本だけ置く。
+func (bot Bot) postThreadMessages(channel, mentionTS string, threadOnly bool, msgs []focusMessage) error {
 	for i, msg := range msgs {
 		opts := []slack.MsgOption{
 			slack.MsgOptionText(msg.Text, false),
-			slack.MsgOptionTS(job.MentionTS),
+			slack.MsgOptionTS(mentionTS),
 		}
 		if len(msg.Blocks) > 0 {
 			// 空スライスで呼ぶと blocks=[] を送って既存 blocks を消す挙動になるので渡さない。
 			opts = append(opts, slack.MsgOptionBlocks(msg.Blocks...))
 		}
-		if i == 0 && !job.ThreadOnly {
+		if i == 0 && !threadOnly {
 			opts = append(opts, slack.MsgOptionBroadcast())
 		}
 		if err := callSlack(func() error {
-			_, _, err := bot.SlackAPI.PostMessage(job.Channel, opts...)
+			_, _, err := bot.SlackAPI.PostMessage(channel, opts...)
 			return err
 		}); err != nil {
 			return err

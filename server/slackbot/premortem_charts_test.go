@@ -98,31 +98,5 @@ func TestPremortemChartMessage_Empty(t *testing.T) {
 	}
 }
 
-// ポジションが上限を超えたら「その他」に畳み、末尾を切り捨てて数を失わない。
-func TestPremortemPositionSeries_ManyPositions(t *testing.T) {
-	stats := premortemStats{}
-	for i := 0; i < focusChartMaxCategorie+5; i++ {
-		stats.Positions = append(stats.Positions, labelCount{Label: string(rune('A'+i%26)) + string(rune('a'+i/26)), Count: focusChartMaxCategorie + 5 - i})
-	}
-	categories, series := premortemPositionSeries(stats)
-	if len(categories) != focusChartMaxCategorie {
-		t.Fatalf("categories = %d, want %d", len(categories), focusChartMaxCategorie)
-	}
-	if categories[len(categories)-1] != focusChartOtherLabel {
-		t.Fatalf("末尾 = %q, want %q", categories[len(categories)-1], focusChartOtherLabel)
-	}
-	if len(series) != 1 {
-		t.Fatalf("series = %d, want 1", len(series))
-	}
-	total := 0.0
-	for _, p := range series[0].Data {
-		total += p.Value
-	}
-	want := 0.0
-	for _, p := range stats.Positions {
-		want += float64(p.Count)
-	}
-	if total != want {
-		t.Fatalf("合計 = %v, want %v（畳んだぶんを失っている）", total, want)
-	}
-}
+// ポジション上限の「その他」畳み込みは positionSeriesFrom（focus と共有）の責務で、
+// TestFocusChartMessage_ManyPositions が番人になっているのでここでは重ねて検証しない。

@@ -33,12 +33,10 @@ const _ = uint(focusMaxBlocksPerMessage - premortemDigestFixedBlocks - premortem
 // カード番号と一致させるため、兆候が無い点も欠番にせず 1 行残す（#683）。
 const premortemNoSignalLabel = "（試合中の兆候は挙がっていません）"
 
-// premortemMessage は Slack へ 1 通として投稿する単位。
-// Text は通知・検索用のフォールバック（blocks だけだと通知プレビューが空になる）。
-type premortemMessage struct {
-	Text   string
-	Blocks []slack.Block
-}
+// premortemMessage は Slack へ 1 通として投稿する単位。中身は focusMessage と同一
+// （Text は通知・検索用のフォールバック）なので、別の型を立てずに別名にする。
+// premortem 側のコードで focusMessage と書かずに済ませるためだけの名前。
+type premortemMessage = focusMessage
 
 // premortemMessages は 1 通目（チャンネルにも出す負け筋の digest）と、
 // スレッド内に続けるチャート 1 通を組み立てる。
