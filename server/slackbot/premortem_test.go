@@ -106,7 +106,7 @@ func TestNewPremortemJob(t *testing.T) {
 
 // AC-3: task 名は premortem- prefix + ts の `.` を `-` に置換（focus とキューを共用するため）。
 func TestPremortemTaskName(t *testing.T) {
-	job := premortemJob{Channel: "C1", MentionTS: "1725.123456"}
+	job := premortemJob{Channel: "C1", TaskKey: "1725.123456"}
 	if got := premortemTaskName(job); got != "premortem-C1-1725-123456" {
 		t.Fatalf("premortemTaskName = %q", got)
 	}
@@ -343,7 +343,7 @@ func TestPremortem_MultiChannel(t *testing.T) {
 	bot := Bot{SlackAPI: api, ChatGPT: gpt}
 
 	job := premortemJob{Channel: "C1", Sources: []string{"C1", "C2"}, MentionTS: testMentionTS}
-	if err := bot.premortem(t.Context(), job, nil); err != nil {
+	if err := bot.premortem(t.Context(), job, bot.premortemSinkFor(job), nil); err != nil {
 		t.Fatalf("premortem: %v", err)
 	}
 
@@ -374,7 +374,7 @@ func TestPremortem_UnreadableChannelIsReported(t *testing.T) {
 	bot := Bot{SlackAPI: api, ChatGPT: gpt}
 
 	job := premortemJob{Channel: "C1", Sources: []string{"C1", "C2"}, MentionTS: testMentionTS}
-	if err := bot.premortem(t.Context(), job, nil); err != nil {
+	if err := bot.premortem(t.Context(), job, bot.premortemSinkFor(job), nil); err != nil {
 		t.Fatalf("読めないチャンネルで全体が止まっている: %v", err)
 	}
 	notice := ""
@@ -398,7 +398,7 @@ func TestPremortem_AllChannelsUnreadable(t *testing.T) {
 	bot := Bot{SlackAPI: api, ChatGPT: &fakeChatGPT{}}
 
 	job := premortemJob{Channel: "C1", Sources: []string{"C1"}, MentionTS: testMentionTS}
-	if err := bot.premortem(t.Context(), job, nil); err == nil {
+	if err := bot.premortem(t.Context(), job, bot.premortemSinkFor(job), nil); err == nil {
 		t.Fatal("err = nil, want error")
 	}
 }
@@ -449,7 +449,7 @@ func TestPremortem_SplitNotice(t *testing.T) {
 	bot := Bot{SlackAPI: api, ChatGPT: gpt}
 
 	job := premortemJob{Channel: "C1", Sources: []string{"C1"}, MentionTS: testMentionTS}
-	if err := bot.premortem(t.Context(), job, nil); err != nil {
+	if err := bot.premortem(t.Context(), job, bot.premortemSinkFor(job), nil); err != nil {
 		t.Fatalf("premortem: %v", err)
 	}
 	if len(gpt.requests) < 2 {

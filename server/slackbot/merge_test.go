@@ -330,7 +330,7 @@ func TestPremortem_MergeMakesKindDiversityGlobal(t *testing.T) {
 	bot := Bot{SlackAPI: newFakeSlackAPI(), ChatGPT: gpt}
 
 	job := premortemJob{Channel: "C1", Sources: []string{"C1"}, MentionTS: testMentionTS}
-	summary, err := bot.summarizePremortem(t.Context(), job, longThreads(6, 35000), nil)
+	summary, err := bot.summarizePremortem(t.Context(), job, bot.premortemSinkFor(job), longThreads(6, 35000), nil)
 	if err != nil {
 		t.Fatalf("summarizePremortem: %v", err)
 	}

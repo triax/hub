@@ -38,6 +38,8 @@ var (
 type SlackAPI interface {
 	// 使うAPIだけ追加する
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
+	// PostEphemeral は指定ユーザにだけ見えるメッセージを送る（/premortem の配送。#695）
+	PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error)
 	GetUsers(options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUserInfo(user string) (*slack.User, error)
 	GetReactions(item slack.ItemRef, params slack.GetReactionsParameters) (slack.ReactedItem, error)

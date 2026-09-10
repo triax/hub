@@ -72,8 +72,18 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 	}
 	blocks = append(blocks, premortemSignalBlocks(report.Risks)...)
 	return append(blocks, slack.NewDividerBlock(), slack.NewContextBlock("premortem_guide",
-		slack.NewTextBlockObject(slack.MarkdownType,
-			"この試合に負けるとしたら、という前提で立てた仮説です。反論・追加はこのスレッドへ。", false, false)))
+		slack.NewTextBlockObject(slack.MarkdownType, premortemGuide(job), false, false)))
+}
+
+// premortemGuide は 1 通目末尾の案内。ephemeral 配送ではスレッドが無いので
+// 「このスレッドへ」が意味を成さない。共有したいときの導線に差し替える（#695）。
+func premortemGuide(job premortemJob) string {
+	const head = "この試合に負けるとしたら、という前提で立てた仮説です。"
+	if job.Ephemeral {
+		return head + "これはあなただけに見えています。チームに共有するには `@" +
+			BotAssistantName + " premortem` で実行してください。"
+	}
+	return head + "反論・追加はこのスレッドへ。"
 }
 
 // premortemTitle は見出し。対象試合が引けなければ期間ラベルに落とすが、処理は止めない。

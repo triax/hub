@@ -114,11 +114,12 @@ type fakeSlackAPI struct {
 	// conversations.info が返すチャンネル（翻訳元の名前を決める）
 	channelInfo *slack.Channel
 
-	posted   []sentMessage
-	updated  []sentMessage
-	added    []string
-	removed  []string
-	postedTS int
+	posted    []sentMessage
+	ephemeral []sentMessage // PostEphemeral の宛先は Timestamp に user_id を入れて持つ
+	updated   []sentMessage
+	added     []string
+	removed   []string
+	postedTS  int
 
 	postErr error
 }
@@ -139,6 +140,20 @@ func (f *fakeSlackAPI) PostMessage(channelID string, options ...slack.MsgOption)
 	f.postedTS++
 	f.posted = append(f.posted, sentMessage{Channel: channelID, Values: applyMsgOptions(channelID, options...)})
 	return channelID, fmt.Sprintf("900.%06d", f.postedTS), nil
+}
+
+// PostEphemeral は「打った人だけに見える」投稿。宛先ユーザは検査したいので
+// sentMessage.Timestamp に載せる（ephemeral は ts を返さないため空いている）。
+func (f *fakeSlackAPI) PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.postErr != nil {
+		return "", f.postErr
+	}
+	f.ephemeral = append(f.ephemeral, sentMessage{
+		Channel: channelID, Timestamp: userID, Values: applyMsgOptions(channelID, options...),
+	})
+	return "", nil
 }
 
 func (f *fakeSlackAPI) UpdateMessage(channelID, timestamp string, options ...slack.MsgOption) (string, string, string, error) {
