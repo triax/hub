@@ -211,9 +211,12 @@ _provision() {
   # オフセットをファイルに記録（他の env との衝突検出用、teardown で workdir ごと削除される）
   echo "$offset" > "${workdir}/offset"
 
-  # id に対応する worktree があれば、そのソースを使う（なければ main リポジトリ）
+  # id に対応する worktree があれば、そのソースを使う（なければ main リポジトリ）。
+  # 探索先は CLAUDE.md の規約（Worktrees must be created under .claude/worktrees/）に合わせる。
+  # ここが規約とずれていると、候補が永遠に見つからず main のコードで env が起動し、
+  # しかも ready:true が返るので consumer は気づけない（#692）。
   local source_root="${REPO_ROOT}"
-  local worktree_candidate="${REPO_ROOT}/.worktrees/${id}"
+  local worktree_candidate="${REPO_ROOT}/.claude/worktrees/${id}"
   if [[ -d "$worktree_candidate" ]]; then
     source_root="$worktree_candidate"
     # worktree に必要なシンボリックリンクを補完する
@@ -300,7 +303,7 @@ _provision() {
   DATASTORE_DATASET="${PROJECT_ID}" \
   DATASTORE_EMULATOR_HOST_PATH="localhost:${ds_port}/datastore" \
   DATASTORE_HOST="http://localhost:${ds_port}" \
-    go run "${source_root}/main.go" \
+    sh -c 'cd "$1" && exec go run "$1/main.go"' _ "${source_root}" \
     > "${workdir}/api.log" 2>&1 &
   echo $! > "${workdir}/api.pid"
 
@@ -339,11 +342,13 @@ _provision() {
   # local-user.json の sub（Slack ID）を取得してメンバーページの URL を構築
   local local_user_id
   local_user_id=$(python3 -c \
-    "import json; d=json.load(open('${REPO_ROOT}/server/filters/local-user.json')); print(d['openid']['sub'])" \
+    "import json; d=json.load(open('${source_root}/server/filters/local-user.json')); print(d['openid']['sub'])" \
     2>/dev/null || echo "unknown")
 
-  printf '{"ready":true,"id":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"accounts":{"dev_user":{"email":"local-dev-auto","secret_ref":"server/filters/local-user.json","verified":true}},"fixtures":{"my-member-page":{"url":"http://localhost:%s/members/%s","notes":"local-user.json のメンバー詳細ページ (isOwnPage=true)"}},"diagnostics":[],"notes":"LocalDev mode: 認証は server/filters/local-user.json から自動注入"}\n' \
-    "$id" "$vite_port" "$api_port" "$ds_port" "$vite_port" "$local_user_id"
+  # source_root を出力に含める。どのソースで起動したかが consumer から見えないと、
+  # worktree の発見に失敗しても ready:true に紛れて気づけない（#692 で実際に起きた）。
+  printf '{"ready":true,"id":"%s","source_root":"%s","endpoints":{"app":"http://localhost:%s","api":"http://localhost:%s/api/1","datastore":"http://localhost:%s"},"accounts":{"dev_user":{"email":"local-dev-auto","secret_ref":"server/filters/local-user.json","verified":true}},"fixtures":{"my-member-page":{"url":"http://localhost:%s/members/%s","notes":"local-user.json のメンバー詳細ページ (isOwnPage=true)"}},"diagnostics":[],"notes":"LocalDev mode: 認証は server/filters/local-user.json から自動注入"}\n' \
+    "$id" "$source_root" "$vite_port" "$api_port" "$ds_port" "$vite_port" "$local_user_id"
 }
 
 # --------------------------------------------------------------- teardown ---
