@@ -227,13 +227,21 @@ func (f *fakeSlackAPI) OpenConversation(*slack.OpenConversationParameters) (*sla
 type fakeChatGPT struct {
 	requests []ChatRequest
 	reply    string
-	err      error
+	// replies は呼び出しごとに違う応答を返したいとき用（分割 + 2 段目 reduce の検証）。
+	// 設定されていれば先頭から順に消費し、尽きたら reply に戻る。
+	replies []string
+	err     error
 }
 
 func (f *fakeChatGPT) Chat(_ context.Context, req ChatRequest) (string, error) {
 	f.requests = append(f.requests, req)
 	if f.err != nil {
 		return "", f.err
+	}
+	if len(f.replies) > 0 {
+		reply := f.replies[0]
+		f.replies = f.replies[1:]
+		return reply, nil
 	}
 	return f.reply, nil
 }

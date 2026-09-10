@@ -682,6 +682,10 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	if !structured {
 		return summary, nil
 	}
+	if len(groups) > 1 {
+		// 塊ごとに出た重複を名寄せしてから数える（#688）。1 塊なら 2 段目は呼ばない。
+		digest = bot.mergeFocusDigest(ctx, digest)
+	}
 	report := rankThemes(digest, few)
 	// focus が 0 件だと 1 通目に見出しと案内しか残らず読み手に何も渡らないので、
 	// LLM の生出力をそのまま見せる平文フォールバックに倒す。
@@ -693,8 +697,27 @@ func (bot Bot) summarize(ctx context.Context, job focusJob, threads []playThread
 	return summary, nil
 }
 
+// mergeFocusDigest は分割で重複して挙がったテーマを名寄せする（#688）。
+// 2 段目には key のグルーピングだけさせ、title / summary / quote といった本文は
+// 1 段目の出力をそのまま使う（merge.go の原則）。
+func (bot Bot) mergeFocusDigest(ctx context.Context, d focusDigest) focusDigest {
+	mapping := bot.mergeCandidateKeys(ctx, toMergeCandidates(d.Themes, func(theme focusTheme) mergeCandidate {
+		return mergeCandidate{Key: theme.Key, Title: theme.Title, Label: theme.Label}
+	}))
+	if len(mapping) == 0 {
+		return d
+	}
+	d.Themes = keepCanonical(d.Themes, func(t focusTheme) string { return t.Key }, mapping)
+	for i := range d.Plays {
+		d.Plays[i].ThemeKeys = canonicalKeys(d.Plays[i].ThemeKeys, mapping)
+	}
+	log.Printf("[focus] 分割で重複した候補 %d 件を名寄せしました", len(mapping))
+	return d
+}
+
 // splitThreadsForPrompt は入力が文脈長に収まる限り 1 塊のまま返す。
-// stellar:debt(scope) 分割時は focus が塊ごとに出て 3〜5 点に収束しない。upgrade: 2 段目 reduce
+// 分割された場合、塊どうしは互いを見ていないので同じ課題が別 key で重複して挙がる。
+// それは mergeFocusDigest（#688 の 2 段目）が名寄せしてから rankThemes に渡す。
 func splitThreadsForPrompt(threads []playThread, budget int) [][]playThread {
 	sizes := make([]int, len(threads))
 	total := 0
