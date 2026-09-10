@@ -32,7 +32,7 @@ func (bot Bot) SlashCommands(w http.ResponseWriter, req *http.Request) {
 	}
 
 	switch req.Form.Get("command") {
-	case "/premortem", "/passion":
+	case "/premortem":
 		bot.onSlashPremortem(w, req)
 	default:
 		// コマンド名を判定に使わず既定へ落とす。既存の「ありがとう」を壊さないため。

@@ -213,7 +213,7 @@ func (bot Bot) onMentionPremortem(event slackevents.AppMentionEvent, args []stri
 	bot.startPremortem(args, event.Channel, event.TimeStamp, event.ThreadTimeStamp)
 }
 
-// onSlashPremortem は `/premortem`（と alias の `/passion`）の入口。
+// onSlashPremortem は `/premortem` の入口。
 //
 // slash command のペイロードには ts が無い（そもそもメッセージではないので）。premortem の
 // 下流は「起動したメッセージ」の ts に全部ぶら下がっている — 👀 のリアクション、受付

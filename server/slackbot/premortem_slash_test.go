@@ -55,54 +55,73 @@ func slashBot(api *fakeSlackAPI, enq *fakeEnqueuer) Bot {
 	return Bot{VerificationToken: testSlashToken, SlackAPI: api, ChatGPT: &fakeChatGPT{}, Enqueuer: enq}
 }
 
-// AC-1 / AC-2 / AC-4 / AC-12: /premortem と /passion がアンカーを 1 通出し、その ts で enqueue する。
+// AC-1 / AC-4 / AC-12: /premortem がアンカーを 1 通出し、その ts で enqueue する。
 func TestSlash_Premortem(t *testing.T) {
-	for _, command := range []string{"/premortem", "/passion"} {
-		t.Run(command, func(t *testing.T) {
-			api := newFakeSlackAPI()
-			enq := newFakeEnqueuer()
-			rec := postSlash(slashBot(api, enq), slashForm(command, "12d"))
+	api := newFakeSlackAPI()
+	enq := newFakeEnqueuer()
+	rec := postSlash(slashBot(api, enq), slashForm("/premortem", "12d"))
 
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200", rec.Code)
-			}
-			if body := rec.Body.String(); body != "" {
-				t.Fatalf("body = %q, want 空（可視のフィードバックはアンカー投稿が担う）", body)
-			}
-			// AC-4: アンカー投稿が 1 通
-			if len(api.posted) != 1 {
-				t.Fatalf("posted = %d, want アンカー 1 通", len(api.posted))
-			}
-			anchor := api.posted[0]
-			if anchor.Channel != "C1" || !strings.Contains(anchor.Text(), "<@U9>") {
-				t.Fatalf("アンカー投稿が期待どおりでない: %+v", anchor)
-			}
-			if anchor.ThreadTS() != "" {
-				t.Fatal("アンカーはトップレベルに出す（スレッド返信にしない）")
-			}
-			// 👀 が付く
-			if joined(api.added) != focusReactionWorking {
-				t.Fatalf("👀 が付いていない: %v", api.added)
-			}
-			// AC-1 / AC-2: enqueue
-			if enq.count() != 1 {
-				t.Fatalf("enqueue = %d, want 1", enq.count())
-			}
-			if enq.uris[0] != PremortemTaskURI {
-				t.Fatalf("uri = %q, want %q", enq.uris[0], PremortemTaskURI)
-			}
-			job := premortemJob{}
-			if err := json.Unmarshal([]byte(enq.bodies[0]), &job); err != nil {
-				t.Fatalf("payload: %v", err)
-			}
-			// AC-4: アンカーの ts が MentionTS になる
-			if job.MentionTS != "900.000001" {
-				t.Fatalf("MentionTS = %q, want アンカーの ts", job.MentionTS)
-			}
-			if job.Channel != "C1" || job.ThreadOnly {
-				t.Fatalf("job = %+v", job)
-			}
-		})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); body != "" {
+		t.Fatalf("body = %q, want 空（可視のフィードバックはアンカー投稿が担う）", body)
+	}
+	// AC-4: アンカー投稿が 1 通
+	if len(api.posted) != 1 {
+		t.Fatalf("posted = %d, want アンカー 1 通", len(api.posted))
+	}
+	anchor := api.posted[0]
+	if anchor.Channel != "C1" || !strings.Contains(anchor.Text(), "<@U9>") {
+		t.Fatalf("アンカー投稿が期待どおりでない: %+v", anchor)
+	}
+	if anchor.ThreadTS() != "" {
+		t.Fatal("アンカーはトップレベルに出す（スレッド返信にしない）")
+	}
+	// 👀 が付く
+	if joined(api.added) != focusReactionWorking {
+		t.Fatalf("👀 が付いていない: %v", api.added)
+	}
+	// AC-1: enqueue
+	if enq.count() != 1 {
+		t.Fatalf("enqueue = %d, want 1", enq.count())
+	}
+	if enq.uris[0] != PremortemTaskURI {
+		t.Fatalf("uri = %q, want %q", enq.uris[0], PremortemTaskURI)
+	}
+	job := premortemJob{}
+	if err := json.Unmarshal([]byte(enq.bodies[0]), &job); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	// AC-4: アンカーの ts が MentionTS になる
+	if job.MentionTS != "900.000001" {
+		t.Fatalf("MentionTS = %q, want アンカーの ts", job.MentionTS)
+	}
+	if job.Channel != "C1" || job.ThreadOnly {
+		t.Fatalf("job = %+v", job)
+	}
+}
+
+// AC-2: `/passion` は alias にしない（#691 で廃止）。premortem を起動せず、
+// 未知の command として既定（ありがとう）へ落ちる。復活させないための番人。
+func TestSlash_PassionIsNotAnAlias(t *testing.T) {
+	responseURL, texts := responseURLCatcher(t)
+	api := newFakeSlackAPI()
+	enq := newFakeEnqueuer()
+
+	form := slashForm("/passion", "12d")
+	form.Set("response_url", responseURL)
+	postSlash(slashBot(api, enq), form)
+
+	if enq.count() != 0 {
+		t.Fatalf("/passion で premortem が起動している: %d 件 enqueue", enq.count())
+	}
+	if len(api.posted) != 0 {
+		t.Fatalf("アンカーが投稿されている: %+v", api.posted)
+	}
+	// 既定（ありがとう）に落ちる。メンションが無いので使い方の案内が返る
+	if len(texts()) != 1 || !strings.Contains(texts()[0], "メンションで指定") {
+		t.Fatalf("既定の command に落ちていない: %v", texts())
 	}
 }
 
