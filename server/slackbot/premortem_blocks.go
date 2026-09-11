@@ -61,7 +61,7 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(premortemTitle(job, game, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("premortem_meta", slack.NewTextBlockObject(
-			slack.MarkdownType, premortemMeta(job, threads), false, false)),
+			slack.MarkdownType, premortemMeta(job, threads, now), false, false)),
 		premortemTOCBlock(report.Risks),
 	)
 
@@ -77,13 +77,45 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 
 // premortemGuide は 1 通目末尾の案内。ephemeral 配送ではスレッドが無いので
 // 「このスレッドへ」が意味を成さない。共有したいときの導線に差し替える（#695）。
+//
+// 冒頭で射程を言い切る（#697）。メタ行にもチャンネルは出るが、あちらは数字が主で
+// 読み飛ばされる。読み手が「試合そのものの予測」として受け取ると、スコープの切られた
+// チャンネルから出た仮説に納得できない。どこから出た話なのかは、出力の受け取り方を
+// 書くこの場所に要る。
 func premortemGuide(job premortemJob) string {
-	const head = "この試合に負けるとしたら、という前提で立てた仮説です。"
+	head := premortemScopeNotice(job) + "この試合に負けるとしたら、という前提で立てた仮説です。"
 	if job.Ephemeral {
 		return head + "これはあなただけに見えています。チームに共有するには `@" +
 			BotAssistantName + " premortem` で実行してください。"
 	}
 	return head + "反論・追加はこのスレッドへ。"
+}
+
+// premortemScopeNotice は射程の申告。収集元を名指しして「ここに書かれていないことは
+// 入っていない」と言う。収集元が引けないときは黙って省く（嘘を書くよりは何も言わない）。
+func premortemScopeNotice(job premortemJob) string {
+	refs := premortemChannelRefs(job)
+	if refs == "" {
+		return ""
+	}
+	if job.ThreadOnly {
+		return "この premortem は " + refs + " のこのスレッドに書かれたことだけを材料にしています。"
+	}
+	return "この premortem は " + refs + " に書かれたことだけを材料にしています。"
+}
+
+// premortemChannelRefs は収集元チャンネルの参照。Slack は mrkdwn の `<#C0ABCDEF>` を
+// クライアント側で `#名前` に描くので、名前を引く API 呼び出しは要らない。
+// 上限は premortemMaxSourceChannels（5）なので切り詰めない。どのチャンネルが入ったかが
+// 射程そのもので、省いたら申告にならない（#697 決定 3）。
+func premortemChannelRefs(job premortemJob) string {
+	refs := make([]string, 0, len(job.Sources))
+	for _, id := range job.Sources {
+		if id = strings.TrimSpace(id); id != "" {
+			refs = append(refs, "<#"+id+">")
+		}
+	}
+	return strings.Join(refs, " ")
 }
 
 // premortemTitle は見出し。対象試合が引けなければ期間ラベルに落とすが、処理は止めない。
@@ -97,13 +129,23 @@ func premortemTitle(job premortemJob, game string, now time.Time) string {
 	return focusRangeLabel(job.focusJobFor(job.Channel), now) + " の premortem"
 }
 
-func premortemMeta(job premortemJob, threads []playThread) string {
+// premortemMeta は見出し直下のメタ行。「どこの・いつの・何件から」を出す。
+// 対象試合が引けてヘッダが試合名になると、期間はここにしか出ない。逆に引けないときは
+// ヘッダと期間が重複するが、条件付きで省くと「射程の書かれない出力」が生まれるので
+// 常に出す（#697 決定 1）。
+//
+// ThreadOnly のときは日付範囲を出さない。スレッドは時間窓で切っていないので、
+// 範囲を書くと読み手に嘘をつくことになる（#697 決定 2）。
+func premortemMeta(job premortemJob, threads []playThread, now time.Time) string {
 	plays, _, replies := countThreadKinds(threads)
+	head := premortemChannelRefs(job)
 	if job.ThreadOnly {
-		return fmt.Sprintf("このスレッドの %d 件の返信から", replies)
+		return joinNonEmpty([]string{head, fmt.Sprintf("このスレッドの %d 件の返信から", replies)}, " ")
 	}
-	return fmt.Sprintf("%d チャンネル · %d プレー / %d 件の反省と資料から",
-		len(job.Sources), plays, replies)
+	span := focusRangeLabel(job.focusJobFor(job.Channel), now)
+	return joinNonEmpty([]string{
+		head, span, fmt.Sprintf("%d プレー / %d 件の反省と資料から", plays, replies),
+	}, " · ")
 }
 
 // premortemTOCBlock は「何点あるのか・どれが重いのか」を先頭で読ませる目次。

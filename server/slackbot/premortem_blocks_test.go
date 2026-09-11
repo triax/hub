@@ -242,3 +242,118 @@ func TestPremortem_TOCBlock(t *testing.T) {
 		t.Fatal("目次に kind が漏れている")
 	}
 }
+
+// AC-1 / AC-2 / AC-3: メタ行が「どこの・いつの・何件から」を申告する。
+// 読み手は試合名の見出しから「試合そのものの予測」を期待して読むので、
+// 実際には 1 チャンネルの反省から出た仮説だと分かる必要がある（#697）。
+func TestPremortemMeta_DeclaresScope(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	job := premortemTestJob()
+	job.Oldest = time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC).Unix()
+
+	got := premortemMeta(job, playThreads(8), now)
+	if !strings.Contains(got, "<#C1>") {
+		t.Fatalf("メタ行に収集元チャンネルが無い: %q", got)
+	}
+	if !strings.Contains(got, focusRangeLabel(job.focusJobFor(job.Channel), now)) {
+		t.Fatalf("メタ行に期間が無い: %q", got)
+	}
+
+	// AC-2: 複数 source は切り詰めず全件出す。どのチャンネルが入ったかが射程そのもの。
+	job.Sources = []string{"C1", "C2", "C3"}
+	got = premortemMeta(job, playThreads(8), now)
+	for _, want := range []string{"<#C1>", "<#C2>", "<#C3>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("メタ行に %s が無い: %q", want, got)
+		}
+	}
+}
+
+// AC-3: 対象試合が引けずヘッダが期間ラベルに落ちても、メタ行の期間は省かない。
+// 条件次第で射程の書かれない出力が生まれるほうが害が大きい（#697 決定 1）。
+func TestPremortemMeta_KeepsSpanWhenHeaderFallsBack(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	job := premortemTestJob()
+	job.Oldest = time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC).Unix()
+	span := focusRangeLabel(job.focusJobFor(job.Channel), now)
+
+	body := blocksJSON(t, premortemDigestBlocks(job, playThreads(8), "", now, premortemSampleReport(t)))
+	if n := strings.Count(body, span); n < 2 {
+		t.Fatalf("期間 %q の出現 = %d, want 2 以上（ヘッダとメタ行の両方）: %s", span, n, body)
+	}
+}
+
+// AC-4: スレッド単体では日付範囲を出さない。スレッドは時間窓で切っていないので、
+// 範囲を書くと読み手に嘘をつくことになる（#697 決定 2）。
+func TestPremortemMeta_ThreadOnlyHasNoDateSpan(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	job := premortemTestJob()
+	job.ThreadOnly = true
+	job.Oldest = time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC).Unix()
+
+	got := premortemMeta(job, playThreads(8), now)
+	if !strings.Contains(got, "<#C1>") {
+		t.Fatalf("スレッド単体のメタ行に収集元チャンネルが無い: %q", got)
+	}
+	if strings.Contains(got, "〜") {
+		t.Fatalf("スレッド単体なのに日付範囲が出ている: %q", got)
+	}
+}
+
+// AC-5: 案内文の冒頭で射程を言い切る。メタ行は数字が主で読み飛ばされるので、
+// 「この出力をどう受け取るか」を書くこの場所にも要る（#697 決定 4）。
+func TestPremortemGuide_DeclaresScope(t *testing.T) {
+	job := premortemTestJob()
+	job.Sources = []string{"C1", "C2"}
+
+	mention := premortemGuide(job)
+	job.Ephemeral = true
+	ephemeral := premortemGuide(job)
+
+	for name, got := range map[string]string{"mention": mention, "ephemeral": ephemeral} {
+		if !strings.HasPrefix(got, "この premortem は <#C1> <#C2> に書かれたことだけを材料にしています。") {
+			t.Fatalf("%s の案内が射程で始まっていない: %q", name, got)
+		}
+		if !strings.Contains(got, "この試合に負けるとしたら") {
+			t.Fatalf("%s の案内から前提の説明が消えている: %q", name, got)
+		}
+	}
+	// 既存の分岐はそのまま残す
+	if !strings.HasSuffix(mention, "反論・追加はこのスレッドへ。") {
+		t.Fatalf("mention の誘導が消えている: %q", mention)
+	}
+	if !strings.Contains(ephemeral, "あなただけに見えています") {
+		t.Fatalf("ephemeral の注記が消えている: %q", ephemeral)
+	}
+}
+
+// AC-6: 射程の申告は既存 context ブロックの中身を変えるだけで、ブロック数を増やさない。
+func TestPremortem_DigestBlocks_CountUnchanged(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	want := premortemDigestFixedBlocks + premortemMaxRisks*premortemBlocksPerRisk
+
+	for _, tc := range []struct {
+		name string
+		job  premortemJob
+	}{
+		{"単一チャンネル", premortemTestJob()},
+		{"複数チャンネル", func() premortemJob {
+			j := premortemTestJob()
+			j.Sources = []string{"C1", "C2", "C3", "C4", "C5"}
+			return j
+		}()},
+		{"スレッド単体", func() premortemJob {
+			j := premortemTestJob()
+			j.ThreadOnly = true
+			return j
+		}()},
+	} {
+		blocks := premortemDigestBlocks(tc.job, playThreads(8), "9/21(日) vs A", now, premortemSampleReport(t))
+		if len(blocks) != want {
+			t.Fatalf("%s: block 数 = %d, want %d", tc.name, len(blocks), want)
+		}
+		if len(blocks) > focusMaxBlocksPerMessage {
+			t.Fatalf("%s: block 数 = %d, Slack の上限 %d を超えている", tc.name, len(blocks), focusMaxBlocksPerMessage)
+		}
+	}
+}
