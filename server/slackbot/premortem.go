@@ -597,15 +597,40 @@ func premortemSystemPrompt(few bool, pc premortemPromptContext) string {
 // 落ちても premortem は壊れない。相手の情報は上乗せであって土台ではないので、
 // opponent が空になれば描画は scenario だけに戻る（#698 大原則）。
 func dropUnbackedOpponents(risks []premortemRisk, corpus string) []premortemRisk {
-	haystack := normalizeForQuoteMatch(corpus)
+	// 相手の材料が無いチャンネルのほうが常態（#698 大原則）。1 件も引用が無いなら
+	// corpus（最大で focusPromptRuneBudget 分）を正規化する意味がないので省く。
+	//
+	// 省くのは haystack の生成だけで、**主張を落とす走査は必ず回す**。引用が無いことは
+	// 根拠が無いことなので、opponent は落とさなければならない（空の haystack に対しては
+	// どんな引用も見つからないので、下のループがそのまま正しく落とす）。
+	haystack := ""
+	if anyOpponentQuote(risks) {
+		haystack = normalizeForQuoteMatch(corpus)
+	}
 	for i := range risks {
 		quote := normalizeForQuoteMatch(risks[i].OpponentQuote)
 		if quote == "" || !strings.Contains(haystack, quote) {
-			risks[i].Opponent = ""
-			risks[i].OpponentQuote = ""
+			risks[i] = risks[i].clearOpponent()
 		}
 	}
 	return risks
+}
+
+func anyOpponentQuote(risks []premortemRisk) bool {
+	for _, r := range risks {
+		if r.OpponentQuote != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// clearOpponent は相手軸の主張を取り下げる。根拠（OpponentQuote）も必ず道連れにする —
+// 片方だけ残ると、後段が「根拠のある主張だ」と誤認する。
+func (r premortemRisk) clearOpponent() premortemRisk {
+	r.Opponent = ""
+	r.OpponentQuote = ""
+	return r
 }
 
 // normalizeForQuoteMatch は逐語照合の前処理。空白・改行の差だけは吸収するが、それ以上は

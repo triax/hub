@@ -64,6 +64,9 @@ func TestDedupeOpponents(t *testing.T) {
 		{premortemRisk: premortemRisk{Key: "c", Opponent: "相手のセカンダリは 3 人", OpponentQuote: "q3"}},
 	}
 	got := dedupeOpponents(risks)
+	if risks[1].Opponent == "" {
+		t.Fatal("渡した slice が書き換えられている（間引きは描画用のコピーに対して行う）")
+	}
 	if got[0].Opponent == "" {
 		t.Fatal("順位が上の 1 件目が落ちている")
 	}
@@ -80,17 +83,41 @@ func TestDedupeOpponents(t *testing.T) {
 // AC-12: 相手の前提は scenario の頭に連結して 1 段落にする。ラベルも専用ブロックも付けない。
 // 枠を作ると、材料が「あるが薄い」ときに空席が見えてしまう（#698 決定 2）。
 func TestPremortemRiskBody_ConcatenatesOpponent(t *testing.T) {
-	r := rankedRisk{premortemRisk: premortemRisk{
-		Opponent: "相手は 3rd&long でスクリーンが多い",
-		Scenario: "対してこちらは LB が前を見られていない。",
-	}}
-	got := premortemRiskBody(r)
-	want := "相手は 3rd&long でスクリーンが多い。対してこちらは LB が前を見られていない。"
-	if got != want {
-		t.Fatalf("本文 =\n %q\nwant\n %q", got, want)
-	}
-	if strings.Contains(got, "相手:") {
-		t.Fatalf("ラベルが出ている（案 B を採らなかったのに）: %q", got)
+	for _, tc := range []struct {
+		name     string
+		opponent string
+		scenario string
+		want     string
+	}{
+		{
+			name:     "相手軸があれば頭に連結する",
+			opponent: "相手は 3rd&long でスクリーンが多い",
+			scenario: "対してこちらは LB が前を見られていない。",
+			want:     "相手は 3rd&long でスクリーンが多い。対してこちらは LB が前を見られていない。",
+		},
+		{
+			// AC-18: 材料ゼロなら scenario だけが残り、現行と同じ見た目に戻る（#698 大原則）
+			name:     "相手軸が無ければ scenario だけ",
+			scenario: "こちらは LB が前を見られていない。",
+			want:     "こちらは LB が前を見られていない。",
+		},
+		{
+			name:     "scenario が空なら相手軸だけ",
+			opponent: "相手はランが中心",
+			want:     "相手はランが中心。",
+		},
+		{name: "両方空なら空"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rankedRisk{premortemRisk: premortemRisk{Opponent: tc.opponent, Scenario: tc.scenario}}
+			got := premortemRiskBody(r)
+			if got != tc.want {
+				t.Fatalf("本文 =\n %q\nwant\n %q", got, tc.want)
+			}
+			if strings.Contains(got, "相手:") {
+				t.Fatalf("ラベルが出ている（案 B を採らなかったのに）: %q", got)
+			}
+		})
 	}
 }
 
@@ -144,14 +171,15 @@ func TestPremortemGuide_InvitesWhenNoOpponent(t *testing.T) {
 	}
 }
 
-func TestHasOpponentBasis(t *testing.T) {
+func TestAnyRisk(t *testing.T) {
+	opponent := func(r rankedRisk) string { return r.Opponent }
 	none := []rankedRisk{{premortemRisk: premortemRisk{Key: "a"}}, {premortemRisk: premortemRisk{Key: "b"}}}
-	if hasOpponentBasis(none) {
+	if anyRisk(none, opponent) {
 		t.Fatal("全件空なのに true")
 	}
 	some := append([]rankedRisk{}, none...)
 	some[1].Opponent = "相手はランが中心"
-	if !hasOpponentBasis(some) {
+	if !anyRisk(some, opponent) {
 		t.Fatal("1 件あるのに false")
 	}
 }
@@ -176,18 +204,7 @@ func TestPremortem_StandsWithoutOpponent(t *testing.T) {
 	if bareTypes != oppTypes {
 		t.Fatalf("opponent の有無でブロック構成が変わった:\n なし=%s\n あり=%s", bareTypes, oppTypes)
 	}
-	if len(bareBlocks) != premortemDigestFixedBlocks+premortemMaxRisks*premortemBlocksPerRisk {
-		t.Fatalf("block 数 = %d, want %d", len(bareBlocks),
-			premortemDigestFixedBlocks+premortemMaxRisks*premortemBlocksPerRisk)
-	}
-
-	// AC-18: 本文が scenario だけで構成され、先頭に余分な区切りが残らない
-	for i, r := range bare.Risks {
-		got := premortemRiskBody(r)
-		if got != r.Scenario {
-			t.Fatalf("risks[%d]: opponent が無いのに本文が scenario と違う:\n got=%q\nwant=%q", i, got, r.Scenario)
-		}
-	}
+	// ブロック数そのものは TestPremortem_DigestBlocks_CountUnchanged が見ている。
 	body := blocksJSON(t, bareBlocks)
 	if strings.Contains(body, "相手:") {
 		t.Fatalf("opponent が無いのに相手のラベルが出ている: %s", body)
@@ -283,32 +300,6 @@ func TestPremortemPromptContextFor_SurvivesInfoFailure(t *testing.T) {
 	}
 	if got := premortemSystemPrompt(false, pc); !strings.HasPrefix(got, "あなたはアメリカン") {
 		t.Fatalf("プロンプトが壊れている:\n%s", got[:120])
-	}
-}
-
-// AC-6: schema に opponent / opponent_quote が required で入る（strict なので空文字許容）。
-func TestPremortemReportSchema_HasOpponentFields(t *testing.T) {
-	risks, ok := premortemReportSchema["properties"].(map[string]any)["risks"].(map[string]any)
-	if !ok {
-		t.Fatal("schema の risks を読めない")
-	}
-	item := risks["items"].(map[string]any)
-	props := item["properties"].(map[string]any)
-	required, _ := item["required"].([]any)
-
-	for _, field := range []string{"opponent", "opponent_quote"} {
-		if _, ok := props[field]; !ok {
-			t.Fatalf("schema に %s が無い", field)
-		}
-		found := false
-		for _, r := range required {
-			if r == field {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("%s が required に入っていない（strict では全 property が required）", field)
-		}
 	}
 }
 

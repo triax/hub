@@ -208,7 +208,8 @@ func TestPremortemReportSchema(t *testing.T) {
 	risk := props["risks"].(map[string]any)["items"].(map[string]any)
 	assertStrict(t, risk, "risks[]")
 	riskProps := risk["properties"].(map[string]any)
-	for _, key := range []string{"key", "kind", "title", "label", "scenario", "phase", "unit", "signal", "prevent", "positions", "quote"} {
+	for _, key := range []string{"key", "kind", "title", "label", "opponent", "opponent_quote",
+		"scenario", "phase", "unit", "signal", "prevent", "positions", "quote"} {
 		if _, ok := riskProps[key]; !ok {
 			t.Fatalf("risks[] に %q が無い", key)
 		}

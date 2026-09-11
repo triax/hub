@@ -59,24 +59,29 @@ func premortemMessages(job premortemJob, threads []playThread, game string, now 
 // 違うから。予防策はコーチが今週の練習を組むときに読み、兆候はサイドラインの担当者が
 // 試合中に見る。同じカードに混ぜるとどちらの用途でも余計な行を読み飛ばすことになる（#683 案D）。
 func premortemDigestBlocks(job premortemJob, threads []playThread, game string, now time.Time, report premortemReport) []slack.Block {
-	blocks := make([]slack.Block, 0, premortemDigestFixedBlocks+len(report.Risks)*premortemBlocksPerRisk)
+	// 間引きは表示の都合なので、描画用のコピーに対して行う。premortemReport は
+	// 「何が採用されたか」を持つ型で、そこに描画の判断を焼き付けない（#698 決定 8）。
+	risks := dedupeOpponents(report.Risks)
+
+	blocks := make([]slack.Block, 0, premortemDigestFixedBlocks+len(risks)*premortemBlocksPerRisk)
 	blocks = append(blocks,
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(premortemTitle(job, game, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("premortem_meta", slack.NewTextBlockObject(
 			slack.MarkdownType, premortemMeta(job, threads, now), false, false)),
-		premortemTOCBlock(report.Risks),
+		premortemTOCBlock(risks),
 	)
 
-	showUnit := premortemUnitsSpan(report.Risks)
+	showUnit := premortemUnitsSpan(risks)
 	total := totalRiskCount(report.Stats)
-	for i, r := range report.Risks {
+	for i, r := range risks {
 		blocks = append(blocks, premortemRiskBlocks(i, r, total, showUnit)...)
 	}
-	blocks = append(blocks, premortemSignalBlocks(report.Risks)...)
+	blocks = append(blocks, premortemSignalBlocks(risks)...)
 	return append(blocks, slack.NewDividerBlock(), slack.NewContextBlock("premortem_guide",
 		slack.NewTextBlockObject(slack.MarkdownType,
-			premortemGuide(job, hasOpponentBasis(report.Risks)), false, false)))
+			premortemGuide(job, anyRisk(risks, func(r rankedRisk) string { return r.Opponent })),
+			false, false)))
 }
 
 // premortemGuide は 1 通目末尾の案内。ephemeral 配送ではスレッドが無いので
@@ -109,10 +114,34 @@ func premortemOpponentInvite(hasOpponent bool) string {
 	return "相手の資料をこのチャンネルに貼ると、相手を踏まえた見立てになります。"
 }
 
-// hasOpponentBasis は採用された負け筋のどれかが相手側の前提を持っているか。
-func hasOpponentBasis(risks []rankedRisk) bool {
+// dedupeOpponents は同じ相手の前提が複数のカードで繰り返されるのを防ぐ。同じ一文が 2 枚に
+// 出ると、読み手には新しい情報が増えたように見えて増えていない。順位が上のカードにだけ残す。
+//
+// **描画用のコピーを返し、渡された slice は書き換えない**。LLM に「重複させるな」と
+// 指示しないのは、横断的な調整を頼むと数えさせることになるから（#658 の原則）。
+func dedupeOpponents(risks []rankedRisk) []rankedRisk {
+	out := make([]rankedRisk, len(risks))
+	copy(out, risks)
+
+	seen := map[string]bool{}
+	for i := range out {
+		key := normalizeForQuoteMatch(out[i].Opponent)
+		if key == "" {
+			continue
+		}
+		if seen[key] {
+			out[i].premortemRisk = out[i].clearOpponent()
+			continue
+		}
+		seen[key] = true
+	}
+	return out
+}
+
+// anyRisk は採用された負け筋のどれかが get の返す値を持っているか。
+func anyRisk(risks []rankedRisk, get func(rankedRisk) string) bool {
 	for _, r := range risks {
-		if r.Opponent != "" {
+		if get(r) != "" {
 			return true
 		}
 	}
@@ -298,7 +327,7 @@ func premortemRiskMeta(r rankedRisk, total int, showUnit bool) string {
 // 全部の兆候を 1 ブロックに集める。番号はカードの番号と一致する（兆候の無い点も欠番にしない）。
 // 全点に兆候が無いときは、見出しごと出さない（空の rich_text_list は invalid_blocks）。
 func premortemSignalBlocks(risks []rankedRisk) []slack.Block {
-	if !hasAnySignal(risks) {
+	if !anyRisk(risks, func(r rankedRisk) string { return r.Signal }) {
 		return nil
 	}
 	items := make([]slack.RichTextElement, 0, len(risks))
@@ -321,15 +350,6 @@ func premortemSignalBlocks(risks []rankedRisk) []slack.Block {
 		slack.NewRichTextBlock("premortem_signals",
 			slack.NewRichTextList(slack.RTEListOrdered, 0, items...)),
 	}
-}
-
-func hasAnySignal(risks []rankedRisk) bool {
-	for _, r := range risks {
-		if r.Signal != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func totalRiskCount(stats premortemStats) int {
