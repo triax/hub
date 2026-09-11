@@ -417,13 +417,13 @@ func (bot Bot) collectPremortem(job premortemJob, sink premortemSink, now time.T
 		if e != nil {
 			// not_in_channel 等。読めなかったチャンネルを記録して次へ。
 			lastErr = e
-			unreadable = append(unreadable, "<#"+channel+">")
+			unreadable = append(unreadable, channelMention(channel))
 			continue
 		}
 		expanded, e := bot.expandThreads(sub, parents, sink.Progress)
 		if e != nil {
 			lastErr = e
-			unreadable = append(unreadable, "<#"+channel+">")
+			unreadable = append(unreadable, channelMention(channel))
 			continue
 		}
 		threads = append(threads, expanded...)
@@ -699,7 +699,12 @@ func premortemDoneText(job premortemJob, threads []playThread, now time.Time, el
 		focusElapsedLabel(elapsed))
 }
 
-// premortemHeader は平文フォールバック用の見出し。
+// premortemHeader は平文フォールバック用の見出し。構造化に失敗した経路でも射程は申告する
+// （#697）。ここを抜かすと、最も質の落ちた出力だけが自分の射程を名乗らないことになる。
 func premortemHeader(job premortemJob, threads []playThread, game string, now time.Time) string {
-	return "*" + premortemTitle(job, game, now) + "*"
+	head := "*" + premortemTitle(job, game, now) + "*"
+	if notice := premortemScopeNotice(job); notice != "" {
+		return head + "\n" + notice
+	}
+	return head
 }

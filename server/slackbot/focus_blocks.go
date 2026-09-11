@@ -338,6 +338,12 @@ func focusPlayElements(p focusPlay) []slack.RichTextSectionElement {
 	return elements
 }
 
+// channelMention は Slack のチャンネル参照。mrkdwn の `<#C0ABCDEF>` はクライアント側で
+// `#名前` に描かれるので、名前を引く API 呼び出しは要らない。
+func channelMention(id string) string {
+	return "<#" + id + ">"
+}
+
 func joinNonEmpty(values []string, sep string) string {
 	kept := make([]string, 0, len(values))
 	for _, v := range values {

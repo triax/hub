@@ -478,3 +478,18 @@ func TestPremortemFewTargets(t *testing.T) {
 		t.Fatal("閾値未満で few になっていない")
 	}
 }
+
+// 構造化に失敗した平文フォールバックでも射程は申告する。ここを抜かすと、
+// 最も質の落ちた出力だけが自分の射程を名乗らないことになる（#697）。
+func TestPremortemHeader_DeclaresScope(t *testing.T) {
+	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	job := premortemJob{Channel: "C1", Sources: []string{"C1", "C2"}, MentionTS: testMentionTS}
+
+	got := premortemHeader(job, nil, "9/21(日) vs A", now)
+	if !strings.HasPrefix(got, "*9/21(日) vs A の premortem*\n") {
+		t.Fatalf("見出しが崩れている: %q", got)
+	}
+	if !strings.Contains(got, "<#C1> <#C2> に書かれたことだけを材料にしています") {
+		t.Fatalf("平文フォールバックに射程の申告が無い: %q", got)
+	}
+}
