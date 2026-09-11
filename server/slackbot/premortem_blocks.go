@@ -12,6 +12,9 @@ import (
 const (
 	// 1 通目の負け筋 1 点あたりの文字数。読み飛ばされない長さに抑える。
 	premortemScenarioRuneLimit = 120
+	// 相手側の前提は 1 文。scenario と足しても section が 3 行を大きく超えないよう、
+	// scenario とは独立に切り詰める（まとめて切ると文の途中で切れる）。
+	premortemOpponentRuneLimit = 100
 	premortemPreventRuneLimit  = 120
 	premortemSignalRuneLimit   = 160
 )
@@ -72,7 +75,8 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 	}
 	blocks = append(blocks, premortemSignalBlocks(report.Risks)...)
 	return append(blocks, slack.NewDividerBlock(), slack.NewContextBlock("premortem_guide",
-		slack.NewTextBlockObject(slack.MarkdownType, premortemGuide(job), false, false)))
+		slack.NewTextBlockObject(slack.MarkdownType,
+			premortemGuide(job, hasOpponentBasis(report.Risks)), false, false)))
 }
 
 // premortemGuide は 1 通目末尾の案内。ephemeral 配送ではスレッドが無いので
@@ -82,13 +86,37 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 // 読み飛ばされる。読み手が「試合そのものの予測」として受け取ると、スコープの切られた
 // チャンネルから出た仮説に納得できない。どこから出た話なのかは、出力の受け取り方を
 // 書くこの場所に要る。
-func premortemGuide(job premortemJob) string {
+func premortemGuide(job premortemJob, hasOpponent bool) string {
 	head := premortemScopeNotice(job) + "この試合に負けるとしたら、という前提で立てた仮説です。"
 	if job.Ephemeral {
-		return head + "これはあなただけに見えています。チームに共有するには `@" +
+		head += "これはあなただけに見えています。チームに共有するには `@" +
 			BotAssistantName + " premortem` で実行してください。"
+	} else {
+		head += "反論・追加はこのスレッドへ。"
 	}
-	return head + "反論・追加はこのスレッドへ。"
+	return head + premortemOpponentInvite(hasOpponent)
+}
+
+// premortemOpponentInvite は相手の材料が 1 件も無かったときの誘い。
+//
+// 「見当たりませんでした」のような欠落の報告にはしない（#698 決定 4）。欠落を詫びる書き方は
+// 「相手情報が無い premortem は不完全だ」という含意を持ち、上乗せであって土台ではないという
+// 大原則と矛盾する。ここは警告ではなく案内なので、context ブロックの小さい文字のまま置く。
+func premortemOpponentInvite(hasOpponent bool) string {
+	if hasOpponent {
+		return ""
+	}
+	return "相手の資料をこのチャンネルに貼ると、相手を踏まえた見立てになります。"
+}
+
+// hasOpponentBasis は採用された負け筋のどれかが相手側の前提を持っているか。
+func hasOpponentBasis(risks []rankedRisk) bool {
+	for _, r := range risks {
+		if r.Opponent != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // premortemScopeNotice は射程の申告。収集元を名指しして「ここに書かれていないことは
@@ -179,8 +207,8 @@ func premortemTOCMeta(r rankedRisk) string {
 func premortemRiskBlocks(i int, r rankedRisk, total int, showUnit bool) []slack.Block {
 	// 見出しと概要は別々に切り詰める（まとめて切ると太字の `*` を落として markdown が壊れる）。
 	head := fmt.Sprintf("*%d. %s*", i+1, truncateRunes(r.Title, focusHeaderRuneLimit))
-	if r.Scenario != "" {
-		head += "\n" + truncateRunes(r.Scenario, premortemScenarioRuneLimit)
+	if body := premortemRiskBody(r); body != "" {
+		head += "\n" + body
 	}
 	blocks := []slack.Block{
 		slack.NewDividerBlock(),
@@ -195,6 +223,34 @@ func premortemRiskBlocks(i int, r rankedRisk, total int, showUnit bool) []slack.
 			slack.NewTextBlockObject(slack.MarkdownType, meta, false, false)))
 	}
 	return blocks
+}
+
+// premortemRiskBody は負け筋カードの本文。相手側の前提（Opponent）を Scenario の頭に
+// 連結して 1 段落にする。**ラベルも専用ブロックも付けない**（#698 決定 2 = 案 E）。
+//
+// 専用の枠を用意すると、枠そのものが期待値を作る。相手の材料が「あるが薄い」ときに
+// 見出しの下が 1 行だけ、という空席が見えてしまい、同じ情報量でも悪く読める。
+// 連結なら、材料が厚ければ段落が長くなり、薄ければ 1 文増えるだけ、無ければ Scenario だけが
+// 残って現行とまったく同じ見た目に戻る（#698 大原則: 相手の情報は上乗せであって土台ではない）。
+func premortemRiskBody(r rankedRisk) string {
+	parts := []string{}
+	if r.Opponent != "" {
+		parts = append(parts, endSentence(truncateRunes(r.Opponent, premortemOpponentRuneLimit)))
+	}
+	if r.Scenario != "" {
+		parts = append(parts, truncateRunes(r.Scenario, premortemScenarioRuneLimit))
+	}
+	return strings.Join(parts, "")
+}
+
+// endSentence は文末に句点が無ければ足す。Opponent と Scenario を空白なしで連結するので、
+// 句点が無いと 2 文が地続きに見える（日本語は語間に空白を置かないため）。
+func endSentence(s string) string {
+	if s == "" || strings.HasSuffix(s, "。") || strings.HasSuffix(s, "！") ||
+		strings.HasSuffix(s, "？") || strings.HasSuffix(s, ".") {
+		return s
+	}
+	return s + "。"
 }
 
 // premortemPreventItems は「今週やること」。空のリストは invalid_blocks で弾かれるので、

@@ -69,8 +69,32 @@ func rankRisks(d premortemDigest, few bool) premortemReport {
 		// 全リスクが 1 件以下。0 件にするより順位のまま見せるほうが役に立つ。
 		risks = pickRisks(d, order, counts, limit, 1)
 	}
+	risks = dedupeOpponents(risks)
 
 	return premortemReport{Risks: risks, Plays: d.Plays, Stats: buildPremortemStats(d, order, counts)}
+}
+
+// dedupeOpponents は、採用された負け筋のあいだで同じ相手の前提が繰り返されるのを防ぐ。
+// 同じ一文が 2 枚のカードに出ると、読み手には新しい情報が増えたように見えて増えていない。
+//
+// **採用が確定した後に呼ぶ**（#698 決定 8）。候補の段階で消すと件数の集計と順位付けが狂う。
+// 間引きは表示の都合であって、順位の都合ではない。LLM に「重複させるな」と指示しないのは、
+// 横断的な調整を頼むと数えさせることになるから（#658 の原則）。
+func dedupeOpponents(risks []rankedRisk) []rankedRisk {
+	seen := map[string]bool{}
+	for i := range risks {
+		key := normalizeForQuoteMatch(risks[i].Opponent)
+		if key == "" {
+			continue
+		}
+		if seen[key] {
+			risks[i].Opponent = ""
+			risks[i].OpponentQuote = ""
+			continue
+		}
+		seen[key] = true
+	}
+	return risks
 }
 
 // pickRisks は order の順に minCount 件以上のリスクを limit 件まで採る。
@@ -122,6 +146,8 @@ func normalizeRisk(risk premortemRisk) premortemRisk {
 	risk.Kind = normalizeRiskKind(risk.Kind)
 	risk.Title = strings.TrimSpace(risk.Title)
 	risk.Label = premortemRiskLabel(risk)
+	risk.Opponent = strings.TrimSpace(risk.Opponent)
+	risk.OpponentQuote = strings.TrimSpace(risk.OpponentQuote)
 	risk.Scenario = strings.TrimSpace(risk.Scenario)
 	risk.Phase = strings.TrimSpace(risk.Phase)
 	risk.Unit = strings.TrimSpace(risk.Unit)

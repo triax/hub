@@ -113,6 +113,8 @@ type fakeSlackAPI struct {
 	conversations []slack.Channel
 	// conversations.info が返すチャンネル（翻訳元の名前を決める）
 	channelInfo *slack.Channel
+	// channelInfoByID は premortem の複数チャンネル用。設定されていれば ID で引く。
+	channelInfoByID map[string]*slack.Channel
 
 	posted    []sentMessage
 	ephemeral []sentMessage // PostEphemeral の宛先は Timestamp に user_id を入れて持つ
@@ -229,7 +231,13 @@ func (f *fakeSlackAPI) GetConversations(*slack.GetConversationsParameters) ([]sl
 	return f.conversations, "", nil
 }
 
-func (f *fakeSlackAPI) GetConversationInfo(*slack.GetConversationInfoInput) (*slack.Channel, error) {
+func (f *fakeSlackAPI) GetConversationInfo(in *slack.GetConversationInfoInput) (*slack.Channel, error) {
+	if f.channelInfoByID != nil {
+		if ch, ok := f.channelInfoByID[in.ChannelID]; ok {
+			return ch, nil
+		}
+		return nil, fmt.Errorf("channel not found: %s", in.ChannelID)
+	}
 	if f.channelInfo == nil {
 		return nil, fmt.Errorf("channel not found")
 	}
