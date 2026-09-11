@@ -94,25 +94,28 @@ func premortemGuide(job premortemJob) string {
 // premortemScopeNotice は射程の申告。収集元を名指しして「ここに書かれていないことは
 // 入っていない」と言う。収集元が引けないときは黙って省く（嘘を書くよりは何も言わない）。
 func premortemScopeNotice(job premortemJob) string {
-	refs := premortemChannelRefs(job)
-	if refs == "" {
+	scope := premortemChannelRefs(job)
+	if scope == "" {
 		return ""
 	}
 	if job.ThreadOnly {
-		return "この premortem は " + refs + " のこのスレッドに書かれたことだけを材料にしています。"
+		scope += " のこのスレッド"
 	}
-	return "この premortem は " + refs + " に書かれたことだけを材料にしています。"
+	return "この premortem は " + scope + " に書かれたことだけを材料にしています。"
 }
 
-// premortemChannelRefs は収集元チャンネルの参照。Slack は mrkdwn の `<#C0ABCDEF>` を
-// クライアント側で `#名前` に描くので、名前を引く API 呼び出しは要らない。
-// 上限は premortemMaxSourceChannels（5）なので切り詰めない。どのチャンネルが入ったかが
-// 射程そのもので、省いたら申告にならない（#697 決定 3）。
+// premortemChannelRefs は収集元チャンネルの参照。上限は premortemMaxSourceChannels（5）
+// なので切り詰めない。どのチャンネルが入ったかが射程そのもので、省いたら申告にならない
+// （#697 決定 3）。
+//
+// 空の ID を捨てるのは、job が Cloud Tasks の JSON を復元したものだから。組み立て時
+// （newPremortemJob の uniqueStrings）は空を通さないが、payload を信用しきって `<#>` を
+// 描くと読み手に壊れた参照を見せることになる。
 func premortemChannelRefs(job premortemJob) string {
 	refs := make([]string, 0, len(job.Sources))
 	for _, id := range job.Sources {
 		if id = strings.TrimSpace(id); id != "" {
-			refs = append(refs, "<#"+id+">")
+			refs = append(refs, channelMention(id))
 		}
 	}
 	return strings.Join(refs, " ")

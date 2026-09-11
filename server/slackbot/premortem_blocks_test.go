@@ -336,7 +336,7 @@ func TestPremortem_DigestBlocks_CountUnchanged(t *testing.T) {
 		name string
 		job  premortemJob
 	}{
-		{"単一チャンネル", premortemTestJob()},
+		// 単一チャンネルは TestPremortem_DigestBlocks_PlanD が block 型の並びごと見ている。
 		{"複数チャンネル", func() premortemJob {
 			j := premortemTestJob()
 			j.Sources = []string{"C1", "C2", "C3", "C4", "C5"}
