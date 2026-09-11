@@ -122,6 +122,8 @@ func normalizeRisk(risk premortemRisk) premortemRisk {
 	risk.Kind = normalizeRiskKind(risk.Kind)
 	risk.Title = strings.TrimSpace(risk.Title)
 	risk.Label = premortemRiskLabel(risk)
+	risk.Opponent = strings.TrimSpace(risk.Opponent)
+	risk.OpponentQuote = strings.TrimSpace(risk.OpponentQuote)
 	risk.Scenario = strings.TrimSpace(risk.Scenario)
 	risk.Phase = strings.TrimSpace(risk.Phase)
 	risk.Unit = strings.TrimSpace(risk.Unit)

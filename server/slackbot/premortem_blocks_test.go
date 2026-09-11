@@ -306,9 +306,9 @@ func TestPremortemGuide_DeclaresScope(t *testing.T) {
 	job := premortemTestJob()
 	job.Sources = []string{"C1", "C2"}
 
-	mention := premortemGuide(job)
+	mention := premortemGuide(job, true)
 	job.Ephemeral = true
-	ephemeral := premortemGuide(job)
+	ephemeral := premortemGuide(job, true)
 
 	for name, got := range map[string]string{"mention": mention, "ephemeral": ephemeral} {
 		if !strings.HasPrefix(got, "この premortem は <#C1> <#C2> に書かれたことだけを材料にしています。") {

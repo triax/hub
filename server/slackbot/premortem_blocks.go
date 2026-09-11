@@ -12,6 +12,9 @@ import (
 const (
 	// 1 通目の負け筋 1 点あたりの文字数。読み飛ばされない長さに抑える。
 	premortemScenarioRuneLimit = 120
+	// 相手側の前提は 1 文。scenario と足しても section が 3 行を大きく超えないよう、
+	// scenario とは独立に切り詰める（まとめて切ると文の途中で切れる）。
+	premortemOpponentRuneLimit = 100
 	premortemPreventRuneLimit  = 120
 	premortemSignalRuneLimit   = 160
 )
@@ -56,23 +59,29 @@ func premortemMessages(job premortemJob, threads []playThread, game string, now 
 // 違うから。予防策はコーチが今週の練習を組むときに読み、兆候はサイドラインの担当者が
 // 試合中に見る。同じカードに混ぜるとどちらの用途でも余計な行を読み飛ばすことになる（#683 案D）。
 func premortemDigestBlocks(job premortemJob, threads []playThread, game string, now time.Time, report premortemReport) []slack.Block {
-	blocks := make([]slack.Block, 0, premortemDigestFixedBlocks+len(report.Risks)*premortemBlocksPerRisk)
+	// 間引きは表示の都合なので、描画用のコピーに対して行う。premortemReport は
+	// 「何が採用されたか」を持つ型で、そこに描画の判断を焼き付けない（#698 決定 8）。
+	risks := dedupeOpponents(report.Risks)
+
+	blocks := make([]slack.Block, 0, premortemDigestFixedBlocks+len(risks)*premortemBlocksPerRisk)
 	blocks = append(blocks,
 		slack.NewHeaderBlock(slack.NewTextBlockObject(
 			slack.PlainTextType, truncateRunes(premortemTitle(job, game, now), focusHeaderRuneLimit), false, false)),
 		slack.NewContextBlock("premortem_meta", slack.NewTextBlockObject(
 			slack.MarkdownType, premortemMeta(job, threads, now), false, false)),
-		premortemTOCBlock(report.Risks),
+		premortemTOCBlock(risks),
 	)
 
-	showUnit := premortemUnitsSpan(report.Risks)
+	showUnit := premortemUnitsSpan(risks)
 	total := totalRiskCount(report.Stats)
-	for i, r := range report.Risks {
+	for i, r := range risks {
 		blocks = append(blocks, premortemRiskBlocks(i, r, total, showUnit)...)
 	}
-	blocks = append(blocks, premortemSignalBlocks(report.Risks)...)
+	blocks = append(blocks, premortemSignalBlocks(risks)...)
 	return append(blocks, slack.NewDividerBlock(), slack.NewContextBlock("premortem_guide",
-		slack.NewTextBlockObject(slack.MarkdownType, premortemGuide(job), false, false)))
+		slack.NewTextBlockObject(slack.MarkdownType,
+			premortemGuide(job, anyRisk(risks, func(r rankedRisk) string { return r.Opponent })),
+			false, false)))
 }
 
 // premortemGuide は 1 通目末尾の案内。ephemeral 配送ではスレッドが無いので
@@ -82,13 +91,61 @@ func premortemDigestBlocks(job premortemJob, threads []playThread, game string, 
 // 読み飛ばされる。読み手が「試合そのものの予測」として受け取ると、スコープの切られた
 // チャンネルから出た仮説に納得できない。どこから出た話なのかは、出力の受け取り方を
 // 書くこの場所に要る。
-func premortemGuide(job premortemJob) string {
+func premortemGuide(job premortemJob, hasOpponent bool) string {
 	head := premortemScopeNotice(job) + "この試合に負けるとしたら、という前提で立てた仮説です。"
 	if job.Ephemeral {
-		return head + "これはあなただけに見えています。チームに共有するには `@" +
+		head += "これはあなただけに見えています。チームに共有するには `@" +
 			BotAssistantName + " premortem` で実行してください。"
+	} else {
+		head += "反論・追加はこのスレッドへ。"
 	}
-	return head + "反論・追加はこのスレッドへ。"
+	return head + premortemOpponentInvite(hasOpponent)
+}
+
+// premortemOpponentInvite は相手の材料が 1 件も無かったときの誘い。
+//
+// 「見当たりませんでした」のような欠落の報告にはしない（#698 決定 4）。欠落を詫びる書き方は
+// 「相手情報が無い premortem は不完全だ」という含意を持ち、上乗せであって土台ではないという
+// 大原則と矛盾する。ここは警告ではなく案内なので、context ブロックの小さい文字のまま置く。
+func premortemOpponentInvite(hasOpponent bool) string {
+	if hasOpponent {
+		return ""
+	}
+	return "相手の資料をこのチャンネルに貼ると、相手を踏まえた見立てになります。"
+}
+
+// dedupeOpponents は同じ相手の前提が複数のカードで繰り返されるのを防ぐ。同じ一文が 2 枚に
+// 出ると、読み手には新しい情報が増えたように見えて増えていない。順位が上のカードにだけ残す。
+//
+// **描画用のコピーを返し、渡された slice は書き換えない**。LLM に「重複させるな」と
+// 指示しないのは、横断的な調整を頼むと数えさせることになるから（#658 の原則）。
+func dedupeOpponents(risks []rankedRisk) []rankedRisk {
+	out := make([]rankedRisk, len(risks))
+	copy(out, risks)
+
+	seen := map[string]bool{}
+	for i := range out {
+		key := normalizeForQuoteMatch(out[i].Opponent)
+		if key == "" {
+			continue
+		}
+		if seen[key] {
+			out[i].premortemRisk = out[i].clearOpponent()
+			continue
+		}
+		seen[key] = true
+	}
+	return out
+}
+
+// anyRisk は採用された負け筋のどれかが get の返す値を持っているか。
+func anyRisk(risks []rankedRisk, get func(rankedRisk) string) bool {
+	for _, r := range risks {
+		if get(r) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // premortemScopeNotice は射程の申告。収集元を名指しして「ここに書かれていないことは
@@ -179,8 +236,8 @@ func premortemTOCMeta(r rankedRisk) string {
 func premortemRiskBlocks(i int, r rankedRisk, total int, showUnit bool) []slack.Block {
 	// 見出しと概要は別々に切り詰める（まとめて切ると太字の `*` を落として markdown が壊れる）。
 	head := fmt.Sprintf("*%d. %s*", i+1, truncateRunes(r.Title, focusHeaderRuneLimit))
-	if r.Scenario != "" {
-		head += "\n" + truncateRunes(r.Scenario, premortemScenarioRuneLimit)
+	if body := premortemRiskBody(r); body != "" {
+		head += "\n" + body
 	}
 	blocks := []slack.Block{
 		slack.NewDividerBlock(),
@@ -195,6 +252,34 @@ func premortemRiskBlocks(i int, r rankedRisk, total int, showUnit bool) []slack.
 			slack.NewTextBlockObject(slack.MarkdownType, meta, false, false)))
 	}
 	return blocks
+}
+
+// premortemRiskBody は負け筋カードの本文。相手側の前提（Opponent）を Scenario の頭に
+// 連結して 1 段落にする。**ラベルも専用ブロックも付けない**（#698 決定 2 = 案 E）。
+//
+// 専用の枠を用意すると、枠そのものが期待値を作る。相手の材料が「あるが薄い」ときに
+// 見出しの下が 1 行だけ、という空席が見えてしまい、同じ情報量でも悪く読める。
+// 連結なら、材料が厚ければ段落が長くなり、薄ければ 1 文増えるだけ、無ければ Scenario だけが
+// 残って現行とまったく同じ見た目に戻る（#698 大原則: 相手の情報は上乗せであって土台ではない）。
+func premortemRiskBody(r rankedRisk) string {
+	parts := []string{}
+	if r.Opponent != "" {
+		parts = append(parts, endSentence(truncateRunes(r.Opponent, premortemOpponentRuneLimit)))
+	}
+	if r.Scenario != "" {
+		parts = append(parts, truncateRunes(r.Scenario, premortemScenarioRuneLimit))
+	}
+	return strings.Join(parts, "")
+}
+
+// endSentence は文末に句点が無ければ足す。Opponent と Scenario を空白なしで連結するので、
+// 句点が無いと 2 文が地続きに見える（日本語は語間に空白を置かないため）。
+func endSentence(s string) string {
+	if s == "" || strings.HasSuffix(s, "。") || strings.HasSuffix(s, "！") ||
+		strings.HasSuffix(s, "？") || strings.HasSuffix(s, ".") {
+		return s
+	}
+	return s + "。"
 }
 
 // premortemPreventItems は「今週やること」。空のリストは invalid_blocks で弾かれるので、
@@ -242,7 +327,7 @@ func premortemRiskMeta(r rankedRisk, total int, showUnit bool) string {
 // 全部の兆候を 1 ブロックに集める。番号はカードの番号と一致する（兆候の無い点も欠番にしない）。
 // 全点に兆候が無いときは、見出しごと出さない（空の rich_text_list は invalid_blocks）。
 func premortemSignalBlocks(risks []rankedRisk) []slack.Block {
-	if !hasAnySignal(risks) {
+	if !anyRisk(risks, func(r rankedRisk) string { return r.Signal }) {
 		return nil
 	}
 	items := make([]slack.RichTextElement, 0, len(risks))
@@ -265,15 +350,6 @@ func premortemSignalBlocks(risks []rankedRisk) []slack.Block {
 		slack.NewRichTextBlock("premortem_signals",
 			slack.NewRichTextList(slack.RTEListOrdered, 0, items...)),
 	}
-}
-
-func hasAnySignal(risks []rankedRisk) bool {
-	for _, r := range risks {
-		if r.Signal != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func totalRiskCount(stats premortemStats) int {

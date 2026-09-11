@@ -102,7 +102,14 @@ type premortemRisk struct {
 	Title string `json:"title"`
 	// Label は目次と pie の凡例に出す短い名詞句（#681 と同じ理由で Title とは別に持つ）。
 	Label string `json:"label"`
-	// Scenario はどう崩れるかの 1〜2 文。
+	// Opponent は相手側の前提を述べた 1 文。材料が無ければ空。**相手の情報は上乗せであって
+	// premortem の土台ではない**（#698 大原則）ので、空でも出力は成立しなければならない。
+	Opponent string `json:"opponent"`
+	// OpponentQuote は Opponent の根拠になった入力の原文。プロンプトに渡した平文に逐語で
+	// 現れなければ Opponent ごと落とす（#698 決定 3・決定 10）。
+	OpponentQuote string `json:"opponent_quote"`
+	// Scenario はどう崩れるかの 1〜2 文。Opponent に続けて読んで意味が通る形で書かせるが、
+	// Opponent が落ちても単体で成立する。
 	Scenario string `json:"scenario"`
 	// Phase は局面（3rd&long / レッドゾーン等）。チャンネルからは決まらないので常に描く。
 	Phase string `json:"phase"`
@@ -144,14 +151,16 @@ func enumField(values ...string) map[string]any {
 
 var premortemReportSchema = strictObject(map[string]any{
 	"risks": arrayOf(strictObject(map[string]any{
-		"key":      stringField(),
-		"kind":     enumField(premortemKinds...),
-		"title":    stringField(),
-		"label":    stringField(),
-		"scenario": stringField(),
-		"phase":    stringField(),
-		"unit":     stringField(),
-		"signal":   stringField(),
+		"key":            stringField(),
+		"kind":           enumField(premortemKinds...),
+		"title":          stringField(),
+		"label":          stringField(),
+		"opponent":       stringField(),
+		"opponent_quote": stringField(),
+		"scenario":       stringField(),
+		"phase":          stringField(),
+		"unit":           stringField(),
+		"signal":         stringField(),
 		// prevent の件数は strict schema（minItems / maxItems 非対応）では縛れない。
 		"prevent":   arrayOf(stringField()),
 		"positions": arrayOf(stringField()),
@@ -351,12 +360,16 @@ func (bot Bot) premortem(ctx context.Context, job premortemJob, sink premortemSi
 		return nil
 	}
 
-	summary, err := bot.summarizePremortem(ctx, job, sink, threads, resolve)
+	// 相手とチャンネルのスコープは**要約より先に**引く。ここが後段だと LLM は相手が誰かを
+	// 知らないまま負け筋を挙げることになり、どの対戦相手でも同じ出力になる（#698）。
+	pc := bot.premortemPromptContextFor(ctx, job, now)
+
+	summary, err := bot.summarizePremortem(ctx, job, sink, threads, resolve, pc)
 	if err != nil {
 		return err
 	}
 
-	game := bot.upcomingGame(ctx, now)
+	game := pc.Game
 	msgs := []premortemMessage{}
 	if summary.Report != nil {
 		msgs = premortemMessages(job, threads, game, now, *summary.Report)
@@ -436,6 +449,51 @@ func (bot Bot) collectPremortem(job premortemJob, sink premortemSink, now time.T
 
 // ------------------------------------------------------------------ 対象試合 ---
 
+// premortemPromptContext は要約プロンプトに渡す「入力の外側」の文脈。次の試合が誰で、
+// いま読んでいるのがどのスコープのチャンネルか。#683 では対象試合を見出し用の表示名としか
+// 扱っておらず、要約の後に引いていたため、LLM は相手が誰かもチャンネルがどこかも
+// 知らないまま負け筋を挙げていた（#698）。
+//
+// どちらも引けないことがある（試合が無い / bot がチャンネル情報を読めない）ので、
+// 空でもプロンプトが成立する形にしておく。
+type premortemPromptContext struct {
+	// Game は対象試合の表示名。相手名の切り出しはしない（#698 決定 9）。
+	Game string
+	// Scope は打たれたチャンネルの名前。ここがスコープを規定する。
+	Scope string
+	// Extras は追加 source チャンネルの名前。参考として読んでいるもの。
+	Extras []string
+}
+
+// premortemPromptContextFor は対象試合とチャンネル名を集める。どちらの失敗も premortem を
+// 止めない（相手軸が薄くなるだけで、premortem 自体は成立する = #698 大原則）。
+func (bot Bot) premortemPromptContextFor(ctx context.Context, job premortemJob, now time.Time) premortemPromptContext {
+	pc := premortemPromptContext{
+		Game:  bot.upcomingGame(ctx, now),
+		Scope: bot.channelName(job.Channel),
+	}
+	for _, id := range job.Sources {
+		if id == job.Channel {
+			continue
+		}
+		if name := bot.channelName(id); name != "" {
+			pc.Extras = append(pc.Extras, "#"+name)
+		}
+	}
+	return pc
+}
+
+// channelName はチャンネル ID から名前を引く。読めなければ空文字を返す（描画側の
+// `<#C…>` と違い、プロンプトには ID を見せても意味が無いので落とす）。
+func (bot Bot) channelName(id string) string {
+	ch, err := bot.SlackAPI.GetConversationInfo(&slack.GetConversationInfoInput{ChannelID: id})
+	if err != nil {
+		log.Println("[premortem] GetConversationInfo:", err)
+		return ""
+	}
+	return ch.Name
+}
+
 // upcomingGame は見出しに出す「次の試合」の表示名。引けなければ空文字を返し、
 // premortem は期間ラベルにフォールバックして最後まで走る（#683）。
 func (bot Bot) upcomingGame(ctx context.Context, now time.Time) string {
@@ -465,12 +523,12 @@ func weekdayJA(t time.Time) string {
 // premortemSystemPrompt は死因の洗い出しの指示。出力の「形」は premortemReportSchema が
 // 縛るので、ここには「中身」の指示だけを書く。順位付けと件数の集計は premortem_rank.go の
 // 仕事なので、「繰り返しを優先しろ」「件数を数えろ」の類は書かない（#658 の原則）。
-func premortemSystemPrompt(few bool) string {
+func premortemSystemPrompt(few bool, pc premortemPromptContext) string {
 	risks := "4〜8 個"
 	if few {
 		risks = "最大 3 個"
 	}
-	return `あなたはアメリカンフットボールチームのコーチ補佐です。
+	return premortemPromptPreamble(pc) + `あなたはアメリカンフットボールチームのコーチ補佐です。
 次の試合は終わり、チームは負けました。あなたはその翌日に「なぜ負けたか」を振り返っています。
 入力は Slack に投稿された「練習の投稿とその反省スレッド」と、そこに貼られた資料です。
 [投稿] 行が投稿本文、[投稿・返信なし] 行は返信の付いていない投稿、その下の "- 名前: 本文" が
@@ -503,7 +561,16 @@ func premortemSystemPrompt(few bool) string {
 - key は負け筋を識別する短い英小文字のスラッグ（例: "ol_slide_late"）。plays から参照するので一意にする。
 - title は 1 行の見出し。誰が・どの局面で・何が起きるかが分かる形にする。
 - label は目次と凡例に出す 14 文字以内の短い名詞句（例: "3rd&long の被サック"）。title を要約したものにする。
+- opponent は相手側の前提を 1 文で。**入力に根拠があるときだけ書く**。無ければ空文字。
+  「相手は強い」「走を止められないと苦しい」のような、相手が誰でも成立する一般論は書かない。
+  相手の情報は上乗せであって、premortem の土台ではない。材料が無いなら空文字のままでよく、
+  埋めるために推測しない。
+- opponent_quote は opponent の根拠になった入力の原文から 20〜40 文字をそのまま抜く
+  （要約しない・言い換えない）。opponent が空なら空文字。**この引用が入力に見つからなければ
+  opponent は破棄される**ので、必ず原文どおりに写す。
 - scenario はどう崩れるかを 1〜2 文で。根拠になった観察を含める。
+  opponent がある負け筋では、opponent に続けて読んで意味が通るように書く（「対してこちらは…」
+  「こちらは…」）。ただし opponent が落ちても単体で文として成立させる。
 - phase は崩れる局面（例: "3rd&long" "レッドゾーン" "前半の 1st down" "2 ミニッツ" "キッキング"）。
   特定できなければ空文字。
 - unit は OF / DF / ST のいずれか。特定できなければ空文字。
@@ -520,9 +587,85 @@ func premortemSystemPrompt(few bool) string {
 - @channel や @here を含む告知、「ナイスオフェンス！！」のような感想はプレーとして扱わない。`
 }
 
+// dropUnbackedOpponents は、根拠の裏が取れない相手軸を落とす。
+//
+// 相手名で照合しない。カレンダーのイベントタイトルは `#試合 vs A` 形式で、`#試合` を剥がして
+// 残る `vs A` が Slack 上の呼び方（略称・愛称）と一致する保証が無い。名前を検索語にすると、
+// 材料があるのに空振りして相手軸が消える。代わりに opponent_quote（入力からの逐語抜き）が
+// corpus に在るかを見る（#698 決定 3）。
+//
+// 落ちても premortem は壊れない。相手の情報は上乗せであって土台ではないので、
+// opponent が空になれば描画は scenario だけに戻る（#698 大原則）。
+func dropUnbackedOpponents(risks []premortemRisk, corpus string) []premortemRisk {
+	// 相手の材料が無いチャンネルのほうが常態（#698 大原則）。1 件も引用が無いなら
+	// corpus（最大で focusPromptRuneBudget 分）を正規化する意味がないので省く。
+	//
+	// 省くのは haystack の生成だけで、**主張を落とす走査は必ず回す**。引用が無いことは
+	// 根拠が無いことなので、opponent は落とさなければならない（空の haystack に対しては
+	// どんな引用も見つからないので、下のループがそのまま正しく落とす）。
+	haystack := ""
+	if anyOpponentQuote(risks) {
+		haystack = normalizeForQuoteMatch(corpus)
+	}
+	for i := range risks {
+		quote := normalizeForQuoteMatch(risks[i].OpponentQuote)
+		if quote == "" || !strings.Contains(haystack, quote) {
+			risks[i] = risks[i].clearOpponent()
+		}
+	}
+	return risks
+}
+
+func anyOpponentQuote(risks []premortemRisk) bool {
+	for _, r := range risks {
+		if r.OpponentQuote != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// clearOpponent は相手軸の主張を取り下げる。根拠（OpponentQuote）も必ず道連れにする —
+// 片方だけ残ると、後段が「根拠のある主張だ」と誤認する。
+func (r premortemRisk) clearOpponent() premortemRisk {
+	r.Opponent = ""
+	r.OpponentQuote = ""
+	return r
+}
+
+// normalizeForQuoteMatch は逐語照合の前処理。空白・改行の差だけは吸収するが、それ以上は
+// 緩めない（緩めると「だいたい似た文字列」が通ってしまい、検証にならない）。
+func normalizeForQuoteMatch(s string) string {
+	return strings.Join(strings.Fields(s), "")
+}
+
+// premortemPromptPreamble は本文の前に置く文脈。何も引けなければ空文字を返し、
+// プロンプトは #683 のときと同じ形になる（相手軸なしでも成立する）。
+func premortemPromptPreamble(pc premortemPromptContext) string {
+	lines := []string{}
+	if pc.Game != "" {
+		lines = append(lines, "- 次の試合: "+pc.Game)
+	}
+	if pc.Scope != "" {
+		scope := "- この会話は #" + pc.Scope + " チャンネルのもの。ここがスコープを規定する。"
+		if len(pc.Extras) > 0 {
+			scope += "参考として " + strings.Join(pc.Extras, " ") + " も読んでいる。"
+		}
+		lines = append(lines, scope,
+			"- チャンネルのスコープから、こちらの誰が相手の何とマッチアップするかを判断する。"+
+				"例: #wr ならこちらのレシーバー陣と相手のセカンダリ、#o-tight ならこちらのラン攻撃と"+
+				"相手のフロント 7、#defense ならこちらの守備と相手のオフェンス。"+
+				"フットボールの一般的な知識で判断してよい。")
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "# いま読んでいるもの\n" + strings.Join(lines, "\n") + "\n\n"
+}
+
 // summarizePremortem は全スレッドを 1 プロンプトにまとめて ChatGPT を呼ぶ。
 // 分割が起きたかどうかを bool で返す（黙って質が落ちるのを防ぐため呼び出し側が通知する）。
-func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, sink premortemSink, threads []playThread, resolve func(string) string) (premortemSummary, error) {
+func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, sink premortemSink, threads []playThread, resolve func(string) string, pc premortemPromptContext) (premortemSummary, error) {
 	groups := splitThreadsForPrompt(threads, focusPromptRuneBudget)
 	if len(groups) > 1 {
 		// 分割そのものは黙って起こさない。名寄せ（#688）で収束はさせるが、
@@ -533,15 +676,21 @@ func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, sink pr
 	}
 
 	few := premortemFewTargets(job, threads)
-	prompt := premortemSystemPrompt(few)
+	prompt := premortemSystemPrompt(few, pc)
 	parts := make([]string, 0, len(groups))
 	digest := premortemDigest{}
 	structured := true
+	// corpus は LLM に見せた平文そのもの。opponent_quote の照合先はここ（#698 決定 10）。
+	// 元の slack.Message と照合すると、resolve 済みメンションや unfurl したリンク本文から
+	// 引いた引用を「入力に無い」と誤判定する。
+	corpus := &strings.Builder{}
 	for _, group := range groups {
+		rendered := renderPremortemThreads(group, resolve)
+		corpus.WriteString(rendered)
 		reply, err := bot.chat(ctx, ChatRequest{
 			Model:  chatModelFocus,
 			System: []string{prompt},
-			User:   renderPremortemThreads(group, resolve),
+			User:   rendered,
 			Schema: &ChatJSONSchema{Name: premortemReportSchemaName, Schema: premortemReportSchema},
 		})
 		if err != nil {
@@ -566,6 +715,9 @@ func (bot Bot) summarizePremortem(ctx context.Context, job premortemJob, sink pr
 	if !structured {
 		return summary, nil
 	}
+	// 名寄せ・順位付けの前に相手軸の裏を取る。根拠の無い相手評をここで落としておけば、
+	// 以降の層は「opponent があるなら根拠がある」を前提にできる。
+	digest.Risks = dropUnbackedOpponents(digest.Risks, corpus.String())
 	if len(groups) > 1 {
 		// 塊ごとに出た重複を名寄せしてから数える（#688）。kind の重複回避も
 		// 名寄せ後の 1 回で効かせる。1 塊なら 2 段目は呼ばない。
