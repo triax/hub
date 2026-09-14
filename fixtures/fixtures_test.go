@@ -46,6 +46,23 @@ func TestDefaultScenarioContents(t *testing.T) {
 	}
 }
 
+// local-user-nonadmin を default に重ねると、自動ログインの本人が非 Admin になること（#702）。
+func TestLocalUserNonAdminOverridesDefault(t *testing.T) {
+	s, err := Resolve(fixedNow, "default", "local-user-nonadmin")
+	if err != nil {
+		t.Fatalf("Resolve(default, local-user-nonadmin): %v", err)
+	}
+	for _, e := range s.Entities {
+		if e.Key.Kind == models.KindMember && e.Key.Name == "U9MD7M0NS" {
+			if e.Value.(*models.Member).Slack.IsAdmin {
+				t.Error("local-user-nonadmin did not drop IsAdmin")
+			}
+			return
+		}
+	}
+	t.Error("composed scenario missing Member U9MD7M0NS")
+}
+
 // dangling key（参照先 entity 不在）を検出すること。
 func TestValidateDetectsDanglingKey(t *testing.T) {
 	taping := &models.Taping{

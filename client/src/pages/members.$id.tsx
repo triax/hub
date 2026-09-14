@@ -17,6 +17,8 @@ export default function MemberView() {
   if (!member) return <></>;
 
   const isOwnPage = myself?.slack?.id === member.slack.id;
+  // 本人に加え、Slack Admin は他メンバーの HP プロフィールを代理編集できる（#702）。
+  const isProxyEdit = !isOwnPage && !!myself?.slack?.is_admin;
 
   return (
     <Layout>
@@ -46,11 +48,12 @@ export default function MemberView() {
 
       <hr className="my-4" />
 
-      {isOwnPage && (
+      {(isOwnPage || isProxyEdit) && (
         <HPProfileSection
           memberId={member.slack.id}
           initialNumber={member.number ?? null}
           slackTitle={member.slack.profile.title || ""}
+          proxyEditFor={isProxyEdit ? member.slack.profile.real_name : undefined}
           onSaveNumber={(n) => repo.update(member.slack.id, { number: n })}
         />
       )}
@@ -133,11 +136,14 @@ function HPProfileSection({
   memberId,
   initialNumber,
   slackTitle,
+  proxyEditFor,
   onSaveNumber,
 }: {
   memberId: string;
   initialNumber: number | null;
   slackTitle: string;
+  // 管理者が他メンバーの分を編集しているとき、その対象者の名前。本人の編集では undefined。
+  proxyEditFor?: string;
   onSaveNumber?: (n: number | null) => Promise<void>;
 }) {
   const repo = useMemo(() => new HPProfileRepo(), []);
@@ -224,6 +230,11 @@ function HPProfileSection({
           {profile.hide_from_hp ? "非掲載" : "掲載"}
         </span>
       </div>
+      {proxyEditFor !== undefined && (
+        <p className="-mt-2 mb-4 p-2 rounded-md bg-red-100 text-sm text-red-800">
+          管理者として {proxyEditFor} さんのプロフィールを編集しています
+        </p>
+      )}
 
       {/* fold アニメーション: grid-rows トリックで自然なスライド+フェード */}
       <div className={`grid transition-all duration-300 ease-in-out ${

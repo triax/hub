@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/triax/hub/server/models"
@@ -86,5 +87,49 @@ func TestBuildPublicEntries_ShorterProfiles(t *testing.T) {
 	entries := buildPublicEntries(members, profiles)
 	if len(entries) != 1 || entries[0].SlackID != "U_A" {
 		t.Fatalf("unexpected entries: %+v", entries)
+	}
+}
+
+// TestCanEditHPProfile は HP プロフィールの認可規則を固定する（Issue #702 AC-1）。
+// 本人は Admin 判定を引かずに可、他人の分は Slack Admin のときだけ可。
+func TestCanEditHPProfile(t *testing.T) {
+	adminLookup := func(isAdmin bool, err error) (func() (bool, error), *int) {
+		calls := 0
+		return func() (bool, error) {
+			calls++
+			return isAdmin, err
+		}, &calls
+	}
+
+	cases := []struct {
+		name        string
+		caller      string
+		target      string
+		isAdmin     bool
+		lookupErr   error
+		want        bool
+		wantErr     bool
+		wantLookups int
+	}{
+		{name: "本人", caller: "U_SELF", target: "U_SELF", isAdmin: false, want: true, wantLookups: 0},
+		{name: "Admin が他人", caller: "U_ADMIN", target: "U_OTHER", isAdmin: true, want: true, wantLookups: 1},
+		{name: "非 Admin が他人", caller: "U_MEMBER", target: "U_OTHER", isAdmin: false, want: false, wantLookups: 1},
+		{name: "Admin 判定の失敗", caller: "U_MEMBER", target: "U_OTHER", lookupErr: errors.New("datastore down"), wantErr: true, wantLookups: 1},
+		{name: "セッション不明", caller: "", target: "", isAdmin: false, want: false, wantLookups: 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			lookup, calls := adminLookup(c.isAdmin, c.lookupErr)
+			got, err := canEditHPProfile(c.caller, c.target, lookup)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
+			}
+			if got != c.want {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+			if *calls != c.wantLookups {
+				t.Errorf("admin lookup called %d times, want %d", *calls, c.wantLookups)
+			}
+		})
 	}
 }

@@ -27,10 +27,30 @@ var allowedMIMETypes = map[string]string{
 
 const maxPhotoBytes = 10 << 20 // 10MB
 
+// canEditHPProfile は caller が target の HP プロフィールを閲覧・編集できるかを判定する。
+// 本人は常に可。他人の分は Slack Admin に限り代理編集できる（#702）。
+// isAdmin は他人の分を判定するときだけ呼ぶ（本人の編集で Datastore を引かないため）。
+func canEditHPProfile(callerID, targetID string, isAdmin func() (bool, error)) (bool, error) {
+	if callerID != "" && callerID == targetID {
+		return true, nil
+	}
+	return isAdmin()
+}
+
+// authorizeHPProfileAccess はセッションユーザが id の HP プロフィールを扱えるかを返す。
+// 判定に失敗した場合は安全側に倒して拒否する（GetApplications と同じ扱い）。
+func authorizeHPProfileAccess(req *http.Request, id string) bool {
+	callerID := filters.GetSessionUserContext(req)
+	ok, err := canEditHPProfile(callerID, id, func() (bool, error) {
+		return isSlackAdmin(req.Context(), callerID)
+	})
+	return err == nil && ok
+}
+
 func GetHPProfile(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	id := chi.URLParam(req, "id")
-	if filters.GetSessionUserContext(req) != id {
+	if !authorizeHPProfileAccess(req, id) {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -45,9 +65,7 @@ func GetHPProfile(w http.ResponseWriter, req *http.Request) {
 func UpdateHPProfile(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	id := chi.URLParam(req, "id")
-
-	callerID := filters.GetSessionUserContext(req)
-	if callerID != id {
+	if !authorizeHPProfileAccess(req, id) {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
@@ -89,9 +107,7 @@ func UpdateHPProfile(w http.ResponseWriter, req *http.Request) {
 func UploadHPPhoto(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 	id := chi.URLParam(req, "id")
-
-	callerID := filters.GetSessionUserContext(req)
-	if callerID != id {
+	if !authorizeHPProfileAccess(req, id) {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
 	}
