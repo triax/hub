@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -246,6 +249,46 @@ func buildPublicEntries(members []models.Member, profiles []*models.MemberHPProf
 	return entries
 }
 
+// publicMembersDigest は公開 API が配信する entries のダイジェストを返す（#704）。
+// 外部サイトはこの値の変化だけを見て、再取得・再ビルドの要否を判断する。
+//
+//   - entries の中身だけで決まる（path / generated_at は含めない）
+//   - GetAllMembers の並び順は保証されないので、SlackID 順に並べたコピーからハッシュを取る
+//   - custom_fields / additional_photo_urls の並び順は保つ（並べ替えも公開内容の変化とみなす）
+//   - hp_profile.updated_at も配信ペイロードに含まれるので除外しない
+//     （「配信内容のどこか 1 箇所でも変われば別の値」を字義どおりに採用する）
+//
+// nil と空スライスで値が割れないよう、make+copy で常に non-nil（JSON では "[]"）にする。
+func publicMembersDigest(entries []publicEntry) string {
+	sorted := make([]publicEntry, len(entries))
+	copy(sorted, entries)
+	slices.SortFunc(sorted, func(a, b publicEntry) int {
+		return strings.Compare(a.SlackID, b.SlackID)
+	})
+	b, err := json.Marshal(sorted)
+	if err != nil {
+		// 空文字などを返すと外部サイトが「変化なし」と判断し続け、更新が黙って止まるため panic（Recovery で 500 + 通知）にする。
+		panic(fmt.Sprintf("publicMembersDigest: json.Marshal: %v", err))
+	}
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// loadPublicEntries は公開 API に載せるエントリを Datastore から組み立てる。
+// ListPublicMembers と GetPublicMembersDigest で必ずこれを共有し、
+// 両者の digest がずれないようにする。
+func loadPublicEntries(ctx context.Context) ([]publicEntry, error) {
+	members, err := models.GetAllMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	profiles, err := models.GetMultiHPProfile(ctx, members)
+	if err != nil {
+		return nil, err
+	}
+	return buildPublicEntries(members, profiles), nil
+}
+
 // ListPublicMembers は外部サイト向けの公開 API。
 // ログイン認証は不要だが、ルーティング側で filters.RequirePublicAPIKey により
 // X-API-Key の提示を必須にしている（消費者の識別・失効のため）。
@@ -253,15 +296,8 @@ func buildPublicEntries(members []models.Member, profiles []*models.MemberHPProf
 // HiddenFields に従ってフィールドを除外する。
 func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
-	ctx := req.Context()
 
-	members, err := models.GetAllMembers(ctx)
-	if err != nil {
-		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
-		return
-	}
-
-	profiles, err := models.GetMultiHPProfile(ctx, members)
+	entries, err := loadPublicEntries(req.Context())
 	if err != nil {
 		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
 		return
@@ -272,9 +308,32 @@ func ListPublicMembers(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "private")
 
 	render.JSON(http.StatusOK, marmoset.P{
-		"members": buildPublicEntries(members, profiles),
-		"path":    path.Clean(req.URL.Path),
-		// 外部サイトがレスポンス自体の鮮度を判断するための生成時刻。
+		"members": entries,
+		// GetPublicMembersDigest と同じ値。外部サイトはビルド時に保存し、次回の確認で比べる。
+		"digest": publicMembersDigest(entries),
+		"path":   path.Clean(req.URL.Path),
+		// レスポンスの生成時刻。リクエストのたびに変わるので、内容の変化の判定には digest を使う。
+		"generated_at": time.Now().UTC(),
+	})
+}
+
+// GetPublicMembersDigest は ListPublicMembers が返す公開内容のダイジェストだけを返す（#704）。
+// 外部サイトが写真を含む全件取得の前に、変化の有無を安く問い合わせるための口。
+// 認証・キャッシュ・CORS の扱いは ListPublicMembers と同じ。
+func GetPublicMembersDigest(w http.ResponseWriter, req *http.Request) {
+	render := marmoset.Render(w)
+
+	entries, err := loadPublicEntries(req.Context())
+	if err != nil {
+		render.JSON(http.StatusInternalServerError, marmoset.P{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Cache-Control", "private")
+
+	render.JSON(http.StatusOK, marmoset.P{
+		"digest":       publicMembersDigest(entries),
+		"count":        len(entries),
 		"generated_at": time.Now().UTC(),
 	})
 }
