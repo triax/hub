@@ -262,7 +262,7 @@ func buildPublicEntries(members []models.Member, profiles []*models.MemberHPProf
 func publicMembersDigest(entries []publicEntry) string {
 	sorted := make([]publicEntry, len(entries))
 	copy(sorted, entries)
-	slices.SortStableFunc(sorted, func(a, b publicEntry) int {
+	slices.SortFunc(sorted, func(a, b publicEntry) int {
 		return strings.Compare(a.SlackID, b.SlackID)
 	})
 	b, err := json.Marshal(sorted)
