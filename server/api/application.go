@@ -32,7 +32,8 @@ func isAllowedOrigin(origin string) bool {
 	return false
 }
 
-func isApplicationAdmin(ctx context.Context, slackID string) (bool, error) {
+// isSlackAdmin は Datastore の Member.Slack.IsAdmin で Slack Admin かどうかを判定する。
+func isSlackAdmin(ctx context.Context, slackID string) (bool, error) {
 	client, err := datastore.NewClient(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if err != nil {
 		return false, err
@@ -113,7 +114,7 @@ func GetApplications(w http.ResponseWriter, req *http.Request) {
 	render := marmoset.Render(w)
 
 	callerID := filters.GetSessionUserContext(req)
-	ok, err := isApplicationAdmin(req.Context(), callerID)
+	ok, err := isSlackAdmin(req.Context(), callerID)
 	if err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
@@ -142,7 +143,7 @@ func UpdateApplication(w http.ResponseWriter, req *http.Request) {
 	id := chi.URLParam(req, "id")
 
 	callerID := filters.GetSessionUserContext(req)
-	ok, err := isApplicationAdmin(req.Context(), callerID)
+	ok, err := isSlackAdmin(req.Context(), callerID)
 	if err != nil || !ok {
 		render.JSON(http.StatusForbidden, marmoset.P{"error": "forbidden"})
 		return
