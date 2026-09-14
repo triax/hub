@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/triax/hub/server/models"
@@ -131,5 +133,92 @@ func TestCanEditHPProfile(t *testing.T) {
 				t.Errorf("admin lookup called %d times, want %d", *calls, c.wantLookups)
 			}
 		})
+	}
+}
+
+func intPtr(n int) *int { return &n }
+
+// digestFixtureEntries は publicMembersDigest のテスト用 entries を毎回新しく作る
+// （ケースごとに 1 箇所だけ書き換えても、他のケースに波及しないようにするため）。
+func digestFixtureEntries() []publicEntry {
+	return []publicEntry{
+		{SlackID: "U_A", Name: "A 太郎", Number: intPtr(1), HPProfile: models.MemberHPProfile{
+			DisplayName: "A", Bio: "よろしく",
+			CustomFields: []models.HPCustomField{{Key: "好きな技", Value: "ラン"}, {Key: "座右の銘", Value: "一歩"}},
+		}},
+		{SlackID: "U_B", Name: "B 次郎", Number: nil, HPProfile: models.MemberHPProfile{DisplayName: "B"}},
+		{SlackID: "U_C", Name: "C 三郎", Number: intPtr(99), HPProfile: models.MemberHPProfile{DisplayName: "C", Position: "QB"}},
+	}
+}
+
+// TestPublicMembersDigest_OrderIndependent は並び順だけ違う entries が同じ digest になることを固定する（Issue #704 AC-1）。
+func TestPublicMembersDigest_OrderIndependent(t *testing.T) {
+	entries := digestFixtureEntries()
+	want := publicMembersDigest(entries)
+
+	reversed := digestFixtureEntries()
+	slices.Reverse(reversed)
+	if got := publicMembersDigest(reversed); got != want {
+		t.Errorf("digest of reordered entries = %s, want %s", got, want)
+	}
+	// 呼び出し元の並び順を壊さない（コピーをソートする）。
+	if reversed[0].SlackID != "U_C" {
+		t.Errorf("publicMembersDigest must not reorder its input, got first = %s", reversed[0].SlackID)
+	}
+}
+
+// TestPublicMembersDigest_DetectsChange は 1 名の 1 フィールドの変化や 1 名の除外で digest が変わることを固定する（Issue #704 AC-2 / AC-3）。
+// custom_fields の並べ替えも公開内容の変化とみなす（homepage#35 との約束）。
+func TestPublicMembersDigest_DetectsChange(t *testing.T) {
+	base := publicMembersDigest(digestFixtureEntries())
+
+	cases := []struct {
+		name   string
+		mutate func([]publicEntry) []publicEntry
+	}{
+		{name: "AC-2 Number を変える", mutate: func(e []publicEntry) []publicEntry { e[0].Number = intPtr(2); return e }},
+		{name: "AC-2 Number を nil から付与", mutate: func(e []publicEntry) []publicEntry { e[1].Number = intPtr(7); return e }},
+		{name: "AC-2 Number を剥奪", mutate: func(e []publicEntry) []publicEntry { e[2].Number = nil; return e }},
+		{name: "AC-2 Name を変える", mutate: func(e []publicEntry) []publicEntry { e[1].Name = "B 二郎"; return e }},
+		{name: "AC-2 HPProfile の 1 フィールドを変える", mutate: func(e []publicEntry) []publicEntry { e[2].HPProfile.Bio = "新しい自己紹介"; return e }},
+		{name: "AC-2 写真 URL の差し替え", mutate: func(e []publicEntry) []publicEntry {
+			e[0].HPProfile.PortraitFormalURL = "https://example.com/hp/photos/U_A/formal-2.jpg"
+			return e
+		}},
+		{name: "AC-3 1 名を取り除く", mutate: func(e []publicEntry) []publicEntry { return e[1:] }},
+		{name: "custom_fields の並べ替え", mutate: func(e []publicEntry) []publicEntry {
+			slices.Reverse(e[0].HPProfile.CustomFields)
+			return e
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := publicMembersDigest(c.mutate(digestFixtureEntries())); got == base {
+				t.Errorf("digest did not change: %s", got)
+			}
+		})
+	}
+}
+
+// TestPublicMembersDigest_Empty は 0 件でも panic せず、nil / 空スライスとも同じ固定値になることを固定する（Issue #704 AC-4）。
+func TestPublicMembersDigest_Empty(t *testing.T) {
+	// sha256("[]")
+	const want = "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+	if got := publicMembersDigest([]publicEntry{}); got != want {
+		t.Errorf("digest of empty entries = %s, want %s", got, want)
+	}
+	if got := publicMembersDigest(nil); got != want {
+		t.Errorf("digest of nil entries = %s, want %s", got, want)
+	}
+}
+
+// TestPublicMembersDigest_Stable は同じ内容なら何度計算しても同じ値になることを固定する（Issue #704 AC-6 の純粋関数側）。
+func TestPublicMembersDigest_Stable(t *testing.T) {
+	first := publicMembersDigest(digestFixtureEntries())
+	if !strings.HasPrefix(first, "sha256:") || len(first) != len("sha256:")+64 {
+		t.Fatalf("unexpected digest format: %s", first)
+	}
+	if second := publicMembersDigest(digestFixtureEntries()); second != first {
+		t.Errorf("digest is not stable: %s != %s", second, first)
 	}
 }

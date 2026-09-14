@@ -112,6 +112,9 @@ func main() {
 	// （GitHub Actions のビルド等）に限られるため X-API-Key での識別を必須にする。
 	r.With(filters.MaxBodySize(1<<20), filters.RequirePublicAPIKey).
 		Get("/api/1/public/members", api.ListPublicMembers)
+	// 公開内容のダイジェスト（外部サイトの更新検知用。#704）。/members と同じ保護をかける。
+	r.With(filters.MaxBodySize(1<<20), filters.RequirePublicAPIKey).
+		Get("/api/1/public/members/digest", api.GetPublicMembersDigest)
 
 	// 入部申請フォーム送信（認証不要）
 	// NOTE: ブラウザから直接叩く経路なので秘密を持てない。ここに API キーは付けない。
