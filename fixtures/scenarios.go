@@ -17,6 +17,8 @@ var registry = map[string]func(now time.Time) Scenario{
 	"position":  positionScenario,
 	"equips":    equipsScenario,
 	"hpprofile": hpprofileScenario,
+	// 既定の SEED_SCENARIOS には含めない（入れると自動ログインの本人が非 Admin になる）。
+	"local-user-nonadmin": localUserNonAdminScenario,
 }
 
 // Names は登録済み scenario 名を返す（ソート済み）。
@@ -43,28 +45,47 @@ func Resolve(now time.Time, names ...string) (Scenario, error) {
 	return Compose(scenarios...)
 }
 
+const localUserSlackID = "U9MD7M0NS" // server/filters/local-user.json の openid.sub
+
+// localUserMember は LocalDev で自動ログインする本人の Member を返す。
+// Admin かどうか以外は default と local-user-nonadmin で同一に保つ。
+func localUserMember(isAdmin bool) *models.Member {
+	m := &models.Member{Status: models.MSActive}
+	m.Slack.ID = localUserSlackID
+	m.Slack.TeamID = "T9LHPRHA6"
+	m.Slack.Name = "otiai10"
+	m.Slack.RealName = "Hiromu Ochiai"
+	m.Slack.IsAdmin = isAdmin
+	m.Slack.Profile.RealName = "Hiromu Ochiai"
+	m.Slack.Profile.DisplayName = "otiai10"
+	m.Slack.Profile.Title = "老害/Staff"
+	return m
+}
+
+// localUserNonAdminScenario は自動ログインの本人（U9MD7M0NS）を非 Admin に落とす overlay。
+// LocalDev では認証ユーザが local-user.json に固定されるため、「非 Admin で他人のページを
+// 開く」「非 Admin で他人の HP プロフィール API を叩くと 403」（Issue #702 AC-2 / AC-4）は
+// この overlay を稼働中の emulator に投入して再現する:
+//
+//	DATASTORE_EMULATOR_HOST=localhost:<port> DATASTORE_PROJECT_ID=triax-football \
+//	  go run ./cmd/seed --scenarios local-user-nonadmin
+//
+// 元に戻すには `--scenarios default` を投入する（key-based upsert で Admin に戻る）。
+func localUserNonAdminScenario(now time.Time) Scenario {
+	_ = now // 相対日付を持たない（他 scenario とシグネチャを揃えるための引数）
+	return Scenario{Name: "local-user-nonadmin", Entities: []Entity{
+		Override(MemberKey(localUserSlackID), localUserMember(false)),
+	}}
+}
+
 // defaultScenario は全 env で必要な最小ベースライン。
 //   - local-user.json の SlackID を持つ admin Member 1 件（自動ログインの本人）
 //   - 直近・近未来の Event 3 件（home 画面が空にならないように。相対日付）
 //
 // いずれも他 entity を参照しないため dangling は発生しない。
 func defaultScenario(now time.Time) Scenario {
-	const localUserSlackID = "U9MD7M0NS" // server/filters/local-user.json の openid.sub
-
-	admin := &models.Member{
-		Status: models.MSActive,
-	}
-	admin.Slack.ID = localUserSlackID
-	admin.Slack.TeamID = "T9LHPRHA6"
-	admin.Slack.Name = "otiai10"
-	admin.Slack.RealName = "Hiromu Ochiai"
-	admin.Slack.IsAdmin = true
-	admin.Slack.Profile.RealName = "Hiromu Ochiai"
-	admin.Slack.Profile.DisplayName = "otiai10"
-	admin.Slack.Profile.Title = "老害/Staff"
-
 	entities := []Entity{
-		NewEntity(MemberKey(localUserSlackID), admin),
+		NewEntity(MemberKey(localUserSlackID), localUserMember(true)),
 	}
 
 	eventDefs := []struct {
