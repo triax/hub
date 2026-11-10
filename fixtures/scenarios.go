@@ -99,6 +99,7 @@ func defaultScenario(now time.Time) Scenario {
 		{"fixture_event_sponsor_01", "#sponsor スポンサー説明会", 7},
 		{"fixture_event_sponsor_02", "#スポンサー 協賛企業交流会", 10},
 		{"fixture_event_practice_sponsor_01", "#練習 #sponsor 合同練習＆協賛社見学", 5},
+		{"fixture_event_event_01", "#event 新歓イベント", 12},
 	}
 	for _, d := range eventDefs {
 		start := now.AddDate(0, 0, d.days)
