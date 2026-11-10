@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/datastore v1.24.0
 	cloud.google.com/go/storage v1.62.2
 	github.com/go-chi/chi/v5 v5.4.0
-	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/openai/openai-go/v3 v3.56.0
 	github.com/otiai10/appyaml v0.0.0-20210625032121-1fe2f3423963

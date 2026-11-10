@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
@@ -80,7 +80,7 @@ func (auth *Auth) Handle(next http.Handler) http.Handler {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
 			return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
-		}); err != nil {
+		}, jwt.WithExpirationRequired()); err != nil {
 			if auth.API {
 				w.WriteHeader(http.StatusUnauthorized)
 			} else {

@@ -215,6 +215,8 @@ github.com/golang-jwt/jwt v3.2.2
 
 **Fix:** Upgrade to `github.com/golang-jwt/jwt/v5` (latest stable). This requires updating import paths and adapting to the v5 API.
 
+**Status:** Resolved in #724 — migrated to `github.com/golang-jwt/jwt/v5` v5.3.1.
+
 ---
 
 ### H-05: End-of-Life Go Runtime
