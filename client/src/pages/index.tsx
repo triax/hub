@@ -22,7 +22,7 @@ const filters: { key: FilterKey; label: string; tags: EventTag[] }[] = [
   { key: "その他", label: "その他", tags: ["meeting", "UNKNOWN"] },
 ];
 
-const defaultFilters: Set<FilterKey> = new Set(["練習", "試合", "スポンサー"]);
+const defaultFilters: Set<FilterKey> = new Set(["練習", "試合", "イベント", "スポンサー"]);
 
 function filterEvents(events: TeamEvent[], active: Set<FilterKey>): TeamEvent[] {
   const allowedTags = new Set<EventTag>();
