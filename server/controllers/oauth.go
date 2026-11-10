@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/triax/hub/server"
 	"github.com/triax/hub/server/models"
 )
@@ -203,15 +203,7 @@ func AuthCallback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	t := jwt.New(jwt.GetSigningMethod(os.Getenv("JWT_SIGNING_METHOD")))
-	t.Claims = &models.SessionUserClaims{
-		StandardClaims: &jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(server.ServerSessionExpire).Unix(),
-		},
-		SlackID: member.Slack.ID,
-	}
-
-	tokenstr, err := t.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
+	tokenstr, err := newSessionToken(member.Slack.ID)
 	if err != nil {
 		http.Redirect(w, req, fmt.Sprintf("/errors?code=%d&error=%s", 6003, err.Error()), http.StatusTemporaryRedirect)
 		return
@@ -253,4 +245,19 @@ func FetchCurrentUserInfo(token string) (info *models.SlackOpenIDUserInfo, err e
 		return nil, fmt.Errorf("error=%s,warning=%s", info.Error, info.Warning)
 	}
 	return info, nil
+}
+
+// newSessionToken は Slack ID を載せたセッション用の署名済み JWT を発行する。
+// 有効期限は server.ServerSessionExpire。検証は filters.Auth が行う。
+func newSessionToken(slackID string) (string, error) {
+	t := jwt.NewWithClaims(
+		jwt.GetSigningMethod(os.Getenv("JWT_SIGNING_METHOD")),
+		&models.SessionUserClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(server.ServerSessionExpire)),
+			},
+			SlackID: slackID,
+		},
+	)
+	return t.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
 }
