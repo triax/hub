@@ -18,24 +18,24 @@ func TestNewSessionToken_AcceptedByAuthFilter(t *testing.T) {
 	server.SessionCookieName = "hub_session_test"
 	t.Cleanup(func() { server.SessionCookieName = original })
 
-	token, err := newSessionToken("U12345678")
+	const slackID = "U12345678"
+	token, err := newSessionToken(slackID)
 	if err != nil {
 		t.Fatalf("newSessionToken: %v", err)
 	}
 
-	for _, apiMode := range []bool{true, false} {
-		var gotSlackID string
-		next := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			gotSlackID = filters.GetSessionUserContext(req)
-		})
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.AddCookie(&http.Cookie{Name: server.SessionCookieName, Value: token})
-		rec := httptest.NewRecorder()
+	// 拒否時のモード別の応答は filters 側のテストが固定する。ここは発行と検証の一致だけを見る。
+	var gotSlackID string
+	next := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		gotSlackID = filters.GetSessionUserContext(req)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: server.SessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
 
-		(&filters.Auth{API: apiMode}).Handle(next).ServeHTTP(rec, req)
+	(&filters.Auth{API: true}).Handle(next).ServeHTTP(rec, req)
 
-		if gotSlackID != "U12345678" {
-			t.Errorf("api=%v: slackID = %q, want %q（status = %d）", apiMode, gotSlackID, "U12345678", rec.Code)
-		}
+	if gotSlackID != slackID {
+		t.Errorf("slackID = %q, want %q（status = %d）", gotSlackID, slackID, rec.Code)
 	}
 }
